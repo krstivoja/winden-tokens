@@ -12,7 +12,8 @@ import {
   closeShadesModal,
   generateShades,
   removeShades,
-  openShadesColorPicker
+  openShadesColorPicker,
+  updateCurveEditor
 } from './components/shades';
 import {
   initStepsModal,
@@ -80,6 +81,7 @@ function init(): void {
     generateShades,
     removeShades,
     openShadesColorPicker,
+    updateCurveEditor,
     // Steps
     selectSourceNumber,
     selectRatioPreset,

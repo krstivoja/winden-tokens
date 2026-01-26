@@ -135,8 +135,18 @@
           </div>
 
           <div class="form-group">
-            <label>Preview</label>
-            <div class="shades-preview" id="shades-preview"></div>
+            <label>
+              <span>Preview</span>
+              <select id="shades-curve-property" class="curve-property-select" onchange="window.app.updateCurveEditor()">
+                <option value="lightness" selected>Lightness</option>
+                <option value="saturation">Saturation</option>
+                <option value="hue">Hue</option>
+              </select>
+            </label>
+            <div class="curve-preview-combined" id="shades-curve-editor">
+              <svg class="curve-svg" id="shades-curve-svg"></svg>
+              <div class="shades-preview" id="shades-preview"></div>
+            </div>
           </div>
         </div>
       </div>

@@ -172,15 +172,73 @@
 // Shades preview
 .shades-preview {
   display: flex;
-  border-radius: 4px;
-  overflow: hidden;
   height: 32px;
-  border: 1px solid var(--border);
 
   &-item {
     flex: 1;
     height: 100%;
   }
+}
+
+// Standalone shades preview (when not in combined view)
+.form-group > .shades-preview {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+// Combined curve editor + preview
+.curve-preview-combined {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.curve-svg {
+  display: block;
+  background: var(--bg-alt);
+  flex-shrink: 0;
+  min-height: 100px;
+}
+
+.curve-node,
+.curve-handle {
+  transition: transform 0.1s, r 0.1s;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+.curve-node:hover {
+  stroke-width: 3;
+}
+
+.curve-handle:hover {
+  r: 7;
+}
+
+.curve-property-select {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  margin-left: 8px;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+.form-group label {
+  display: flex;
+  align-items: center;
 }
 
 // Steps preview
