@@ -1,0 +1,192 @@
+// Table and spreadsheet styles
+.table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.spreadsheet {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  th,
+  td {
+    border: 1px solid var(--border);
+    padding: 0;
+    height: 32px;
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  th {
+    background: var(--bg-alt);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 0 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+
+    &.col-name {
+      width: 40%;
+      padding-left: 42px;
+    }
+
+    &.col-value {
+      padding-left: 10px;
+    }
+  }
+
+  tbody tr {
+    &:hover {
+      background: var(--bg-hover);
+    }
+
+    &.selected {
+      background: var(--bg-selected);
+    }
+  }
+}
+
+// Group rows
+.group-row {
+  td {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  &:hover {
+    td {
+      background: var(--bg-hover);
+    }
+
+    .row-action {
+      opacity: 1 !important;
+    }
+  }
+
+  &.collapsed + tr:not(.group-row),
+  &.collapsed ~ tr:not(.group-row) {
+    display: none;
+  }
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+tr.grouped-item .cell-input:first-of-type {
+  padding-left: 26px;
+}
+
+tr.hidden-by-group {
+  display: none;
+}
+
+// Add row
+.add-row {
+  td {
+    background: transparent;
+    border: 1px dashed var(--border);
+  }
+
+  &:hover td {
+    background: var(--bg-hover);
+  }
+}
+
+.add-row-btn {
+  width: 100%;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+// Row actions
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+tr:hover .row-actions {
+  opacity: 1;
+}
+
+.row-action {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  &.danger:hover {
+    background: #ffe5e5;
+    color: var(--danger);
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+// Empty state
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-dim);
+}

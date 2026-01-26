@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokens Manager</title>
+</head>
+<body>
+  <div class="tabs">
+    <button class="tab active" data-tab="table">Table</button>
+    <button class="tab" data-tab="json">JSON</button>
+  </div>
+
+  <!-- Table Tab -->
+  <div id="table-tab" class="tab-content active">
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <select id="collection-select" class="collection-select"></select>
+        <button id="add-collection-btn" class="btn btn-icon" title="New Collection">
+          <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        </button>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group">
+        <button id="add-variable-btn" class="btn btn-primary">
+          <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+          Add Variable
+        </button>
+        <button id="shades-btn" class="btn" title="Generate Color Shades">
+          <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.2"/><rect x="5" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.5"/><rect x="9" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="13" y="2" width="2" height="12" rx="1" fill="currentColor"/></svg>
+          Shades
+        </button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <span id="status" class="status"></span>
+
+      <button id="refresh-btn" class="btn btn-icon" title="Refresh">
+        <svg viewBox="0 0 16 16"><path d="M13.65 2.35A8 8 0 1 0 16 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z" fill="currentColor"/></svg>
+      </button>
+    </div>
+
+    <div class="table-container">
+      <table class="spreadsheet">
+        <thead>
+          <tr>
+            <th class="col-name">Name</th>
+            <th class="col-value">Value</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Add Menu -->
+    <div id="add-menu" class="add-menu">
+      <button data-type="COLOR"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M7.312 6.803a7 7 0 0 1 9.639.248l.28.298a7 7 0 0 1 1.76 4.998l-.029.38C18.807 14.222 17.446 15 16.242 15H13.5l-.101.01a.5.5 0 0 0-.4.49v.5c0 .82-.338 1.603-.92 2.127-.6.542-1.468.8-2.37.488a7 7 0 0 1-2.362-1.385l-.297-.28a7 7 0 0 1 0-9.9zm8.93.955a6 6 0 0 0-8.485 0l-.212.225a6 6 0 0 0 2.492 9.689c.978.337 1.848-.457 1.953-1.467L12 16v-.499a1.5 1.5 0 0 1 1.5-1.5h2.743l.158-.006c.733-.057 1.391-.513 1.543-1.216l.024-.155a6 6 0 0 0-1.484-4.611zM8.5 12.001a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7-2a1 1 0 1 1-.001 2 1 1 0 0 1 0-2m-6-1.5a1 1 0 1 1 0 2.001 1 1 0 0 1 0-2m3.5-1a1 1 0 1 1 0 2 1 1 0 0 1 0-2"></path></svg>Color</button>
+      <button data-type="FLOAT"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M16 6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 7a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm3.05 2.002a.5.5 0 0 1 .448.547l-.045.452h1.495l.055-.55a.5.5 0 0 1 .995.098l-.045.452h.547a.5.5 0 1 1 0 1h-.648l-.199 2h.847a.5.5 0 1 1 0 1h-.948l-.054.548a.501.501 0 0 1-.995-.098l.044-.45h-1.495l-.054.548a.501.501 0 0 1-.995-.098l.044-.45H9.5a.5.5 0 0 1 0-1h.647l.2-2H9.5a.5.5 0 0 1 0-1h.948l.055-.55a.5.5 0 0 1 .546-.449m.302 1.999-.199 2h1.494l.2-2z"></path></svg>Number</button>
+      <button data-type="STRING"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M8 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2zm3.5 1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 1 0V10h1.5v4H11a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-.5v-4H14v.5a.5.5 0 0 0 1 0v-1a.5.5 0 0 0-.5-.5z" clip-rule="evenodd"></path></svg>String</button>
+      <button data-type="BOOLEAN"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M10 8h4a4 4 0 0 1 0 8h-4a4 4 0 0 1 0-8m-5 4a5 5 0 0 1 5-5h4a5 5 0 0 1 0 10h-4a5 5 0 0 1-5-5m5 2a2 2 0 1 1 0-4 2 2 0 0 1 0 4m-3-2a3 3 0 1 1 6 0 3 3 0 0 1-6 0" clip-rule="evenodd"></path></svg>Boolean</button>
+    </div>
+  </div>
+
+  <!-- JSON Tab -->
+  <div id="json-tab" class="tab-content">
+    <div class="json-panel">
+      <textarea id="json-editor" class="json-editor" spellcheck="false"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button id="json-update-btn" class="btn btn-primary">Update</button>
+        <button id="json-format-btn" class="btn">Format</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shades Generator Modal -->
+  <div id="shades-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Generate Color Shades</h3>
+        <button class="modal-close" onclick="window.app.closeShadesModal()">
+          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select Color</label>
+          <select id="shades-source" class="form-input" onchange="window.app.selectSourceColor()">
+            <option value="">-- Select a color --</option>
+          </select>
+        </div>
+
+        <div id="shades-options" style="display:none;flex-direction:column;gap:16px;">
+          <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="shades-name" class="form-input" placeholder="e.g. blue, primary, brand" value="">
+          </div>
+
+          <div class="form-group">
+            <label>Base Color</label>
+            <div class="color-input-wrapper">
+              <div class="color-input-preview" onclick="window.app.openShadesColorPicker()" style="cursor:pointer;">
+                <div class="color-fill" id="shades-base-preview" style="background: transparent"></div>
+              </div>
+              <input type="hidden" id="shades-base-color" value="">
+              <input type="text" id="shades-base-hex" class="form-input mono" value="" placeholder="#000000" oninput="window.app.updateBaseFromHex()">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Lightest</label>
+              <div class="lightness-input-wrapper">
+                <input type="number" id="shades-light-value" class="form-input" value="5" min="0" max="100" oninput="window.app.updateShadesPreview()">
+                <div class="lightness-preview" id="shades-light-preview"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Darkest</label>
+              <div class="lightness-input-wrapper">
+                <input type="number" id="shades-dark-value" class="form-input" value="90" min="0" max="100" oninput="window.app.updateShadesPreview()">
+                <div class="lightness-preview" id="shades-dark-preview"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Shades</label>
+              <input type="number" id="shades-count" class="form-input" value="11" min="2" max="20" oninput="window.app.updateShadesPreview()" style="width:60px;">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Preview</label>
+            <div class="shades-preview" id="shades-preview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="shades-remove-btn" class="btn btn-danger" onclick="window.app.removeShades()" style="display:none;">Remove Shades</button>
+        <div class="spacer"></div>
+        <button class="btn" onclick="window.app.closeShadesModal()">Cancel</button>
+        <button id="shades-generate-btn" class="btn btn-primary" onclick="window.app.generateShades()">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Modal -->
+  <div id="input-modal" class="modal-overlay">
+    <div class="modal" style="width: 300px;">
+      <div class="modal-header">
+        <h3 id="input-modal-title">Enter Name</h3>
+        <button class="modal-close" onclick="window.app.closeInputModal()">
+          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label id="input-modal-label">Name</label>
+          <input type="text" id="input-modal-input" class="form-input" placeholder="Enter name...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="window.app.closeInputModal()">Cancel</button>
+        <button id="input-modal-confirm" class="btn btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color Picker Modal -->
+  <div id="color-picker-modal" class="modal-overlay">
+    <div class="modal" style="width: 300px;">
+      <div class="modal-header">
+        <h3>Pick Color</h3>
+        <button class="modal-close" onclick="window.app.closeColorPicker()">
+          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="color-picker-container">
+          <div id="sv-panel" class="picker-sv-panel">
+            <div id="sv-handle" class="picker-sv-handle"></div>
+          </div>
+          <div id="hue-slider" class="picker-hue-slider">
+            <div id="hue-handle" class="picker-hue-handle"></div>
+          </div>
+          <div class="color-picker-inputs">
+            <input type="text" id="picker-hex-input" class="form-input" placeholder="#000000">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="window.app.closeColorPicker()">Cancel</button>
+        <button class="btn btn-primary" onclick="window.app.confirmColorPicker()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resize Handle -->
+  <div class="resize-handle" id="resize-handle"></div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

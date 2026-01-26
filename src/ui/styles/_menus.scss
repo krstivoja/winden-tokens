@@ -1,0 +1,53 @@
+// Menu styles
+.add-menu {
+  position: absolute;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  z-index: 100;
+  display: none;
+
+  &.open {
+    display: block;
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+
+    svg {
+      flex-shrink: 0;
+    }
+
+    &[data-type="COLOR"] svg {
+      color: #c41e3a;
+    }
+
+    &[data-type="FLOAT"] svg {
+      color: #3a5bc4;
+    }
+
+    &[data-type="STRING"] svg {
+      color: #2e8b57;
+    }
+
+    &[data-type="BOOLEAN"] svg {
+      color: #c47a1e;
+    }
+
+    &:hover {
+      background: var(--bg-hover);
+    }
+  }
+}

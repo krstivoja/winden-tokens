@@ -1,0 +1,399 @@
+"use strict";
+// Tokens Manager - Figma Plugin
+figma.showUI(__html__, { width: 600, height: 500, themeColors: true });
+// Track variable state for change detection
+let lastDataHash = '';
+// Fetch and send all data to UI
+async function fetchData() {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const variables = await figma.variables.getLocalVariablesAsync();
+    const collectionData = collections.map(c => ({
+        id: c.id,
+        name: c.name
+    }));
+    const variableData = variables.map(variable => {
+        const modeId = Object.keys(variable.valuesByMode)[0];
+        const value = variable.valuesByMode[modeId];
+        return {
+            id: variable.id,
+            collectionId: variable.variableCollectionId,
+            name: variable.name,
+            resolvedType: variable.resolvedType,
+            value: formatValue(value, variable.resolvedType)
+        };
+    });
+    // Update hash for change detection
+    lastDataHash = JSON.stringify({ collections: collectionData, variables: variableData });
+    figma.ui.postMessage({
+        type: 'data-loaded',
+        collections: collectionData,
+        variables: variableData
+    });
+}
+function formatValue(value, type) {
+    if (value === null || value === undefined) {
+        return 'undefined';
+    }
+    if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+        return `→ ${value.id}`;
+    }
+    switch (type) {
+        case 'COLOR':
+            if (typeof value === 'object' && 'r' in value) {
+                const r = Math.round(value.r * 255);
+                const g = Math.round(value.g * 255);
+                const b = Math.round(value.b * 255);
+                const a = value.a !== undefined ? value.a : 1;
+                const toHex = (n) => ('0' + n.toString(16).toUpperCase()).slice(-2);
+                const hex = '#' + toHex(r) + toHex(g) + toHex(b);
+                if (a < 1) {
+                    return hex + toHex(Math.round(a * 255));
+                }
+                return hex;
+            }
+            return String(value);
+        case 'FLOAT':
+            return String(value);
+        case 'STRING':
+            return String(value);
+        case 'BOOLEAN':
+            return value ? 'true' : 'false';
+        default:
+            return JSON.stringify(value);
+    }
+}
+function parseValue(value, type) {
+    switch (type) {
+        case 'COLOR':
+            const rgbaMatch = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            if (rgbaMatch) {
+                return {
+                    r: parseInt(rgbaMatch[1]) / 255,
+                    g: parseInt(rgbaMatch[2]) / 255,
+                    b: parseInt(rgbaMatch[3]) / 255,
+                    a: rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1
+                };
+            }
+            const hexMatch = value.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+            if (hexMatch) {
+                let hex = hexMatch[1];
+                if (hex.length === 3) {
+                    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+                }
+                return {
+                    r: parseInt(hex.substring(0, 2), 16) / 255,
+                    g: parseInt(hex.substring(2, 4), 16) / 255,
+                    b: parseInt(hex.substring(4, 6), 16) / 255,
+                    a: 1
+                };
+            }
+            throw new Error(`Invalid color format: ${value}`);
+        case 'FLOAT':
+            const num = parseFloat(value);
+            if (isNaN(num))
+                throw new Error(`Invalid number: ${value}`);
+            return num;
+        case 'STRING':
+            return value;
+        case 'BOOLEAN':
+            if (value === 'true')
+                return true;
+            if (value === 'false')
+                return false;
+            throw new Error(`Invalid boolean: ${value}`);
+        default:
+            return value;
+    }
+}
+function getDefaultValue(type) {
+    switch (type) {
+        case 'COLOR':
+            return { r: 0, g: 0, b: 0, a: 1 };
+        case 'FLOAT':
+            return 0;
+        case 'STRING':
+            return '';
+        case 'BOOLEAN':
+            return false;
+        default:
+            return null;
+    }
+}
+// Create a new collection
+async function createCollection(name) {
+    try {
+        figma.variables.createVariableCollection(name);
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Create a new variable
+async function createVariable(collectionId, name, varType, value) {
+    try {
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const resolvedType = varType;
+        const variable = figma.variables.createVariable(name, collection, resolvedType);
+        const modeId = collection.modes[0].modeId;
+        const parsedValue = value ? parseValue(value, varType) : getDefaultValue(varType);
+        variable.setValueForMode(modeId, parsedValue);
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Update variable name
+async function updateVariableName(id, newName) {
+    try {
+        const variable = await figma.variables.getVariableByIdAsync(id);
+        if (variable) {
+            variable.name = newName;
+            await fetchData();
+            figma.ui.postMessage({ type: 'update-success' });
+        }
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Update variable value
+async function updateVariableValue(id, newValue) {
+    try {
+        const variable = await figma.variables.getVariableByIdAsync(id);
+        if (variable) {
+            const modeId = Object.keys(variable.valuesByMode)[0];
+            const parsedValue = parseValue(newValue, variable.resolvedType);
+            variable.setValueForMode(modeId, parsedValue);
+            await fetchData();
+            figma.ui.postMessage({ type: 'update-success' });
+        }
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Delete variable
+async function deleteVariable(id) {
+    try {
+        const variable = await figma.variables.getVariableByIdAsync(id);
+        if (variable) {
+            variable.remove();
+            await fetchData();
+            figma.ui.postMessage({ type: 'update-success' });
+        }
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Delete group of variables
+async function deleteGroup(ids) {
+    try {
+        for (const id of ids) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                variable.remove();
+            }
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Duplicate variable
+async function duplicateVariable(id) {
+    try {
+        const variable = await figma.variables.getVariableByIdAsync(id);
+        if (variable) {
+            const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+            if (!collection)
+                throw new Error('Collection not found');
+            const newVariable = figma.variables.createVariable(variable.name + ' copy', collection, variable.resolvedType);
+            // Copy value from first mode
+            const modeId = Object.keys(variable.valuesByMode)[0];
+            const value = variable.valuesByMode[modeId];
+            newVariable.setValueForMode(modeId, value);
+            await fetchData();
+            figma.ui.postMessage({ type: 'update-success' });
+        }
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Create color shades
+async function createShades(collectionId, shades) {
+    try {
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        for (const shade of shades) {
+            const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
+            const parsedValue = parseValue(shade.value, 'COLOR');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Update color shades (delete old, create new)
+async function updateShades(collectionId, deleteIds, shades) {
+    try {
+        // Delete old shades
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                variable.remove();
+            }
+        }
+        // Create new shades
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        for (const shade of shades) {
+            const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
+            const parsedValue = parseValue(shade.value, 'COLOR');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Remove shades and convert back to single color
+async function removeShades(collectionId, deleteIds, newColor) {
+    try {
+        // Delete all shades
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                variable.remove();
+            }
+        }
+        // Create single color
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        const variable = figma.variables.createVariable(newColor.name, collection, 'COLOR');
+        const parsedValue = parseValue(newColor.value, 'COLOR');
+        variable.setValueForMode(modeId, parsedValue);
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Update from JSON
+async function updateFromJson(data) {
+    try {
+        // Update existing variables
+        for (const varData of data.variables) {
+            if (varData.id) {
+                const variable = await figma.variables.getVariableByIdAsync(varData.id);
+                if (variable) {
+                    if (varData.name && varData.name !== variable.name) {
+                        variable.name = varData.name;
+                    }
+                    if (varData.value !== undefined) {
+                        const modeId = Object.keys(variable.valuesByMode)[0];
+                        const parsedValue = parseValue(varData.value, varData.type || variable.resolvedType);
+                        variable.setValueForMode(modeId, parsedValue);
+                    }
+                }
+            }
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Poll for changes
+async function checkForChanges() {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const variables = await figma.variables.getLocalVariablesAsync();
+    const collectionData = collections.map(c => ({ id: c.id, name: c.name }));
+    const variableData = variables.map(v => {
+        const modeId = Object.keys(v.valuesByMode)[0];
+        return {
+            id: v.id,
+            collectionId: v.variableCollectionId,
+            name: v.name,
+            resolvedType: v.resolvedType,
+            value: formatValue(v.valuesByMode[modeId], v.resolvedType)
+        };
+    });
+    const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
+    if (lastDataHash && currentHash !== lastDataHash) {
+        figma.ui.postMessage({ type: 'changes-detected' });
+    }
+}
+// Start polling
+setInterval(checkForChanges, 2000);
+// Initial fetch
+fetchData();
+// Message handler
+figma.ui.onmessage = async (msg) => {
+    switch (msg.type) {
+        case 'refresh':
+            await fetchData();
+            break;
+        case 'create-collection':
+            await createCollection(msg.name);
+            break;
+        case 'create-variable':
+            await createVariable(msg.collectionId, msg.name, msg.varType, msg.value);
+            break;
+        case 'update-variable-name':
+            await updateVariableName(msg.id, msg.name);
+            break;
+        case 'update-variable-value':
+            await updateVariableValue(msg.id, msg.value);
+            break;
+        case 'delete-variable':
+            await deleteVariable(msg.id);
+            break;
+        case 'delete-group':
+            await deleteGroup(msg.ids);
+            break;
+        case 'duplicate-variable':
+            await duplicateVariable(msg.id);
+            break;
+        case 'update-from-json':
+            await updateFromJson(msg.data);
+            break;
+        case 'create-shades':
+            await createShades(msg.collectionId, msg.shades);
+            break;
+        case 'update-shades':
+            await updateShades(msg.collectionId, msg.deleteIds, msg.shades);
+            break;
+        case 'remove-shades':
+            await removeShades(msg.collectionId, msg.deleteIds, msg.newColor);
+            break;
+        case 'resize':
+            figma.ui.resize(msg.width, msg.height);
+            break;
+        case 'cancel':
+            figma.closePlugin();
+            break;
+    }
+};

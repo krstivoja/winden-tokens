@@ -1,44 +1,23 @@
 {
   "name": "tokens-manager",
   "version": "1.0.0",
-  "description": "Your Figma Plugin",
-  "main": "code.js",
+  "description": "Figma Plugin for managing design tokens",
+  "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "lint": "eslint --ext .ts,.tsx --ignore-pattern node_modules .",
-    "lint:fix": "eslint --ext .ts,.tsx --ignore-pattern node_modules --fix .",
-    "watch": "npm run build -- --watch"
+    "dev": "concurrently \"vite build --watch --mode development\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "build": "vite build && tsc --project tsconfig.plugin.json",
+    "build:ui": "vite build",
+    "build:plugin": "tsc --project tsconfig.plugin.json"
   },
   "author": "",
-  "license": "",
+  "license": "MIT",
   "devDependencies": {
-    "@figma/eslint-plugin-figma-plugins": "*",
-    "@figma/plugin-typings": "*",
-    "@typescript-eslint/eslint-plugin": "^6.12.0",
-    "@typescript-eslint/parser": "^6.12.0",
-    "eslint": "^8.54.0",
-    "typescript": "^5.3.2"
-  },
-  "eslintConfig": {
-    "extends": [
-      "eslint:recommended",
-      "plugin:@typescript-eslint/recommended",
-      "plugin:@figma/figma-plugins/recommended"
-    ],
-    "parser": "@typescript-eslint/parser",
-    "parserOptions": {
-      "project": "./tsconfig.json"
-    },
-    "root": true,
-    "rules": {
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          "argsIgnorePattern": "^_",
-          "varsIgnorePattern": "^_",
-          "caughtErrorsIgnorePattern": "^_"
-        }
-      ]
-    }
+    "@figma/plugin-typings": "^1.98.0",
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "sass": "^1.69.5",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.4",
+    "vite-plugin-singlefile": "^0.13.5"
   }
 }

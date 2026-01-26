@@ -1,0 +1,307 @@
+// Main entry point for the UI
+
+import './styles/main.scss';
+import { state } from './state';
+import { renderCollections, renderTable } from './components/table';
+import { initColorPicker, openColorPicker, closeColorPicker, confirmColorPicker } from './components/colorPicker';
+import {
+  initShadesModal,
+  selectSourceColor,
+  updateBaseFromHex,
+  updateShadesPreview,
+  closeShadesModal,
+  generateShades,
+  removeShades,
+  openShadesColorPicker
+} from './components/shades';
+import { initModals, showInputModal, closeInputModal } from './components/modals';
+import { post, $ } from './utils/helpers';
+import { hexToRgb } from './utils/color';
+
+// Initialize application
+function init(): void {
+  initColorPicker();
+  initShadesModal();
+  initModals();
+  initTabs();
+  initToolbar();
+  initResize();
+  initCollectionSelect();
+  initAddMenu();
+
+  // Expose app methods to window for inline handlers
+  (window as any).app = {
+    showAddMenu,
+    toggleGroup,
+    deleteGroup,
+    updateNameFromDisplay,
+    updateValue,
+    handleKey,
+    openColorPickerForVariable,
+    selectSourceColor,
+    updateBaseFromHex,
+    updateShadesPreview,
+    closeShadesModal,
+    generateShades,
+    removeShades,
+    openShadesColorPicker,
+    closeColorPicker,
+    confirmColorPicker,
+    closeInputModal
+  };
+}
+
+// Tab switching
+function initTabs(): void {
+  document.querySelectorAll('.tab').forEach(tab => {
+    (tab as HTMLElement).onclick = () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      const tabId = (tab as HTMLElement).dataset.tab + '-tab';
+      $(`${tabId}`)?.classList.add('active');
+      if ((tab as HTMLElement).dataset.tab === 'json') updateJson();
+    };
+  });
+}
+
+// Toolbar buttons
+function initToolbar(): void {
+  const refreshBtn = $('refresh-btn');
+  const addCollectionBtn = $('add-collection-btn');
+
+  if (refreshBtn) {
+    refreshBtn.onclick = () => post({ type: 'refresh' });
+  }
+
+  if (addCollectionBtn) {
+    addCollectionBtn.onclick = () => {
+      showInputModal('New Collection', 'Collection name', 'Create', (name) => {
+        post({ type: 'create-collection', name });
+      });
+    };
+  }
+}
+
+// Collection select
+function initCollectionSelect(): void {
+  const select = $('collection-select') as HTMLSelectElement;
+  if (select) {
+    select.onchange = () => {
+      state.selectedCollectionId = select.value;
+      renderTable();
+    };
+  }
+}
+
+// Add menu
+const addMenu = $('add-menu');
+
+function initAddMenu(): void {
+  const addVariableBtn = $('add-variable-btn');
+  if (addVariableBtn) {
+    addVariableBtn.onclick = showAddMenu;
+  }
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('#add-menu') &&
+        !target.closest('#add-variable-btn') &&
+        !target.closest('.add-row-btn')) {
+      addMenu?.classList.remove('open');
+    }
+  });
+
+  addMenu?.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      const type = (btn as HTMLElement).dataset.type;
+      addMenu?.classList.remove('open');
+      showInputModal('New Variable', 'Variable name', 'Create', (name) => {
+        let value = '';
+        if (type === 'COLOR') value = 'rgb(0, 0, 0)';
+        else if (type === 'FLOAT') value = '0';
+        else if (type === 'BOOLEAN') value = 'true';
+        post({ type: 'create-variable', collectionId: state.selectedCollectionId, name, varType: type, value });
+      });
+    };
+  });
+}
+
+function showAddMenu(e: Event): void {
+  const target = e.target as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  if (addMenu) {
+    addMenu.style.top = (rect.bottom + 4) + 'px';
+    addMenu.style.left = rect.left + 'px';
+    addMenu.classList.add('open');
+  }
+}
+
+// Resize handling
+function initResize(): void {
+  const resizeHandle = $('resize-handle');
+  let isResizing = false;
+  let startX: number, startY: number, startWidth: number, startHeight: number;
+
+  if (resizeHandle) {
+    resizeHandle.onmousedown = (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = window.innerWidth;
+      startHeight = window.innerHeight;
+      e.preventDefault();
+    };
+  }
+
+  document.onmousemove = (e) => {
+    if (!isResizing) return;
+    const newWidth = Math.max(400, startWidth + (e.clientX - startX));
+    const newHeight = Math.max(300, startHeight + (e.clientY - startY));
+    post({ type: 'resize', width: newWidth, height: newHeight });
+  };
+
+  document.onmouseup = () => {
+    isResizing = false;
+  };
+}
+
+// JSON editor
+function updateJson(): void {
+  const jsonEditor = $('json-editor') as HTMLTextAreaElement;
+  if (!jsonEditor) return;
+
+  jsonEditor.value = JSON.stringify({
+    collections: state.collections,
+    variables: state.variables.map(v => ({
+      id: v.id,
+      collectionId: v.collectionId,
+      name: v.name,
+      type: v.resolvedType,
+      value: v.value
+    }))
+  }, null, 2);
+}
+
+// Actions
+function toggleGroup(groupName: string): void {
+  state.toggleGroup(groupName);
+  renderTable();
+}
+
+function deleteGroup(ids: string): void {
+  const idList = ids.split(',');
+  if (confirm(`Delete all ${idList.length} variables in this group?`)) {
+    post({ type: 'delete-group', ids: idList });
+  }
+}
+
+function updateNameFromDisplay(id: string, displayName: string, fullName: string): void {
+  const parts = fullName.split('/');
+  let newFullName: string;
+  if (parts.length > 1) {
+    parts[parts.length - 1] = displayName;
+    newFullName = parts.join('/');
+  } else {
+    newFullName = displayName;
+  }
+  if (newFullName !== fullName) {
+    post({ type: 'update-variable-name', id, name: newFullName });
+  }
+}
+
+function updateValue(id: string, value: string): void {
+  post({ type: 'update-variable-value', id, value });
+}
+
+function handleKey(e: KeyboardEvent, rowIndex: number, field: string): void {
+  const tableBody = $('table-body');
+  if (!tableBody) return;
+
+  const rows = tableBody.querySelectorAll('tr:not(.add-row):not(.group-row)');
+
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (field === 'name') {
+      const valueInput = rows[rowIndex]?.querySelector('td:last-child input') as HTMLInputElement;
+      if (valueInput) valueInput.focus();
+    } else {
+      const nextRow = rows[rowIndex + 1];
+      if (nextRow) {
+        const nameInput = nextRow.querySelector('.name-cell input') as HTMLInputElement;
+        if (nameInput) nameInput.focus();
+      }
+    }
+  } else if (e.key === 'Enter') {
+    (e.target as HTMLElement).blur();
+  }
+}
+
+function openColorPickerForVariable(id: string, currentValue: string): void {
+  openColorPicker(currentValue, (hex) => {
+    updateValue(id, hexToRgb(hex));
+  });
+}
+
+// Status display
+function showStatus(msg: string, type: string): void {
+  const statusEl = $('status');
+  if (!statusEl) return;
+
+  statusEl.textContent = msg;
+  statusEl.className = 'status ' + type;
+  if (type === 'success') {
+    setTimeout(() => {
+      statusEl.textContent = '';
+      statusEl.className = 'status';
+    }, 2000);
+  }
+}
+
+// Message handler
+window.onmessage = (e) => {
+  const msg = e.data.pluginMessage;
+  if (!msg) return;
+
+  if (msg.type === 'data-loaded') {
+    state.setData(msg.collections || [], msg.variables || []);
+    renderCollections();
+    renderTable();
+    updateJson();
+  }
+
+  if (msg.type === 'update-success') showStatus('Saved', 'success');
+  if (msg.type === 'update-error') showStatus('Error: ' + msg.error, 'warning');
+  if (msg.type === 'changes-detected') showStatus('Changes detected - click Refresh', 'warning');
+};
+
+// JSON buttons
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+
+  const jsonFormatBtn = $('json-format-btn');
+  const jsonUpdateBtn = $('json-update-btn');
+  const jsonEditor = $('json-editor') as HTMLTextAreaElement;
+
+  if (jsonFormatBtn && jsonEditor) {
+    jsonFormatBtn.onclick = () => {
+      try {
+        jsonEditor.value = JSON.stringify(JSON.parse(jsonEditor.value), null, 2);
+        jsonEditor.classList.remove('error');
+      } catch {
+        jsonEditor.classList.add('error');
+      }
+    };
+  }
+
+  if (jsonUpdateBtn && jsonEditor) {
+    jsonUpdateBtn.onclick = () => {
+      try {
+        post({ type: 'update-from-json', data: JSON.parse(jsonEditor.value) });
+        jsonEditor.classList.remove('error');
+      } catch {
+        jsonEditor.classList.add('error');
+      }
+    };
+  }
+});

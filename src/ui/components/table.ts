@@ -1,0 +1,153 @@
+// Table rendering component
+
+import { VariableData, VariableType } from '../types';
+import { state } from '../state';
+import { esc, post } from '../utils/helpers';
+import { getTypeIcon } from '../utils/icons';
+import { rgbToHex } from '../utils/color';
+
+export function renderCollections(): void {
+  const select = document.getElementById('collection-select') as HTMLSelectElement;
+  if (!select) return;
+
+  select.innerHTML = state.collections.map(c =>
+    `<option value="${c.id}" ${c.id === state.selectedCollectionId ? 'selected' : ''}>${esc(c.name)}</option>`
+  ).join('') || '<option value="">No collections</option>';
+}
+
+export function renderTable(): void {
+  const tableBody = document.getElementById('table-body');
+  if (!tableBody) return;
+
+  const filtered = state.getFilteredVariables();
+
+  if (!filtered.length) {
+    tableBody.innerHTML = `
+      <tr class="add-row">
+        <td colspan="2">
+          <button class="add-row-btn" onclick="window.app.showAddMenu(event)">
+            <svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+            Add first variable
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Group variables by their path prefix
+  const grouped: Record<string, VariableData[]> = {};
+  const ungrouped: VariableData[] = [];
+
+  filtered.forEach(v => {
+    const parts = v.name.split('/');
+    if (parts.length > 1) {
+      const groupName = parts.slice(0, -1).join('/');
+      if (!grouped[groupName]) grouped[groupName] = [];
+      grouped[groupName].push({ ...v, displayName: parts[parts.length - 1] });
+    } else {
+      ungrouped.push({ ...v, displayName: v.name });
+    }
+  });
+
+  const sortedGroups = Object.keys(grouped).sort();
+
+  let html = '';
+  let rowIndex = 0;
+
+  // Render ungrouped variables first
+  ungrouped.forEach(v => {
+    html += renderVariableRow(v, rowIndex++, false);
+  });
+
+  // Render grouped variables
+  sortedGroups.forEach(groupName => {
+    const isCollapsed = state.isGroupCollapsed(groupName);
+    const groupIds = grouped[groupName].map(v => v.id).join(',');
+    html += `
+      <tr class="group-row ${isCollapsed ? 'collapsed' : ''}" data-group="${esc(groupName)}">
+        <td colspan="2">
+          <div class="group-header">
+            <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="window.app.toggleGroup('${esc(groupName)}')">
+              <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </span>
+            <span onclick="window.app.toggleGroup('${esc(groupName)}')" style="flex:1;cursor:pointer;">
+              ${esc(groupName)}
+              <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>
+            </span>
+            <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">
+              <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+
+    grouped[groupName].forEach(v => {
+      html += renderVariableRow(v, rowIndex++, true, isCollapsed, groupName);
+    });
+  });
+
+  tableBody.innerHTML = html;
+}
+
+function renderVariableRow(
+  v: VariableData,
+  i: number,
+  isGrouped: boolean,
+  isHidden = false,
+  groupName = ''
+): string {
+  const hiddenClass = isHidden ? 'hidden-by-group' : '';
+  const groupedClass = isGrouped ? 'grouped-item' : '';
+  const dataGroup = groupName ? `data-parent-group="${esc(groupName)}"` : '';
+
+  return `
+    <tr data-id="${v.id}" class="${groupedClass} ${hiddenClass}" ${dataGroup}>
+      <td>
+        <div class="name-cell">
+          <span class="type-icon ${v.resolvedType}">${getTypeIcon(v.resolvedType)}</span>
+          <input class="cell-input" value="${esc(v.displayName)}"
+            data-full-name="${esc(v.name)}"
+            onblur="window.app.updateNameFromDisplay('${v.id}', this.value, '${esc(v.name)}')"
+            onkeydown="window.app.handleKey(event, ${i}, 'name')">
+        </div>
+      </td>
+      <td>
+        ${renderValueCell(v)}
+      </td>
+    </tr>
+  `;
+}
+
+function renderValueCell(v: VariableData): string {
+  if (v.resolvedType === 'COLOR') {
+    return `
+      <div class="color-value-cell">
+        <div class="color-swatch" onclick="window.app.openColorPickerForVariable('${v.id}', '${esc(v.value)}')">
+          <div class="color-swatch-inner" style="background:${esc(v.value)}"></div>
+        </div>
+        <input class="cell-input mono" value="${esc(v.value)}"
+          onblur="window.app.updateValue('${v.id}', this.value)">
+      </div>
+    `;
+  }
+
+  if (v.resolvedType === 'BOOLEAN') {
+    return `
+      <div class="cell">
+        <div class="bool-toggle">
+          <button class="${v.value === 'true' ? 'active' : ''}" onclick="window.app.updateValue('${v.id}', 'true')">True</button>
+          <button class="${v.value === 'false' ? 'active' : ''}" onclick="window.app.updateValue('${v.id}', 'false')">False</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="value-cell">
+      <input class="cell-input mono" value="${esc(v.value)}"
+        onblur="window.app.updateValue('${v.id}', this.value)">
+    </div>
+  `;
+}
