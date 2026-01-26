@@ -1,0 +1,1848 @@
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f9f9f9;
+    --bg-hover: #f0f0f0;
+    --bg-selected: #e8f4ff;
+    --border: #e0e0e0;
+    --text: #1e1e1e;
+    --text-dim: #666;
+    --accent: #18a0fb;
+    --danger: #e03e3e;
+    --success: #1bc47d;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Inter, -apple-system, sans-serif;
+    font-size: 12px;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-alt);
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 8px;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text);
+  }
+
+  .btn:hover { background: var(--bg-hover); }
+  .btn-icon { padding: 6px; }
+  .btn svg { width: 14px; height: 14px; }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: #0d8de5; }
+
+  .btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+  }
+  .btn-danger:hover { background: #c43030; }
+
+  .collection-select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    min-width: 140px;
+  }
+
+  .spacer { flex: 1; }
+
+  .status {
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .status.success { background: #e6f9f0; color: var(--success); }
+  .status.warning { background: #fff8e6; color: #b86e00; }
+
+  /* Table Container */
+  .table-container {
+    flex: 1;
+    overflow: auto;
+  }
+
+  /* Spreadsheet Table */
+  .spreadsheet {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .spreadsheet th,
+  .spreadsheet td {
+    border: 1px solid var(--border);
+    padding: 0;
+    height: 32px;
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .spreadsheet th {
+    background: var(--bg-alt);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 0 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .spreadsheet th.col-actions { width: 70px; text-align: center; }
+  .spreadsheet th.col-color { width: 40px; }
+  .spreadsheet th.col-name { width: 35%; }
+  .spreadsheet th.col-type { width: 80px; }
+  .spreadsheet th.col-value { }
+
+  .spreadsheet tbody tr:nth-child(even) { background: var(--bg-alt); }
+  .spreadsheet tbody tr:hover { background: var(--bg-hover); }
+  .spreadsheet tbody tr.selected { background: var(--bg-selected); }
+
+  /* Cells */
+  .cell {
+    padding: 0 10px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .cell-input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 0 10px;
+    outline: none;
+  }
+
+  .cell-input:focus {
+    background: white;
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+
+  .cell-input.mono {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 11px;
+  }
+
+  /* Color Cell */
+  .color-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .color-swatch::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg, #ddd 25%, transparent 25%),
+                linear-gradient(-45deg, #ddd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ddd 75%),
+                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+  }
+
+  .color-swatch-inner {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .color-swatch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  /* Type Icon */
+  .type-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .type-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  .type-icon.COLOR svg { color: #c41e3a; }
+  .type-icon.FLOAT svg { color: #3a5bc4; }
+  .type-icon.STRING svg { color: #2e8b57; }
+  .type-icon.BOOLEAN svg { color: #c47a1e; }
+
+  /* Boolean Toggle */
+  .bool-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bool-toggle button {
+    padding: 4px 12px;
+    border: none;
+    background: var(--bg);
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .bool-toggle button:first-child { border-right: 1px solid var(--border); }
+  .bool-toggle button.active { background: var(--accent); color: white; }
+
+  /* Actions */
+  .row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  tr:hover .row-actions { opacity: 1; }
+
+  .row-action {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: none;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+
+  .row-action:hover { background: var(--bg-hover); color: var(--text); }
+  .row-action.danger:hover { background: #ffe5e5; color: var(--danger); }
+  .row-action svg { width: 12px; height: 12px; }
+
+  /* Add Row */
+  .add-row td {
+    background: transparent;
+    border: 1px dashed var(--border);
+  }
+
+  .add-row:hover td { background: var(--bg-hover); }
+
+  .add-row-btn {
+    width: 100%;
+    height: 32px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .add-row-btn:hover { color: var(--accent); }
+
+  /* Empty State */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-dim);
+  }
+
+  /* Tab bar for JSON */
+  .tabs {
+    display: flex;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .tab-content.active { display: flex; }
+
+  /* JSON Panel */
+  .json-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .json-editor {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 11px;
+    resize: none;
+    outline: none;
+  }
+
+  .json-editor:focus { border-color: var(--accent); }
+  .json-editor.error { border-color: var(--danger); background: #fff5f5; }
+
+  /* Add Type Menu */
+  .add-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 4px;
+    z-index: 100;
+    display: none;
+  }
+
+  .add-menu.open { display: block; }
+
+  .add-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .add-menu button svg { flex-shrink: 0; }
+  .add-menu button[data-type="COLOR"] svg { color: #c41e3a; }
+  .add-menu button[data-type="FLOAT"] svg { color: #3a5bc4; }
+  .add-menu button[data-type="STRING"] svg { color: #2e8b57; }
+  .add-menu button[data-type="BOOLEAN"] svg { color: #c47a1e; }
+
+  .add-menu button:hover { background: var(--bg-hover); }
+
+  /* Group Rows */
+  .group-row td {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .group-row:hover td {
+    background: var(--bg-hover);
+  }
+
+  .group-row:hover .row-action {
+    opacity: 1 !important;
+  }
+
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .group-toggle {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    transition: transform 0.15s;
+  }
+
+  .group-toggle.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  .group-toggle svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .group-row.collapsed + tr:not(.group-row),
+  .group-row.collapsed ~ tr:not(.group-row) {
+    display: none;
+  }
+
+  /* Show rows until next group when not collapsed */
+  tr.grouped-item {
+    /* Indent the name slightly */
+  }
+
+  tr.grouped-item .cell-input:first-of-type {
+    padding-left: 26px;
+  }
+
+  tr.hidden-by-group {
+    display: none;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+
+  .modal-overlay.open {
+    display: flex;
+  }
+
+  .modal {
+    background: var(--bg);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    width: 360px;
+    max-height: 90vh;
+    overflow: auto;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+
+  .modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  .modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-group label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+
+  .form-input {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+  }
+
+  .form-input:focus {
+    border-color: var(--accent);
+  }
+
+  .form-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .form-row .form-group {
+    flex: 1;
+  }
+
+  .color-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .color-input-preview {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .color-input-preview::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg, #ddd 25%, transparent 25%),
+                linear-gradient(-45deg, #ddd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ddd 75%),
+                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+  }
+
+  .color-input-preview .color-fill {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .color-input-preview input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .color-input-wrapper .form-input {
+    flex: 1;
+  }
+
+  /* Lightness Input */
+  .lightness-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .lightness-input-wrapper .form-input {
+    width: 70px;
+    text-align: center;
+  }
+
+  .lightness-preview {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* Shades Preview */
+  .shades-preview {
+    display: flex;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 32px;
+    border: 1px solid var(--border);
+  }
+
+  .shades-preview-item {
+    flex: 1;
+    height: 100%;
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Color Picker */
+  .color-picker-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .picker-hue-slider {
+    width: 220px;
+    height: 20px;
+    border-radius: 10px;
+    background: linear-gradient(to right,
+      hsl(0, 100%, 50%),
+      hsl(60, 100%, 50%),
+      hsl(120, 100%, 50%),
+      hsl(180, 100%, 50%),
+      hsl(240, 100%, 50%),
+      hsl(300, 100%, 50%),
+      hsl(360, 100%, 50%)
+    );
+    position: relative;
+    cursor: pointer;
+  }
+
+  .picker-hue-handle {
+    position: absolute;
+    top: 50%;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(0,0,0,0.2);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .color-picker-inputs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .color-picker-inputs .form-input {
+    width: 100px;
+    text-align: center;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 11px;
+  }
+
+  .picker-sv-panel {
+    width: 220px;
+    height: 180px;
+    border-radius: 12px;
+    position: relative;
+    cursor: crosshair;
+    background: linear-gradient(to right, #fff, hsl(0, 100%, 50%));
+  }
+
+  .picker-sv-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent, #000);
+    border-radius: 12px;
+    pointer-events: none;
+  }
+
+  .picker-sv-handle {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(0,0,0,0.2);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 2;
+    background: transparent;
+  }
+
+  /* Resize Handle */
+  .resize-handle {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 1000;
+  }
+
+  .resize-handle::before {
+    content: '';
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--border);
+    border-bottom: 2px solid var(--border);
+  }
+
+  .resize-handle:hover::before {
+    border-color: var(--text-dim);
+  }
+</style>
+
+<div class="tabs">
+  <button class="tab active" data-tab="table">Table</button>
+  <button class="tab" data-tab="json">JSON</button>
+</div>
+
+<!-- Table Tab -->
+<div id="table-tab" class="tab-content active">
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <select id="collection-select" class="collection-select"></select>
+      <button id="add-collection-btn" class="btn btn-icon" title="New Collection">
+        <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
+    <div class="toolbar-group">
+      <button id="add-variable-btn" class="btn btn-primary">
+        <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        Add Variable
+      </button>
+      <button id="shades-btn" class="btn" title="Generate Color Shades">
+        <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.2"/><rect x="5" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.5"/><rect x="9" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="13" y="2" width="2" height="12" rx="1" fill="currentColor"/></svg>
+        Shades
+      </button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span id="status" class="status"></span>
+
+    <button id="refresh-btn" class="btn btn-icon" title="Refresh">
+      <svg viewBox="0 0 16 16"><path d="M13.65 2.35A8 8 0 1 0 16 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <div class="table-container">
+    <table class="spreadsheet">
+      <thead>
+        <tr>
+          <th class="col-actions"></th>
+          <th class="col-color"></th>
+          <th class="col-name">Name</th>
+          <th class="col-type">Type</th>
+          <th class="col-value">Value</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Add Menu -->
+  <div id="add-menu" class="add-menu">
+    <button data-type="COLOR"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M19 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0M14 19a3 3 0 1 1-6 0 3 3 0 0 1 6 0M8 14a3 3 0 1 1-6 0 3 3 0 0 1 6 0M9 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0M16 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0M22 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>Color</button>
+    <button data-type="FLOAT"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m10 5-2 14M16 5l-2 14"/></svg>Number</button>
+    <button data-type="STRING"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" stroke="currentColor" stroke-width="2" rx="2"/><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M9.5 10v4M14.5 10v4M9.5 10h1.75c.69 0 1.25.56 1.25 1.25v0c0 .69-.56 1.25-1.25 1.25H9.5M12.5 12.5h-.75M14.5 10h-1.75c-.69 0-1.25.56-1.25 1.25v0c0 .69.56 1.25 1.25 1.25h.5c.69 0 1.25.56 1.25 1.25v0c0 .69-.56 1.25-1.25 1.25H12.5"/></svg>String</button>
+    <button data-type="BOOLEAN"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect width="18" height="12" x="3" y="6" stroke="currentColor" stroke-width="2" rx="6"/><circle cx="9" cy="12" r="3" fill="currentColor"/></svg>Boolean</button>
+  </div>
+</div>
+
+<!-- JSON Tab -->
+<div id="json-tab" class="tab-content">
+  <div class="json-panel">
+    <textarea id="json-editor" class="json-editor" spellcheck="false"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button id="json-update-btn" class="btn btn-primary">Update</button>
+      <button id="json-format-btn" class="btn">Format</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shades Generator Modal -->
+<div id="shades-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Generate Color Shades</h3>
+      <button class="modal-close" onclick="closeShadesModal()">
+        <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Select Color</label>
+        <select id="shades-source" class="form-input" onchange="selectSourceColor()">
+          <option value="">-- Select a color --</option>
+        </select>
+      </div>
+
+      <div id="shades-options" style="display:none;flex-direction:column;gap:16px;">
+        <div class="form-group">
+          <label>Group Name</label>
+          <input type="text" id="shades-name" class="form-input" placeholder="e.g. blue, primary, brand" value="">
+        </div>
+
+        <div class="form-group">
+          <label>Base Color</label>
+          <div class="color-input-wrapper">
+            <div class="color-input-preview" onclick="openShadesColorPicker()" style="cursor:pointer;">
+              <div class="color-fill" id="shades-base-preview" style="background: transparent"></div>
+            </div>
+            <input type="hidden" id="shades-base-color" value="">
+            <input type="text" id="shades-base-hex" class="form-input mono" value="" placeholder="#000000" oninput="updateBaseFromHex()">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Lightest</label>
+            <div class="lightness-input-wrapper">
+              <input type="number" id="shades-light-value" class="form-input" value="5" min="0" max="100" oninput="updateShadesPreview()">
+              <div class="lightness-preview" id="shades-light-preview"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Darkest</label>
+            <div class="lightness-input-wrapper">
+              <input type="number" id="shades-dark-value" class="form-input" value="90" min="0" max="100" oninput="updateShadesPreview()">
+              <div class="lightness-preview" id="shades-dark-preview"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Shades</label>
+            <input type="number" id="shades-count" class="form-input" value="11" min="2" max="20" oninput="updateShadesPreview()" style="width:60px;">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Preview</label>
+          <div class="shades-preview" id="shades-preview"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="shades-remove-btn" class="btn btn-danger" onclick="removeShades()" style="display:none;">Remove Shades</button>
+      <div class="spacer"></div>
+      <button class="btn" onclick="closeShadesModal()">Cancel</button>
+      <button id="shades-generate-btn" class="btn btn-primary" onclick="generateShades()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Input Modal -->
+<div id="input-modal" class="modal-overlay">
+  <div class="modal" style="width: 300px;">
+    <div class="modal-header">
+      <h3 id="input-modal-title">Enter Name</h3>
+      <button class="modal-close" onclick="closeInputModal()">
+        <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label id="input-modal-label">Name</label>
+        <input type="text" id="input-modal-input" class="form-input" placeholder="Enter name...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeInputModal()">Cancel</button>
+      <button id="input-modal-confirm" class="btn btn-primary">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Color Picker Modal -->
+<div id="color-picker-modal" class="modal-overlay">
+  <div class="modal" style="width: 300px;">
+    <div class="modal-header">
+      <h3>Pick Color</h3>
+      <button class="modal-close" onclick="closeColorPicker()">
+        <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="color-picker-container">
+        <div id="sv-panel" class="picker-sv-panel">
+          <div id="sv-handle" class="picker-sv-handle"></div>
+        </div>
+        <div id="hue-slider" class="picker-hue-slider">
+          <div id="hue-handle" class="picker-hue-handle"></div>
+        </div>
+        <div class="color-picker-inputs">
+          <input type="text" id="picker-hex-input" class="form-input" placeholder="#000000">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeColorPicker()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmColorPicker()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Resize Handle -->
+<div class="resize-handle" id="resize-handle"></div>
+
+<script>
+  let collections = [];
+  let variables = [];
+  let selectedCollectionId = null;
+  let collapsedGroups = new Set();
+
+  const collectionSelect = document.getElementById('collection-select');
+  const tableBody = document.getElementById('table-body');
+  const statusEl = document.getElementById('status');
+  const addMenu = document.getElementById('add-menu');
+  const jsonEditor = document.getElementById('json-editor');
+
+  // Type icons (Figma native)
+  function getTypeIcon(type) {
+    const icons = {
+      COLOR: '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M19 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0M14 19a3 3 0 1 1-6 0 3 3 0 0 1 6 0M8 14a3 3 0 1 1-6 0 3 3 0 0 1 6 0M9 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0M16 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0M22 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>',
+      FLOAT: '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m10 5-2 14M16 5l-2 14"/></svg>',
+      STRING: '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" stroke="currentColor" stroke-width="2" rx="2"/><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M9.5 10v4M14.5 10v4M9.5 10h1.75c.69 0 1.25.56 1.25 1.25v0c0 .69-.56 1.25-1.25 1.25H9.5M12.5 12.5h-.75M14.5 10h-1.75c-.69 0-1.25.56-1.25 1.25v0c0 .69.56 1.25 1.25 1.25h.5c.69 0 1.25.56 1.25 1.25v0c0 .69-.56 1.25-1.25 1.25H12.5"/></svg>',
+      BOOLEAN: '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect width="18" height="12" x="3" y="6" stroke="currentColor" stroke-width="2" rx="6"/><circle cx="9" cy="12" r="3" fill="currentColor"/></svg>'
+    };
+    return icons[type] || type;
+  }
+
+  // Resize handling
+  const resizeHandle = document.getElementById('resize-handle');
+  let isResizing = false;
+  let startX, startY, startWidth, startHeight;
+
+  resizeHandle.onmousedown = (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startWidth = window.innerWidth;
+    startHeight = window.innerHeight;
+    e.preventDefault();
+  };
+
+  document.onmousemove = (e) => {
+    if (!isResizing) return;
+    const newWidth = Math.max(400, startWidth + (e.clientX - startX));
+    const newHeight = Math.max(300, startHeight + (e.clientY - startY));
+    parent.postMessage({ pluginMessage: { type: 'resize', width: newWidth, height: newHeight } }, '*');
+  };
+
+  document.onmouseup = () => {
+    isResizing = false;
+  };
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+      if (tab.dataset.tab === 'json') updateJson();
+    };
+  });
+
+  // Messages
+  window.onmessage = (e) => {
+    const msg = e.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'data-loaded') {
+      collections = msg.collections || [];
+      variables = msg.variables || [];
+      if (!selectedCollectionId && collections.length) selectedCollectionId = collections[0].id;
+      renderCollections();
+      renderTable();
+      updateJson();
+    }
+
+    if (msg.type === 'update-success') showStatus('Saved', 'success');
+    if (msg.type === 'update-error') showStatus('Error: ' + msg.error, 'warning');
+    if (msg.type === 'changes-detected') showStatus('Changes detected - click Refresh', 'warning');
+  };
+
+  function showStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status ' + type;
+    if (type === 'success') setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'status'; }, 2000);
+  }
+
+  function renderCollections() {
+    collectionSelect.innerHTML = collections.map(c =>
+      `<option value="${c.id}" ${c.id === selectedCollectionId ? 'selected' : ''}>${esc(c.name)}</option>`
+    ).join('') || '<option value="">No collections</option>';
+  }
+
+  collectionSelect.onchange = () => {
+    selectedCollectionId = collectionSelect.value;
+    renderTable();
+  };
+
+  function renderTable() {
+    const filtered = variables.filter(v => v.collectionId === selectedCollectionId);
+
+    if (!filtered.length) {
+      tableBody.innerHTML = `
+        <tr class="add-row">
+          <td colspan="5">
+            <button class="add-row-btn" onclick="showAddMenu(event)">
+              <svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+              Add first variable
+            </button>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    // Group variables by their path prefix
+    const grouped = {};
+    const ungrouped = [];
+
+    filtered.forEach(v => {
+      const parts = v.name.split('/');
+      if (parts.length > 1) {
+        const groupName = parts.slice(0, -1).join('/');
+        if (!grouped[groupName]) grouped[groupName] = [];
+        grouped[groupName].push({ ...v, displayName: parts[parts.length - 1] });
+      } else {
+        ungrouped.push({ ...v, displayName: v.name });
+      }
+    });
+
+    // Sort groups alphabetically
+    const sortedGroups = Object.keys(grouped).sort();
+
+    let html = '';
+    let rowIndex = 0;
+
+    // Render ungrouped variables first
+    ungrouped.forEach(v => {
+      html += renderVariableRow(v, rowIndex++, false);
+    });
+
+    // Render grouped variables
+    sortedGroups.forEach(groupName => {
+      const isCollapsed = collapsedGroups.has(groupName);
+      const groupIds = grouped[groupName].map(v => v.id).join(',');
+      html += `
+        <tr class="group-row ${isCollapsed ? 'collapsed' : ''}" data-group="${esc(groupName)}">
+          <td colspan="5">
+            <div class="group-header">
+              <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="toggleGroup('${esc(groupName)}')">
+                <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              </span>
+              <span onclick="toggleGroup('${esc(groupName)}')" style="flex:1;cursor:pointer;">
+                ${esc(groupName)}
+                <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>
+              </span>
+              <button class="row-action danger" onclick="deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">
+                <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+
+      grouped[groupName].forEach(v => {
+        html += renderVariableRow(v, rowIndex++, true, isCollapsed, groupName);
+      });
+    });
+
+    tableBody.innerHTML = html;
+  }
+
+  function renderVariableRow(v, i, isGrouped, isHidden = false, groupName = '') {
+    const hiddenClass = isHidden ? 'hidden-by-group' : '';
+    const groupedClass = isGrouped ? 'grouped-item' : '';
+    const dataGroup = groupName ? `data-parent-group="${esc(groupName)}"` : '';
+
+    return `
+      <tr data-id="${v.id}" class="${groupedClass} ${hiddenClass}" ${dataGroup}>
+        <td>
+          <div class="row-actions">
+            <button class="row-action" onclick="duplicateVar('${v.id}')" title="Duplicate">
+              <svg viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            </button>
+            <button class="row-action danger" onclick="deleteVar('${v.id}')" title="Delete">
+              <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+          </div>
+        </td>
+        <td>
+          ${v.resolvedType === 'COLOR' ? `
+            <div class="color-cell">
+              <div class="color-swatch" onclick="openColorPickerForVariable('${v.id}', '${esc(v.value)}')">
+                <div class="color-swatch-inner" style="background:${esc(v.value)}"></div>
+              </div>
+            </div>
+          ` : ''}
+        </td>
+        <td>
+          <input class="cell-input" value="${esc(v.displayName)}"
+            data-full-name="${esc(v.name)}"
+            onblur="updateNameFromDisplay('${v.id}', this.value, '${esc(v.name)}')"
+            onkeydown="handleKey(event, ${i}, 'name')">
+        </td>
+        <td>
+          <div class="cell"><span class="type-icon ${v.resolvedType}">${getTypeIcon(v.resolvedType)}</span></div>
+        </td>
+        <td>
+          ${v.resolvedType === 'BOOLEAN' ? `
+            <div class="cell">
+              <div class="bool-toggle">
+                <button class="${v.value === 'true' ? 'active' : ''}" onclick="updateValue('${v.id}', 'true')">True</button>
+                <button class="${v.value === 'false' ? 'active' : ''}" onclick="updateValue('${v.id}', 'false')">False</button>
+              </div>
+            </div>
+          ` : `
+            <input class="cell-input mono" value="${esc(v.value)}"
+              onblur="updateValue('${v.id}', this.value)"
+              onkeydown="handleKey(event, ${i}, 'value')">
+          `}
+        </td>
+      </tr>
+    `;
+  }
+
+  function toggleGroup(groupName) {
+    if (collapsedGroups.has(groupName)) {
+      collapsedGroups.delete(groupName);
+    } else {
+      collapsedGroups.add(groupName);
+    }
+    renderTable();
+  }
+
+  // Keyboard navigation
+  function handleKey(e, rowIndex, field) {
+    const rows = tableBody.querySelectorAll('tr:not(.add-row)');
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (field === 'name') {
+        // Move to value in same row
+        const valueInput = rows[rowIndex]?.querySelector('td:last-child input');
+        if (valueInput) valueInput.focus();
+      } else {
+        // Move to name in next row
+        const nextRow = rows[rowIndex + 1];
+        if (nextRow) {
+          const nameInput = nextRow.querySelector('td:nth-child(3) input');
+          if (nameInput) nameInput.focus();
+        }
+      }
+    } else if (e.key === 'Enter') {
+      e.target.blur();
+    } else if (e.key === 'ArrowDown' && e.ctrlKey) {
+      e.preventDefault();
+      const nextRow = rows[rowIndex + 1];
+      if (nextRow) {
+        const input = nextRow.querySelector(`td:nth-child(${field === 'name' ? 3 : 5}) input`);
+        if (input) input.focus();
+      }
+    } else if (e.key === 'ArrowUp' && e.ctrlKey) {
+      e.preventDefault();
+      const prevRow = rows[rowIndex - 1];
+      if (prevRow) {
+        const input = prevRow.querySelector(`td:nth-child(${field === 'name' ? 3 : 5}) input`);
+        if (input) input.focus();
+      }
+    }
+  }
+
+  // Actions
+  function updateName(id, name) {
+    post({ type: 'update-variable-name', id, name });
+  }
+
+  function updateNameFromDisplay(id, displayName, fullName) {
+    // Preserve the group path when updating the name
+    const parts = fullName.split('/');
+    let newFullName;
+    if (parts.length > 1) {
+      parts[parts.length - 1] = displayName;
+      newFullName = parts.join('/');
+    } else {
+      newFullName = displayName;
+    }
+    if (newFullName !== fullName) {
+      post({ type: 'update-variable-name', id, name: newFullName });
+    }
+  }
+
+  function updateValue(id, value) {
+    post({ type: 'update-variable-value', id, value });
+  }
+
+  function duplicateVar(id) {
+    post({ type: 'duplicate-variable', id });
+  }
+
+  function deleteVar(id) {
+    if (confirm('Delete this variable?')) post({ type: 'delete-variable', id });
+  }
+
+  function deleteGroup(ids) {
+    const idList = ids.split(',');
+    if (confirm(`Delete all ${idList.length} variables in this group?`)) {
+      post({ type: 'delete-group', ids: idList });
+    }
+  }
+
+  // Add menu
+  document.getElementById('add-variable-btn').onclick = showAddMenu;
+
+  function showAddMenu(e) {
+    const rect = e.target.getBoundingClientRect();
+    addMenu.style.top = (rect.bottom + 4) + 'px';
+    addMenu.style.left = rect.left + 'px';
+    addMenu.classList.add('open');
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#add-menu') && !e.target.closest('#add-variable-btn') && !e.target.closest('.add-row-btn')) {
+      addMenu.classList.remove('open');
+    }
+  });
+
+  addMenu.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      const type = btn.dataset.type;
+      addMenu.classList.remove('open');
+      showInputModal('New Variable', 'Variable name', 'Create', (name) => {
+        let value = '';
+        if (type === 'COLOR') value = 'rgb(0, 0, 0)';
+        else if (type === 'FLOAT') value = '0';
+        else if (type === 'BOOLEAN') value = 'true';
+        post({ type: 'create-variable', collectionId: selectedCollectionId, name, varType: type, value });
+      });
+    };
+  });
+
+  // Add collection
+  document.getElementById('add-collection-btn').onclick = () => {
+    showInputModal('New Collection', 'Collection name', 'Create', (name) => {
+      post({ type: 'create-collection', name });
+    });
+  };
+
+  // Input modal
+  const inputModal = document.getElementById('input-modal');
+  const inputModalInput = document.getElementById('input-modal-input');
+  let inputModalCallback = null;
+
+  function showInputModal(title, label, confirmText, callback) {
+    document.getElementById('input-modal-title').textContent = title;
+    document.getElementById('input-modal-label').textContent = label;
+    document.getElementById('input-modal-confirm').textContent = confirmText;
+    inputModalInput.value = '';
+    inputModalCallback = callback;
+    inputModal.classList.add('open');
+    setTimeout(() => inputModalInput.focus(), 50);
+  }
+
+  function closeInputModal() {
+    inputModal.classList.remove('open');
+    inputModalCallback = null;
+  }
+
+  document.getElementById('input-modal-confirm').onclick = () => {
+    const value = inputModalInput.value.trim();
+    if (value && inputModalCallback) {
+      inputModalCallback(value);
+    }
+    closeInputModal();
+  };
+
+  inputModalInput.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      document.getElementById('input-modal-confirm').click();
+    } else if (e.key === 'Escape') {
+      closeInputModal();
+    }
+  };
+
+  inputModal.onclick = (e) => {
+    if (e.target === inputModal) closeInputModal();
+  };
+
+  // Refresh
+  document.getElementById('refresh-btn').onclick = () => post({ type: 'refresh' });
+
+  // JSON
+  function updateJson() {
+    jsonEditor.value = JSON.stringify({ collections, variables: variables.map(v => ({
+      id: v.id, collectionId: v.collectionId, name: v.name, type: v.resolvedType, value: v.value
+    }))}, null, 2);
+  }
+
+  document.getElementById('json-format-btn').onclick = () => {
+    try {
+      jsonEditor.value = JSON.stringify(JSON.parse(jsonEditor.value), null, 2);
+      jsonEditor.classList.remove('error');
+    } catch { jsonEditor.classList.add('error'); }
+  };
+
+  document.getElementById('json-update-btn').onclick = () => {
+    try {
+      post({ type: 'update-from-json', data: JSON.parse(jsonEditor.value) });
+      jsonEditor.classList.remove('error');
+    } catch { jsonEditor.classList.add('error'); }
+  };
+
+  // Utils
+  function post(msg) { parent.postMessage({ pluginMessage: msg }, '*'); }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function rgbToHex(rgb) {
+    const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (m) return '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
+    return '#000000';
+  }
+
+  function hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? `rgb(${parseInt(m[1],16)}, ${parseInt(m[2],16)}, ${parseInt(m[3],16)})` : hex;
+  }
+
+  // Shades Generator
+  const shadesModal = document.getElementById('shades-modal');
+  const shadesPreview = document.getElementById('shades-preview');
+  const shadesSourceSelect = document.getElementById('shades-source');
+
+  document.getElementById('shades-btn').onclick = () => {
+    populateColorSourceDropdown();
+    // Reset to empty state
+    document.getElementById('shades-name').value = '';
+    document.getElementById('shades-base-color').value = '';
+    document.getElementById('shades-base-hex').value = '';
+    document.getElementById('shades-base-preview').style.background = 'transparent';
+    document.getElementById('shades-light-value').value = 5;
+    document.getElementById('shades-dark-value').value = 90;
+    document.getElementById('shades-count').value = '11';
+    // Hide options until a color is selected
+    document.getElementById('shades-options').style.display = 'none';
+    document.getElementById('shades-generate-btn').style.display = 'none';
+    document.getElementById('shades-remove-btn').style.display = 'none';
+    shadesModal.classList.add('open');
+    clearShadesPreview();
+  };
+
+  function clearShadesPreview() {
+    shadesPreview.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px;text-align:center;">Pick a color to preview shades</div>';
+    document.getElementById('shades-light-preview').style.background = 'transparent';
+    document.getElementById('shades-dark-preview').style.background = 'transparent';
+  }
+
+  function populateColorSourceDropdown() {
+    const colorVars = variables.filter(v =>
+      v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'
+    );
+
+    // Group colors by their base name (before /)
+    const groups = {};
+    const standalone = [];
+
+    colorVars.forEach(v => {
+      if (v.name.includes('/')) {
+        const baseName = v.name.split('/')[0];
+        if (!groups[baseName]) groups[baseName] = [];
+        groups[baseName].push(v);
+      } else {
+        standalone.push(v);
+      }
+    });
+
+    let options = '<option value="">-- Pick a color manually --</option>';
+
+    // Add standalone colors
+    standalone.forEach(v => {
+      options += `<option value="single:${v.id}" data-color="${esc(v.value)}" data-name="${esc(v.name)}" data-type="single">${esc(v.name)}</option>`;
+    });
+
+    // Add grouped colors
+    Object.keys(groups).sort().forEach(groupName => {
+      const shades = groups[groupName];
+      // Find the middle shade to use as base color
+      const midIndex = Math.floor(shades.length / 2);
+      const baseShade = shades[midIndex];
+      const shadeIds = shades.map(s => s.id).join(',');
+      options += `<option value="group:${groupName}" data-color="${esc(baseShade.value)}" data-name="${esc(groupName)}" data-type="group" data-count="${shades.length}" data-ids="${shadeIds}">${esc(groupName)} (${shades.length} shades)</option>`;
+    });
+
+    shadesSourceSelect.innerHTML = options;
+  }
+
+  function selectSourceColor() {
+    const selected = shadesSourceSelect.selectedOptions[0];
+    const optionsDiv = document.getElementById('shades-options');
+    const generateBtn = document.getElementById('shades-generate-btn');
+    const removeBtn = document.getElementById('shades-remove-btn');
+
+    if (!selected || !selected.value) {
+      optionsDiv.style.display = 'none';
+      generateBtn.style.display = 'none';
+      removeBtn.style.display = 'none';
+      return;
+    }
+
+    // Show options
+    optionsDiv.style.display = 'flex';
+    generateBtn.style.display = 'block';
+
+    const colorValue = selected.dataset.color;
+    const varName = selected.dataset.name;
+    const type = selected.dataset.type;
+
+    document.getElementById('shades-name').value = varName;
+
+    // Set base color
+    const hex = rgbToHex(colorValue);
+    document.getElementById('shades-base-color').value = hex;
+    document.getElementById('shades-base-hex').value = hex;
+    document.getElementById('shades-base-preview').style.background = hex;
+
+    // Set default lightness values
+    document.getElementById('shades-light-value').value = 5;
+    document.getElementById('shades-dark-value').value = 90;
+
+    // If it's a group, show update option and match count
+    if (type === 'group') {
+      const count = parseInt(selected.dataset.count);
+      document.getElementById('shades-count').value = count;
+      generateBtn.textContent = 'Update Shades';
+      removeBtn.style.display = 'block';
+    } else {
+      generateBtn.textContent = 'Generate';
+      removeBtn.style.display = 'none';
+    }
+
+    updateShadesPreview();
+  }
+
+  function closeShadesModal() {
+    shadesModal.classList.remove('open');
+  }
+
+  shadesModal.onclick = (e) => {
+    if (e.target === shadesModal) closeShadesModal();
+  };
+
+  function updateBaseFromHex() {
+    const hexInput = document.getElementById('shades-base-hex');
+    const colorInput = document.getElementById('shades-base-color');
+    const preview = document.getElementById('shades-base-preview');
+    let hex = hexInput.value.trim();
+    if (!hex.startsWith('#')) hex = '#' + hex;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      colorInput.value = hex;
+      preview.style.background = hex;
+      updateShadesPreview();
+    }
+  }
+
+  function updateShadesPreview() {
+    const baseColor = document.getElementById('shades-base-color').value;
+
+    // If no base color is set, show placeholder
+    if (!baseColor) {
+      clearShadesPreview();
+      return;
+    }
+
+    const lightValue = parseInt(document.getElementById('shades-light-value').value) || 0;
+    const darkValue = parseInt(document.getElementById('shades-dark-value').value) || 100;
+    const count = parseInt(document.getElementById('shades-count').value);
+
+    // Update base preview
+    document.getElementById('shades-base-preview').style.background = baseColor;
+    document.getElementById('shades-base-hex').value = baseColor;
+
+    // Calculate light and dark colors from lightness values
+    const baseRgb = hexToRgbObj(baseColor);
+    const lightColor = lightnessToColor(baseRgb, lightValue);
+    const darkColor = lightnessToColor(baseRgb, darkValue);
+
+    document.getElementById('shades-light-preview').style.background = lightColor;
+    document.getElementById('shades-dark-preview').style.background = darkColor;
+
+    const shades = generateShadeColors(lightValue, darkValue, baseRgb, count);
+    shadesPreview.innerHTML = shades.map(c =>
+      `<div class="shades-preview-item" style="background:${c}" title="${c}"></div>`
+    ).join('');
+  }
+
+  // Convert lightness value (0=white, 100=black) to a color based on base color
+  function lightnessToColor(baseRgb, lightness) {
+    // 0 = white, 50 = base color hue at mid brightness, 100 = black
+    // We mix the base color's hue with white/black based on lightness
+    if (lightness <= 50) {
+      // Mix with white: 0 = pure white, 50 = base color
+      const t = lightness / 50;
+      const rgb = {
+        r: Math.round(255 + (baseRgb.r - 255) * t),
+        g: Math.round(255 + (baseRgb.g - 255) * t),
+        b: Math.round(255 + (baseRgb.b - 255) * t)
+      };
+      return rgbObjToHex(rgb);
+    } else {
+      // Mix with black: 50 = base color, 100 = black
+      const t = (lightness - 50) / 50;
+      const rgb = {
+        r: Math.round(baseRgb.r * (1 - t)),
+        g: Math.round(baseRgb.g * (1 - t)),
+        b: Math.round(baseRgb.b * (1 - t))
+      };
+      return rgbObjToHex(rgb);
+    }
+  }
+
+  function hexToRgbObj(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
+  }
+
+  function rgbObjToHex(rgb) {
+    return '#' + [rgb.r, rgb.g, rgb.b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
+  }
+
+  function interpolateColor(c1, c2, t) {
+    return {
+      r: c1.r + (c2.r - c1.r) * t,
+      g: c1.g + (c2.g - c1.g) * t,
+      b: c1.b + (c2.b - c1.b) * t
+    };
+  }
+
+  function generateShadeColors(lightValue, darkValue, baseRgb, count) {
+    const shades = [];
+
+    for (let i = 0; i < count; i++) {
+      // Interpolate lightness value from light to dark
+      const t = i / (count - 1);
+      const lightness = lightValue + (darkValue - lightValue) * t;
+      shades.push(lightnessToColor(baseRgb, lightness));
+    }
+
+    return shades;
+  }
+
+  function getShadeNames(count) {
+    if (count === 5) return ['100', '300', '500', '700', '900'];
+    if (count === 10) return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+    if (count === 11) return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+    // Generate names from 50 to 950 for custom counts
+    const names = [];
+    for (let i = 0; i < count; i++) {
+      const value = Math.round(50 + (i / (count - 1)) * 900);
+      names.push(String(value));
+    }
+    return names;
+  }
+
+  function generateShades() {
+    const name = document.getElementById('shades-name').value.trim();
+    const baseColor = document.getElementById('shades-base-color').value;
+
+    if (!baseColor) {
+      alert('Please pick a base color');
+      return;
+    }
+
+    if (!name) {
+      alert('Please enter a group name');
+      return;
+    }
+
+    const selected = shadesSourceSelect.selectedOptions[0];
+    const isUpdate = selected && selected.dataset.type === 'group';
+    const isSingle = selected && selected.dataset.type === 'single';
+
+    let deleteIds = [];
+    if (isUpdate) {
+      deleteIds = selected.dataset.ids.split(',');
+    } else if (isSingle) {
+      // Delete the original single color when converting to shades
+      const singleId = selected.value.replace('single:', '');
+      deleteIds = [singleId];
+    }
+
+    const lightValue = parseInt(document.getElementById('shades-light-value').value) || 0;
+    const darkValue = parseInt(document.getElementById('shades-dark-value').value) || 100;
+    const count = parseInt(document.getElementById('shades-count').value);
+
+    const baseRgb = hexToRgbObj(baseColor);
+    const colors = generateShadeColors(lightValue, darkValue, baseRgb, count);
+    const names = getShadeNames(count);
+
+    const shades = colors.map((hex, i) => ({
+      name: `${name}/${names[i]}`,
+      value: hexToRgb(hex)
+    }));
+
+    if (deleteIds.length > 0) {
+      // Delete old color(s) and create new shades
+      post({ type: 'update-shades', collectionId: selectedCollectionId, deleteIds, shades });
+    } else {
+      post({ type: 'create-shades', collectionId: selectedCollectionId, shades });
+    }
+    closeShadesModal();
+  }
+
+  function removeShades() {
+    const selected = shadesSourceSelect.selectedOptions[0];
+    if (!selected || selected.dataset.type !== 'group') return;
+
+    const groupName = selected.dataset.name;
+    const shadeIds = selected.dataset.ids.split(',');
+    const baseColor = document.getElementById('shades-base-color').value;
+
+    if (!confirm(`Convert "${groupName}" shades back to a single color?`)) return;
+
+    // Create single color with the base color value
+    post({
+      type: 'remove-shades',
+      collectionId: selectedCollectionId,
+      deleteIds: shadeIds,
+      newColor: {
+        name: groupName,
+        value: hexToRgb(baseColor)
+      }
+    });
+    closeShadesModal();
+  }
+
+  // Color Picker
+  const colorPickerModal = document.getElementById('color-picker-modal');
+  const pickerHexInput = document.getElementById('picker-hex-input');
+  const hueSlider = document.getElementById('hue-slider');
+  const hueHandle = document.getElementById('hue-handle');
+  const svPanel = document.getElementById('sv-panel');
+  const svHandle = document.getElementById('sv-handle');
+
+  let colorPickerCallback = null;
+  let pickerHue = 0;
+  let pickerSat = 100;
+  let pickerVal = 100;
+
+  // HSV to RGB
+  function hsvToRgb(h, s, v) {
+    s /= 100; v /= 100;
+    const i = Math.floor(h / 60) % 6;
+    const f = h / 60 - Math.floor(h / 60);
+    const p = v * (1 - s);
+    const q = v * (1 - f * s);
+    const t = v * (1 - (1 - f) * s);
+    let r, g, b;
+    switch (i) {
+      case 0: r = v; g = t; b = p; break;
+      case 1: r = q; g = v; b = p; break;
+      case 2: r = p; g = v; b = t; break;
+      case 3: r = p; g = q; b = v; break;
+      case 4: r = t; g = p; b = v; break;
+      case 5: r = v; g = p; b = q; break;
+    }
+    return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+  }
+
+  // RGB to HSV
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0, s = max === 0 ? 0 : d / max, v = max;
+    if (d !== 0) {
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) * 60; break;
+        case g: h = ((b - r) / d + 2) * 60; break;
+        case b: h = ((r - g) / d + 4) * 60; break;
+      }
+    }
+    return { h, s: s * 100, v: v * 100 };
+  }
+
+  function updatePickerDisplay() {
+    // Update SV panel background (hue color)
+    const hueColor = `hsl(${pickerHue}, 100%, 50%)`;
+    svPanel.style.background = `linear-gradient(to right, #fff, ${hueColor})`;
+
+    // Update handles
+    hueHandle.style.left = `${(pickerHue / 360) * 100}%`;
+    svHandle.style.left = `${pickerSat}%`;
+    svHandle.style.top = `${100 - pickerVal}%`;
+
+    // Update hex input
+    const rgb = hsvToRgb(pickerHue, pickerSat, pickerVal);
+    const hex = rgbObjToHex(rgb);
+    pickerHexInput.value = hex;
+  }
+
+  function getPickerHex() {
+    const rgb = hsvToRgb(pickerHue, pickerSat, pickerVal);
+    return rgbObjToHex(rgb);
+  }
+
+  // Hue slider interaction
+  let hueDragging = false;
+  hueSlider.onmousedown = (e) => {
+    hueDragging = true;
+    updateHueFromEvent(e);
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (hueDragging) updateHueFromEvent(e);
+  });
+  document.addEventListener('mouseup', () => { hueDragging = false; });
+
+  function updateHueFromEvent(e) {
+    const rect = hueSlider.getBoundingClientRect();
+    let x = (e.clientX - rect.left) / rect.width;
+    x = Math.max(0, Math.min(1, x));
+    pickerHue = x * 360;
+    updatePickerDisplay();
+  }
+
+  // SV panel interaction
+  let svDragging = false;
+  svPanel.onmousedown = (e) => {
+    svDragging = true;
+    updateSVFromEvent(e);
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (svDragging) updateSVFromEvent(e);
+  });
+  document.addEventListener('mouseup', () => { svDragging = false; });
+
+  function updateSVFromEvent(e) {
+    const rect = svPanel.getBoundingClientRect();
+    let x = (e.clientX - rect.left) / rect.width;
+    let y = (e.clientY - rect.top) / rect.height;
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+    pickerSat = x * 100;
+    pickerVal = (1 - y) * 100;
+    updatePickerDisplay();
+  }
+
+  // Hex input
+  pickerHexInput.oninput = () => {
+    let hex = pickerHexInput.value.trim();
+    if (!hex.startsWith('#')) hex = '#' + hex;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      const rgb = hexToRgbObj(hex);
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      pickerHue = hsv.h;
+      pickerSat = hsv.s;
+      pickerVal = hsv.v;
+      updatePickerDisplay();
+    }
+  };
+
+  function openColorPicker(initialColor, callback) {
+    colorPickerCallback = callback;
+
+    // Set initial color
+    const hex = initialColor.startsWith('#') ? initialColor : rgbToHex(initialColor);
+    const rgb = hexToRgbObj(hex);
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    pickerHue = hsv.h;
+    pickerSat = hsv.s;
+    pickerVal = hsv.v;
+
+    updatePickerDisplay();
+    colorPickerModal.classList.add('open');
+  }
+
+  function closeColorPicker() {
+    colorPickerModal.classList.remove('open');
+    colorPickerCallback = null;
+  }
+
+  function confirmColorPicker() {
+    const hex = getPickerHex();
+    if (colorPickerCallback) {
+      colorPickerCallback(hex);
+    }
+    closeColorPicker();
+  }
+
+  colorPickerModal.onclick = (e) => {
+    if (e.target === colorPickerModal) closeColorPicker();
+  };
+
+  // Override color swatch clicks to use new picker
+  function openColorPickerForVariable(id, currentValue) {
+    openColorPicker(currentValue, (hex) => {
+      updateValue(id, hexToRgb(hex));
+    });
+  }
+
+  // Override shades base color click
+  function openShadesColorPicker() {
+    const currentHex = document.getElementById('shades-base-color').value;
+    openColorPicker(currentHex, (hex) => {
+      document.getElementById('shades-base-color').value = hex;
+      document.getElementById('shades-base-hex').value = hex;
+      document.getElementById('shades-base-preview').style.background = hex;
+      updateShadesPreview();
+    });
+  }
+</script>
