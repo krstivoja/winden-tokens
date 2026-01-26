@@ -134,17 +134,60 @@ export function selectSourceNumber(): void {
   const baseValueInput = document.getElementById('steps-base-value') as HTMLInputElement;
 
   if (nameInput) nameInput.value = varName;
-  if (baseValueInput) baseValueInput.value = varValue;
 
   if (type === 'group') {
     generateBtn.textContent = 'Update Steps';
     removeBtn.style.display = 'block';
+    // For groups, populate base step dropdown with actual step names from variables
+    populateBaseStepDropdownFromGroup(varName);
   } else {
+    if (baseValueInput) baseValueInput.value = varValue;
     generateBtn.textContent = 'Generate';
     removeBtn.style.display = 'none';
   }
 
   updateStepsPreview();
+}
+
+function populateBaseStepDropdownFromGroup(groupName: string): void {
+  const baseStepSelect = document.getElementById('steps-base-step') as HTMLSelectElement;
+  const baseValueInput = document.getElementById('steps-base-value') as HTMLInputElement;
+  const stepsListInput = document.getElementById('steps-list') as HTMLInputElement;
+
+  if (!baseStepSelect || !baseValueInput || !stepsListInput) return;
+
+  // Find all variables in this group
+  const groupVars = state.variables.filter(v =>
+    v.collectionId === state.selectedCollectionId &&
+    v.name.startsWith(groupName + '/')
+  );
+
+  if (groupVars.length === 0) return;
+
+  // Extract step names and build options
+  const steps = groupVars.map(v => {
+    const stepName = v.name.split('/').pop() || '';
+    return { name: stepName, value: v.value };
+  });
+
+  // Update steps list input
+  stepsListInput.value = steps.map(s => s.name).join(', ');
+
+  // Populate dropdown
+  let optionsHtml = '';
+  steps.forEach(step => {
+    optionsHtml += `<option value="${esc(step.name)}">${esc(step.name)}</option>`;
+  });
+  baseStepSelect.innerHTML = optionsHtml;
+
+  // Select middle step as default base
+  const midIndex = Math.floor(steps.length / 2);
+  baseStepSelect.selectedIndex = midIndex;
+
+  // Set base value to the selected step's actual value
+  if (baseValueInput && steps[midIndex]) {
+    baseValueInput.value = steps[midIndex].value;
+  }
 }
 
 export function selectRatioPreset(): void {
@@ -187,6 +230,11 @@ function populateBaseStepDropdown(selectedValue?: string): void {
     const midIndex = Math.floor(stepsList.length / 2);
     baseStepSelect.value = stepsList[midIndex];
   }
+}
+
+export function onBaseStepChange(): void {
+  // Just update preview - base value stays fixed
+  updateStepsPreview();
 }
 
 export function selectStepsPreset(): void {
@@ -343,10 +391,15 @@ export function removeSteps(): void {
 
   if (!selected || selected.dataset.type !== 'group') return;
 
-  const groupName = selected.dataset.name;
+  const groupName = selected.dataset.name || '';
   const stepIds = selected.dataset.ids?.split(',') || [];
-  const baseValueInput = document.getElementById('steps-base-value') as HTMLInputElement;
-  const baseValue = baseValueInput?.value || '16';
+  const baseStepSelect = document.getElementById('steps-base-step') as HTMLSelectElement;
+  const baseStepName = baseStepSelect?.value || '';
+
+  // Find the actual value of the selected base step from state
+  const fullStepName = `${groupName}/${baseStepName}`;
+  const baseStepVar = state.variables.find(v => v.name === fullStepName);
+  const baseValue = baseStepVar?.value || '16';
 
   if (!confirm(`Convert "${groupName}" steps back to a single number?`)) return;
 
