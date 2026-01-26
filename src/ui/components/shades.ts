@@ -37,7 +37,40 @@ let saturationCurve: CurveHandles = createDefaultHandles();
 let hueCurve: CurveHandles = createDefaultHandles();
 
 type DragTarget = 'handle1' | 'handle2' | 'startNode' | 'endNode';
-let dragState: { startY: number; startValue: number; property: string; target: DragTarget } | null = null;
+let dragState: { startX: number; startY: number; startValue: number; startT: number; property: string; target: DragTarget } | null = null;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getCurveLayout(count: number, containerWidth: number): {
+  swatchWidth: number;
+  firstNodeX: number;
+  lastNodeX: number;
+  rangeX: number;
+} {
+  const swatchWidth = containerWidth / count;
+  const firstNodeX = swatchWidth / 2;
+  const lastNodeX = containerWidth - swatchWidth / 2;
+  return { swatchWidth, firstNodeX, lastNodeX, rangeX: Math.max(1, lastNodeX - firstNodeX) };
+}
+
+function getShadeColorsForCurve(count: number): string[] {
+  const baseColorInput = document.getElementById('shades-base-color') as HTMLInputElement;
+  const baseColor = baseColorInput?.value;
+  if (!baseColor) return Array.from({ length: count }, () => 'var(--bg)');
+
+  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
+  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
+  const lightValue = parseInt(lightInput?.value || '0') || 0;
+  const darkValue = parseInt(darkInput?.value || '100') || 100;
+
+  const baseRgb = hexToRgbObj(baseColor);
+  const lightAdj = evaluateCurveAtNodes(lightnessCurve, count);
+  const satAdj = evaluateCurveAtNodes(saturationCurve, count);
+  const hueAdj = evaluateCurveAtNodes(hueCurve, count);
+  return generateShadeColorsWithAllCurves(lightValue, darkValue, baseRgb, count, lightAdj, satAdj, hueAdj);
+}
 
 export function initShadesModal(): void {
   const shadesBtn = document.getElementById('shades-btn');
@@ -393,19 +426,46 @@ function setCurrentCurve(property: string, curve: CurveHandles): void {
 
 // Evaluate a cubic bezier curve at parameter t (0-1)
 // The curve goes from (0, startValue) through handle1 and handle2 to (1, endValue)
+function cubicBezierAt(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const mt = 1 - t;
+  return mt * mt * mt * p0 +
+         3 * mt * mt * t * p1 +
+         3 * mt * t * t * p2 +
+         t * t * t * p3;
+}
+
+function cubicBezierDerivative(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const mt = 1 - t;
+  return 3 * mt * mt * (p1 - p0) +
+         6 * mt * t * (p2 - p1) +
+         3 * t * t * (p3 - p2);
+}
+
+function solveBezierTForX(x: number, x1: number, x2: number): number {
+  let t = clamp(x, 0, 1);
+  for (let i = 0; i < 5; i++) {
+    const xAt = cubicBezierAt(0, x1, x2, 1, t);
+    const dx = xAt - x;
+    if (Math.abs(dx) < 1e-4) break;
+    const d = cubicBezierDerivative(0, x1, x2, 1, t);
+    if (d === 0) break;
+    t = clamp(t - dx / d, 0, 1);
+  }
+  return t;
+}
+
 function evaluateCubicBezier(handles: CurveHandles, t: number): number {
-  // Control points: P0=(0, startValue), P1=handle1, P2=handle2, P3=(1, endValue)
+  // Control points: P0=(0, startValue), P1=(handle1.t, handle1.value), P2=(handle2.t, handle2.value), P3=(1, endValue)
   const p0y = handles.startValue;
   const p1y = handles.handle1.value;
   const p2y = handles.handle2.value;
   const p3y = handles.endValue;
+  const p1x = clamp(handles.handle1.t, 0, 1);
+  const p2x = clamp(handles.handle2.t, 0, 1);
 
-  // Cubic bezier formula
-  const mt = 1 - t;
-  return mt * mt * mt * p0y +
-         3 * mt * mt * t * p1y +
-         3 * mt * t * t * p2y +
-         t * t * t * p3y;
+  // Solve for parameter where bezier x equals t, then evaluate y at that parameter
+  const u = solveBezierTForX(t, p1x, p2x);
+  return cubicBezierAt(p0y, p1y, p2y, p3y, u);
 }
 
 // Get adjustment values for each node by evaluating the curve
@@ -448,7 +508,7 @@ function renderCurve(): void {
   svg.style.height = curveHeight + 'px';
 
   // Calculate positions - NO padding for nodes to align with swatches below
-  const swatchWidth = containerWidth / count;
+  const { swatchWidth, firstNodeX, lastNodeX, rangeX } = getCurveLayout(count, containerWidth);
   const midY = curveHeight / 2;
   const maxY = curveHeight - 10;
   const minY = 10;
@@ -456,6 +516,12 @@ function renderCurve(): void {
 
   // Build SVG content
   let svgContent = '';
+
+  // Background grid (vertical lines aligned to swatches)
+  for (let i = 0; i <= count; i++) {
+    const x = i * swatchWidth;
+    svgContent += `<line x1="${x}" y1="0" x2="${x}" y2="${curveHeight}" stroke="var(--border)" stroke-width="1" opacity="0.35"/>`;
+  }
 
   // Middle line (zero adjustment baseline)
   svgContent += `<line x1="0" y1="${midY}" x2="${containerWidth}" y2="${midY}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>`;
@@ -465,7 +531,8 @@ function renderCurve(): void {
   const nodePositions: { x: number; y: number; value: number }[] = [];
 
   for (let i = 0; i < count; i++) {
-    const x = swatchWidth * i + swatchWidth / 2;
+    const t = i / (count - 1);
+    const x = firstNodeX + rangeX * t;
     const value = adjustments[i];
     const y = midY - (value / 50) * valueRange;
     nodePositions.push({ x, y, value });
@@ -475,13 +542,11 @@ function renderCurve(): void {
   const firstNode = nodePositions[0];
   const lastNode = nodePositions[count - 1];
 
-  // Handle 1: fixed X position between first and second node
-  const handle1X = firstNode.x + swatchWidth * 0.7;
-  const handle1Y = Math.max(minY, Math.min(maxY, midY - (curve.handle1.value / 50) * valueRange));
-
-  // Handle 2: fixed X position between second-to-last and last node
-  const handle2X = lastNode.x - swatchWidth * 0.7;
-  const handle2Y = Math.max(minY, Math.min(maxY, midY - (curve.handle2.value / 50) * valueRange));
+  // Handle positions (horizontal, based on handle t values)
+  const handle1X = firstNodeX + rangeX * clamp(curve.handle1.t, 0, 1);
+  const handle1Y = clamp(midY - (curve.handle1.value / 50) * valueRange, minY, maxY);
+  const handle2X = firstNodeX + rangeX * clamp(curve.handle2.t, 0, 1);
+  const handle2Y = clamp(midY - (curve.handle2.value / 50) * valueRange, minY, maxY);
 
   // Draw a smooth curve THROUGH all nodes using Catmull-Rom style
   if (nodePositions.length > 1) {
@@ -510,25 +575,30 @@ function renderCurve(): void {
   svgContent += `<line x1="${lastNode.x}" y1="${lastNode.y}" x2="${handle2X}" y2="${handle2Y}" stroke="var(--text-dim)" stroke-width="1"/>`;
 
   // Draw handles (draggable)
-  svgContent += `<circle cx="${handle1X}" cy="${handle1Y}" r="${handleRadius}" fill="var(--text)" class="curve-handle" data-target="handle1" style="cursor:grab;"/>`;
-  svgContent += `<circle cx="${handle2X}" cy="${handle2Y}" r="${handleRadius}" fill="var(--text)" class="curve-handle" data-target="handle2" style="cursor:grab;"/>`;
+  svgContent += `<circle cx="${handle1X}" cy="${handle1Y}" r="${handleRadius}" fill="var(--text)" class="curve-handle" data-target="handle1" style="cursor:ew-resize;"/>`;
+  svgContent += `<circle cx="${handle2X}" cy="${handle2Y}" r="${handleRadius}" fill="var(--text)" class="curve-handle" data-target="handle2" style="cursor:ew-resize;"/>`;
 
   // Draw nodes - first and last are draggable (up/down only)
+  const shadeColors = getShadeColorsForCurve(count);
   nodePositions.forEach((np, i) => {
     const isFirstOrLast = i === 0 || i === nodePositions.length - 1;
     const target = i === 0 ? 'startNode' : (i === nodePositions.length - 1 ? 'endNode' : '');
+    const fillColor = shadeColors[i] || 'var(--bg)';
     if (isFirstOrLast) {
-      svgContent += `<circle cx="${np.x}" cy="${np.y}" r="${nodeRadius}" fill="var(--bg)" stroke="var(--accent)" stroke-width="2" class="curve-node-draggable" data-target="${target}" style="cursor:ns-resize;"/>`;
+      svgContent += `<circle cx="${np.x}" cy="${np.y}" r="${nodeRadius}" fill="${fillColor}" stroke="var(--accent)" stroke-width="2" class="curve-node-draggable" data-target="${target}" style="cursor:ns-resize;"/>`;
     } else {
-      svgContent += `<circle cx="${np.x}" cy="${np.y}" r="${nodeRadius}" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>`;
+      svgContent += `<circle cx="${np.x}" cy="${np.y}" r="${nodeRadius}" fill="${fillColor}" stroke="var(--accent)" stroke-width="2"/>`;
     }
   });
 
   svg.innerHTML = svgContent;
 
-  // Add drag handlers only for handles
+  // Add drag handlers for handles and endpoints
   svg.querySelectorAll('.curve-handle').forEach(el => {
     (el as SVGElement).addEventListener('mousedown', onHandleMouseDown);
+  });
+  svg.querySelectorAll('.curve-node-draggable').forEach(el => {
+    (el as SVGElement).addEventListener('mousedown', onNodeMouseDown);
   });
 }
 
@@ -541,45 +611,94 @@ function onHandleMouseDown(e: Event): void {
   const curve = getCurrentCurve(property);
 
   const startValue = targetType === 'handle1' ? curve.handle1.value : curve.handle2.value;
+  const startT = targetType === 'handle1' ? curve.handle1.t : curve.handle2.t;
 
   dragState = {
+    startX: mouseEvent.clientX,
     startY: mouseEvent.clientY,
     startValue,
+    startT,
     property,
     target: targetType
   };
 
-  document.addEventListener('mousemove', onHandleMouseMove);
-  document.addEventListener('mouseup', onHandleMouseUp);
+  document.addEventListener('mousemove', onCurveMouseMove);
+  document.addEventListener('mouseup', onCurveMouseUp);
   e.preventDefault();
 }
 
-function onHandleMouseMove(e: MouseEvent): void {
+function onNodeMouseDown(e: Event): void {
+  const mouseEvent = e as MouseEvent;
+  const target = mouseEvent.target as SVGElement;
+  const targetType = target.dataset.target as DragTarget;
+  const propertySelect = document.getElementById('shades-curve-property') as HTMLSelectElement;
+  const property = propertySelect?.value || 'lightness';
+  const curve = getCurrentCurve(property);
+
+  const startValue = targetType === 'startNode' ? curve.startValue : curve.endValue;
+
+  dragState = {
+    startX: mouseEvent.clientX,
+    startY: mouseEvent.clientY,
+    startValue,
+    startT: targetType === 'startNode' ? 0 : 1,
+    property,
+    target: targetType
+  };
+
+  document.addEventListener('mousemove', onCurveMouseMove);
+  document.addEventListener('mouseup', onCurveMouseUp);
+  e.preventDefault();
+}
+
+function onCurveMouseMove(e: MouseEvent): void {
   if (!dragState) return;
 
-  const deltaY = dragState.startY - e.clientY;
-  // Scale: 50px drag = 50 units change
-  const deltaValue = (deltaY / 50) * 50;
-  const newValue = Math.max(-50, Math.min(50, dragState.startValue + deltaValue));
-
-  // Update the curve handle value
   const curve = getCurrentCurve(dragState.property);
   const updatedCurve = { ...curve };
-  if (dragState.target === 'handle1') {
-    updatedCurve.handle1 = { ...curve.handle1, value: newValue };
+
+  if (dragState.target === 'handle1' || dragState.target === 'handle2') {
+    const container = document.getElementById('shades-curve-editor');
+    const countInput = document.getElementById('shades-count') as HTMLInputElement;
+    const count = parseInt(countInput?.value || '11');
+    const containerWidth = container?.offsetWidth || 300;
+    const { rangeX } = getCurveLayout(count, containerWidth);
+    const deltaX = e.clientX - dragState.startX;
+    const minGap = 0.05;
+
+    let newT = dragState.startT + deltaX / rangeX;
+    const deltaY = dragState.startY - e.clientY;
+    const newValue = clamp(dragState.startValue + deltaY, -50, 50);
+    if (dragState.target === 'handle1') {
+      const maxT = clamp(curve.handle2.t - minGap, 0, 1 - minGap);
+      newT = clamp(newT, 0, maxT);
+      updatedCurve.handle1 = { ...curve.handle1, t: newT, value: newValue };
+    } else {
+      const minT = clamp(curve.handle1.t + minGap, minGap, 1);
+      newT = clamp(newT, minT, 1);
+      updatedCurve.handle2 = { ...curve.handle2, t: newT, value: newValue };
+    }
   } else {
-    updatedCurve.handle2 = { ...curve.handle2, value: newValue };
+    const deltaY = dragState.startY - e.clientY;
+    // Scale: 50px drag = 50 units change (1:1)
+    const newValue = clamp(dragState.startValue + deltaY, -50, 50);
+    if (dragState.target === 'startNode') {
+      updatedCurve.startValue = newValue;
+    } else {
+      updatedCurve.endValue = newValue;
+    }
   }
+
   setCurrentCurve(dragState.property, updatedCurve);
 
   renderCurve();
   updateShadesPreviewWithCurve();
 }
 
-function onHandleMouseUp(): void {
+function onCurveMouseUp(): void {
   dragState = null;
-  document.removeEventListener('mousemove', onHandleMouseMove);
-  document.removeEventListener('mouseup', onHandleMouseUp);
+  document.removeEventListener('mousemove', onCurveMouseMove);
+  document.removeEventListener('mouseup', onCurveMouseUp);
 }
 
 function updateShadesPreviewWithCurve(): void {
