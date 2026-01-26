@@ -3,6 +3,15 @@
 figma.showUI(__html__, { width: 600, height: 500, themeColors: true });
 // Track variable state for change detection
 let lastDataHash = '';
+// Get stored variable order
+function getVariableOrder() {
+    const orderJson = figma.root.getPluginData('variableOrder');
+    return orderJson ? JSON.parse(orderJson) : [];
+}
+// Set stored variable order
+function setVariableOrder(order) {
+    figma.root.setPluginData('variableOrder', JSON.stringify(order));
+}
 // Fetch and send all data to UI
 async function fetchData() {
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
@@ -11,7 +20,7 @@ async function fetchData() {
         id: c.id,
         name: c.name
     }));
-    const variableData = variables.map(variable => {
+    let variableData = variables.map(variable => {
         const modeId = Object.keys(variable.valuesByMode)[0];
         const value = variable.valuesByMode[modeId];
         return {
@@ -22,6 +31,22 @@ async function fetchData() {
             value: formatValue(value, variable.resolvedType)
         };
     });
+    // Apply custom order if exists
+    const order = getVariableOrder();
+    if (order.length > 0) {
+        variableData.sort((a, b) => {
+            const indexA = order.indexOf(a.id);
+            const indexB = order.indexOf(b.id);
+            // Items not in order go to the end
+            if (indexA === -1 && indexB === -1)
+                return 0;
+            if (indexA === -1)
+                return 1;
+            if (indexB === -1)
+                return -1;
+            return indexA - indexB;
+        });
+    }
     // Update hash for change detection
     lastDataHash = JSON.stringify({ collections: collectionData, variables: variableData });
     figma.ui.postMessage({
@@ -53,7 +78,10 @@ function formatValue(value, type) {
             }
             return String(value);
         case 'FLOAT':
-            return String(value);
+            // Round to remove floating point precision artifacts
+            const rounded = Math.round(value * 1000) / 1000;
+            // If it's a whole number, show without decimals
+            return Number.isInteger(rounded) ? String(rounded) : String(rounded);
         case 'STRING':
             return String(value);
         case 'BOOLEAN':
@@ -300,6 +328,106 @@ async function removeShades(collectionId, deleteIds, newColor) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+// Create number steps
+async function createSteps(collectionId, steps) {
+    try {
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        for (const step of steps) {
+            const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
+            const parsedValue = parseValue(step.value, 'FLOAT');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Update number steps (delete old, create new)
+async function updateSteps(collectionId, deleteIds, steps) {
+    try {
+        // Delete old steps
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                variable.remove();
+            }
+        }
+        // Create new steps
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        for (const step of steps) {
+            const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
+            const parsedValue = parseValue(step.value, 'FLOAT');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Remove steps and convert back to single number
+async function removeSteps(collectionId, deleteIds, newNumber) {
+    try {
+        // Delete all steps
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                variable.remove();
+            }
+        }
+        // Create single number
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        const variable = figma.variables.createVariable(newNumber.name, collection, 'FLOAT');
+        const parsedValue = parseValue(newNumber.value, 'FLOAT');
+        variable.setValueForMode(modeId, parsedValue);
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Reorder variable
+async function reorderVariable(draggedId, targetId, insertBefore) {
+    try {
+        const variables = await figma.variables.getLocalVariablesAsync();
+        let order = getVariableOrder();
+        // Initialize order if empty
+        if (order.length === 0) {
+            order = variables.map(v => v.id);
+        }
+        // Remove dragged item from current position
+        const draggedIndex = order.indexOf(draggedId);
+        if (draggedIndex > -1) {
+            order.splice(draggedIndex, 1);
+        }
+        // Find target position
+        let targetIndex = order.indexOf(targetId);
+        if (!insertBefore) {
+            targetIndex++;
+        }
+        // Insert at new position
+        order.splice(targetIndex, 0, draggedId);
+        setVariableOrder(order);
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
 // Update from JSON
 async function updateFromJson(data) {
     try {
@@ -388,6 +516,18 @@ figma.ui.onmessage = async (msg) => {
             break;
         case 'remove-shades':
             await removeShades(msg.collectionId, msg.deleteIds, msg.newColor);
+            break;
+        case 'create-steps':
+            await createSteps(msg.collectionId, msg.steps);
+            break;
+        case 'update-steps':
+            await updateSteps(msg.collectionId, msg.deleteIds, msg.steps);
+            break;
+        case 'remove-steps':
+            await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber);
+            break;
+        case 'reorder-variable':
+            await reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore);
             break;
         case 'resize':
             figma.ui.resize(msg.width, msg.height);

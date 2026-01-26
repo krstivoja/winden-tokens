@@ -14,20 +14,53 @@ import {
   removeShades,
   openShadesColorPicker
 } from './components/shades';
+import {
+  initStepsModal,
+  selectSourceNumber,
+  selectRatioPreset,
+  selectStepsPreset,
+  onStepsListInput,
+  updateStepsPreview,
+  closeStepsModal,
+  generateSteps,
+  removeSteps
+} from './components/steps';
 import { initModals, showInputModal, closeInputModal } from './components/modals';
 import { post, $ } from './utils/helpers';
 import { hexToRgb } from './utils/color';
+import { icons, typeIcons } from './utils/icons';
+import { VariableType } from './types';
+
+// Inject icons into placeholders
+function initIcons(): void {
+  document.querySelectorAll('[data-icon]').forEach(el => {
+    const iconName = (el as HTMLElement).dataset.icon;
+    if (!iconName) return;
+
+    // Handle type icons (type-COLOR, type-FLOAT, etc.)
+    if (iconName.startsWith('type-')) {
+      const typeName = iconName.replace('type-', '') as VariableType;
+      el.innerHTML = typeIcons[typeName] || '';
+    } else {
+      // Handle UI icons
+      el.innerHTML = (icons as Record<string, string>)[iconName] || '';
+    }
+  });
+}
 
 // Initialize application
 function init(): void {
+  initIcons();
   initColorPicker();
   initShadesModal();
+  initStepsModal();
   initModals();
   initTabs();
   initToolbar();
   initResize();
   initCollectionSelect();
   initAddMenu();
+  initDragDrop();
 
   // Expose app methods to window for inline handlers
   (window as any).app = {
@@ -38,6 +71,7 @@ function init(): void {
     updateValue,
     handleKey,
     openColorPickerForVariable,
+    // Shades
     selectSourceColor,
     updateBaseFromHex,
     updateShadesPreview,
@@ -45,6 +79,16 @@ function init(): void {
     generateShades,
     removeShades,
     openShadesColorPicker,
+    // Steps
+    selectSourceNumber,
+    selectRatioPreset,
+    selectStepsPreset,
+    onStepsListInput,
+    updateStepsPreview,
+    closeStepsModal,
+    generateSteps,
+    removeSteps,
+    // Common
     closeColorPicker,
     confirmColorPicker,
     closeInputModal
@@ -135,6 +179,95 @@ function showAddMenu(e: Event): void {
     addMenu.style.left = rect.left + 'px';
     addMenu.classList.add('open');
   }
+}
+
+// Drag and drop reordering
+let draggedRow: HTMLTableRowElement | null = null;
+
+function initDragDrop(): void {
+  const tableBody = $('table-body');
+  if (!tableBody) return;
+
+  tableBody.addEventListener('dragstart', (e) => {
+    const target = e.target as HTMLElement;
+    const row = target.closest('tr[data-id]') as HTMLTableRowElement;
+    if (!row) return;
+
+    draggedRow = row;
+    row.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', row.dataset.id || '');
+    }
+  });
+
+  tableBody.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (!draggedRow) return;
+
+    const target = e.target as HTMLElement;
+    const row = target.closest('tr[data-id]') as HTMLTableRowElement;
+    if (!row || row === draggedRow) return;
+
+    // Clear previous indicators
+    tableBody.querySelectorAll('.drag-over, .drag-over-below').forEach(el => {
+      el.classList.remove('drag-over', 'drag-over-below');
+    });
+
+    // Determine if dropping above or below
+    const rect = row.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+      row.classList.add('drag-over');
+    } else {
+      row.classList.add('drag-over-below');
+    }
+  });
+
+  tableBody.addEventListener('dragleave', (e) => {
+    const target = e.target as HTMLElement;
+    const row = target.closest('tr[data-id]') as HTMLTableRowElement;
+    if (row) {
+      row.classList.remove('drag-over', 'drag-over-below');
+    }
+  });
+
+  tableBody.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (!draggedRow) return;
+
+    const target = e.target as HTMLElement;
+    const dropRow = target.closest('tr[data-id]') as HTMLTableRowElement;
+    if (!dropRow || dropRow === draggedRow) return;
+
+    const draggedId = draggedRow.dataset.id;
+    const targetId = dropRow.dataset.id;
+    const insertBefore = dropRow.classList.contains('drag-over');
+
+    // Clear states
+    tableBody.querySelectorAll('.drag-over, .drag-over-below').forEach(el => {
+      el.classList.remove('drag-over', 'drag-over-below');
+    });
+
+    if (draggedId && targetId) {
+      post({
+        type: 'reorder-variable',
+        draggedId,
+        targetId,
+        insertBefore
+      });
+    }
+  });
+
+  tableBody.addEventListener('dragend', () => {
+    if (draggedRow) {
+      draggedRow.classList.remove('dragging');
+      draggedRow = null;
+    }
+    tableBody.querySelectorAll('.drag-over, .drag-over-below').forEach(el => {
+      el.classList.remove('drag-over', 'drag-over-below');
+    });
+  });
 }
 
 // Resize handling

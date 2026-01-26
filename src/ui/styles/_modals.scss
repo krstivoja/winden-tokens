@@ -182,3 +182,41 @@
     height: 100%;
   }
 }
+
+// Steps preview
+.steps-preview {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.steps-preview-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.steps-preview-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.base {
+    background: var(--bg-selected);
+    font-weight: 600;
+  }
+
+  .step-name {
+    color: var(--text-dim);
+  }
+
+  .step-value {
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+}

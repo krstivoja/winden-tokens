@@ -17,7 +17,7 @@
       <div class="toolbar-group">
         <select id="collection-select" class="collection-select"></select>
         <button id="add-collection-btn" class="btn btn-icon" title="New Collection">
-          <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+          <span class="icon" data-icon="plus"></span>
         </button>
       </div>
 
@@ -25,12 +25,16 @@
 
       <div class="toolbar-group">
         <button id="add-variable-btn" class="btn btn-primary">
-          <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+          <span class="icon" data-icon="plus"></span>
           Add Variable
         </button>
         <button id="shades-btn" class="btn" title="Generate Color Shades">
-          <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.2"/><rect x="5" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.5"/><rect x="9" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="13" y="2" width="2" height="12" rx="1" fill="currentColor"/></svg>
+          <span class="icon" data-icon="shades"></span>
           Shades
+        </button>
+        <button id="steps-btn" class="btn" title="Generate Number Steps">
+          <span class="icon" data-icon="steps"></span>
+          Steps
         </button>
       </div>
 
@@ -39,7 +43,7 @@
       <span id="status" class="status"></span>
 
       <button id="refresh-btn" class="btn btn-icon" title="Refresh">
-        <svg viewBox="0 0 16 16"><path d="M13.65 2.35A8 8 0 1 0 16 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z" fill="currentColor"/></svg>
+        <span class="icon" data-icon="refresh"></span>
       </button>
     </div>
 
@@ -57,10 +61,10 @@
 
     <!-- Add Menu -->
     <div id="add-menu" class="add-menu">
-      <button data-type="COLOR"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M7.312 6.803a7 7 0 0 1 9.639.248l.28.298a7 7 0 0 1 1.76 4.998l-.029.38C18.807 14.222 17.446 15 16.242 15H13.5l-.101.01a.5.5 0 0 0-.4.49v.5c0 .82-.338 1.603-.92 2.127-.6.542-1.468.8-2.37.488a7 7 0 0 1-2.362-1.385l-.297-.28a7 7 0 0 1 0-9.9zm8.93.955a6 6 0 0 0-8.485 0l-.212.225a6 6 0 0 0 2.492 9.689c.978.337 1.848-.457 1.953-1.467L12 16v-.499a1.5 1.5 0 0 1 1.5-1.5h2.743l.158-.006c.733-.057 1.391-.513 1.543-1.216l.024-.155a6 6 0 0 0-1.484-4.611zM8.5 12.001a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7-2a1 1 0 1 1-.001 2 1 1 0 0 1 0-2m-6-1.5a1 1 0 1 1 0 2.001 1 1 0 0 1 0-2m3.5-1a1 1 0 1 1 0 2 1 1 0 0 1 0-2"></path></svg>Color</button>
-      <button data-type="FLOAT"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M16 6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 7a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm3.05 2.002a.5.5 0 0 1 .448.547l-.045.452h1.495l.055-.55a.5.5 0 0 1 .995.098l-.045.452h.547a.5.5 0 1 1 0 1h-.648l-.199 2h.847a.5.5 0 1 1 0 1h-.948l-.054.548a.501.501 0 0 1-.995-.098l.044-.45h-1.495l-.054.548a.501.501 0 0 1-.995-.098l.044-.45H9.5a.5.5 0 0 1 0-1h.647l.2-2H9.5a.5.5 0 0 1 0-1h.948l.055-.55a.5.5 0 0 1 .546-.449m.302 1.999-.199 2h1.494l.2-2z"></path></svg>Number</button>
-      <button data-type="STRING"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M8 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2zm3.5 1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 1 0V10h1.5v4H11a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-.5v-4H14v.5a.5.5 0 0 0 1 0v-1a.5.5 0 0 0-.5-.5z" clip-rule="evenodd"></path></svg>String</button>
-      <button data-type="BOOLEAN"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M10 8h4a4 4 0 0 1 0 8h-4a4 4 0 0 1 0-8m-5 4a5 5 0 0 1 5-5h4a5 5 0 0 1 0 10h-4a5 5 0 0 1-5-5m5 2a2 2 0 1 1 0-4 2 2 0 0 1 0 4m-3-2a3 3 0 1 1 6 0 3 3 0 0 1-6 0" clip-rule="evenodd"></path></svg>Boolean</button>
+      <button data-type="COLOR"><span class="icon" data-icon="type-COLOR"></span>Color</button>
+      <button data-type="FLOAT"><span class="icon" data-icon="type-FLOAT"></span>Number</button>
+      <button data-type="STRING"><span class="icon" data-icon="type-STRING"></span>String</button>
+      <button data-type="BOOLEAN"><span class="icon" data-icon="type-BOOLEAN"></span>Boolean</button>
     </div>
   </div>
 
@@ -81,7 +85,7 @@
       <div class="modal-header">
         <h3>Generate Color Shades</h3>
         <button class="modal-close" onclick="window.app.closeShadesModal()">
-          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="icon" data-icon="close"></span>
         </button>
       </div>
       <div class="modal-body">
@@ -151,7 +155,7 @@
       <div class="modal-header">
         <h3 id="input-modal-title">Enter Name</h3>
         <button class="modal-close" onclick="window.app.closeInputModal()">
-          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="icon" data-icon="close"></span>
         </button>
       </div>
       <div class="modal-body">
@@ -173,7 +177,7 @@
       <div class="modal-header">
         <h3>Pick Color</h3>
         <button class="modal-close" onclick="window.app.closeColorPicker()">
-          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="icon" data-icon="close"></span>
         </button>
       </div>
       <div class="modal-body">
@@ -192,6 +196,86 @@
       <div class="modal-footer">
         <button class="btn" onclick="window.app.closeColorPicker()">Cancel</button>
         <button class="btn btn-primary" onclick="window.app.confirmColorPicker()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Steps Generator Modal -->
+  <div id="steps-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Generate Number Steps</h3>
+        <button class="modal-close" onclick="window.app.closeStepsModal()">
+          <span class="icon" data-icon="close"></span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select Number Variable</label>
+          <select id="steps-source" class="form-input" onchange="window.app.selectSourceNumber()">
+            <option value="">-- Select a number --</option>
+          </select>
+        </div>
+
+        <div id="steps-options" style="display:none;flex-direction:column;gap:16px;">
+          <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="steps-name" class="form-input" placeholder="e.g. spacing" value="">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Base Value</label>
+              <input type="number" id="steps-base-value" class="form-input" value="16" min="0" step="any" oninput="window.app.updateStepsPreview()">
+            </div>
+            <div class="form-group">
+              <label>Base Step</label>
+              <select id="steps-base-step" class="form-input" onchange="window.app.updateStepsPreview()"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Scale Ratio</label>
+            <div class="form-row">
+              <select id="steps-ratio-preset" class="form-input" onchange="window.app.selectRatioPreset()">
+                <option value="1.125">Minor Second (1.125)</option>
+                <option value="1.2">Minor Third (1.2)</option>
+                <option value="1.25" selected>Major Third (1.25)</option>
+                <option value="1.333">Perfect Fourth (1.333)</option>
+                <option value="1.414">Augmented Fourth (1.414)</option>
+                <option value="1.5">Perfect Fifth (1.5)</option>
+                <option value="1.618">Golden Ratio (1.618)</option>
+                <option value="2">Octave (2)</option>
+                <option value="custom">Custom...</option>
+              </select>
+              <input type="number" id="steps-ratio-custom" class="form-input" value="1.25" min="1" step="0.001" oninput="window.app.updateStepsPreview()" style="width:80px;" disabled>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Steps</label>
+            <div class="form-row">
+              <select id="steps-list-preset" class="form-input" onchange="window.app.selectStepsPreset()">
+                <option value="tshirt">T-shirt (xs-3xl)</option>
+                <option value="numeric">Numeric (1-10)</option>
+                <option value="gutenberg">Gutenberg (xs-ultra)</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            <input type="text" id="steps-list" class="form-input mono" value="xs, sm, md, lg, xl, 2xl, 3xl" oninput="window.app.onStepsListInput()" style="margin-top:6px;">
+          </div>
+
+          <div class="form-group">
+            <label>Preview</label>
+            <div class="steps-preview" id="steps-preview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="steps-remove-btn" class="btn btn-danger" onclick="window.app.removeSteps()" style="display:none;">Remove Steps</button>
+        <div class="spacer"></div>
+        <button class="btn" onclick="window.app.closeStepsModal()">Cancel</button>
+        <button id="steps-generate-btn" class="btn btn-primary" onclick="window.app.generateSteps()">Generate</button>
       </div>
     </div>
   </div>

@@ -3,7 +3,7 @@
 import { VariableData, VariableType } from '../types';
 import { state } from '../state';
 import { esc, post } from '../utils/helpers';
-import { getTypeIcon } from '../utils/icons';
+import { getTypeIcon, icons } from '../utils/icons';
 import { rgbToHex } from '../utils/color';
 
 export function renderCollections(): void {
@@ -26,7 +26,7 @@ export function renderTable(): void {
       <tr class="add-row">
         <td colspan="2">
           <button class="add-row-btn" onclick="window.app.showAddMenu(event)">
-            <svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+            ${icons.plus}
             Add first variable
           </button>
         </td>
@@ -68,16 +68,12 @@ export function renderTable(): void {
       <tr class="group-row ${isCollapsed ? 'collapsed' : ''}" data-group="${esc(groupName)}">
         <td colspan="2">
           <div class="group-header">
-            <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="window.app.toggleGroup('${esc(groupName)}')">
-              <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-            </span>
+            <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="window.app.toggleGroup('${esc(groupName)}')">${icons.chevronDown}</span>
             <span onclick="window.app.toggleGroup('${esc(groupName)}')" style="flex:1;cursor:pointer;">
               ${esc(groupName)}
               <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>
             </span>
-            <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">
-              <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>
-            </button>
+            <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">${icons.close}</button>
           </div>
         </td>
       </tr>
@@ -103,9 +99,10 @@ function renderVariableRow(
   const dataGroup = groupName ? `data-parent-group="${esc(groupName)}"` : '';
 
   return `
-    <tr data-id="${v.id}" class="${groupedClass} ${hiddenClass}" ${dataGroup}>
+    <tr data-id="${v.id}" class="${groupedClass} ${hiddenClass}" ${dataGroup} draggable="true">
       <td>
         <div class="name-cell">
+          <span class="drag-handle" title="Drag to reorder">${icons.drag}</span>
           <span class="type-icon ${v.resolvedType}">${getTypeIcon(v.resolvedType)}</span>
           <input class="cell-input" value="${esc(v.displayName)}"
             data-full-name="${esc(v.name)}"
