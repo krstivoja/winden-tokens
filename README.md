@@ -6,6 +6,20 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 
 ## Features
 
+<img width="1920" height="1080" alt="Cover 1" src="https://github.com/user-attachments/assets/7f332cbf-75f0-4858-a41a-2add6d7a3342" />
+
+### Create shades
+<img width="1920" height="1080" alt="Cover 2" src="https://github.com/user-attachments/assets/8ee45fd0-1e33-4efa-9792-9533a22b1f0b" />
+
+### Scale ratio
+<img width="1920" height="1080" alt="Cover 3" src="https://github.com/user-attachments/assets/087330a2-fcf1-44c8-a332-090d3a32dd8c" />
+
+### Bulk editing
+<img width="1920" height="1080" alt="Cover 4" src="https://github.com/user-attachments/assets/eaacdeaf-6509-46a3-8b6e-9226582ba3b3" />
+
+
+
+
 - **Spreadsheet-style editing** - Edit variables inline with a familiar table interface
 - **Search & filter** - Quickly find variables by name with instant search
 - **Color picker** - Visual HSV color picker with saturation-value panel and hue slider
