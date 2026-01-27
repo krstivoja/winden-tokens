@@ -308,6 +308,12 @@
   &.hidden {
     display: none;
   }
+
+  &.selected {
+    background: var(--bg-selected);
+    border-left: 2px solid var(--accent);
+    padding-left: 8px;
+  }
 }
 
 .color-reference-swatch {
@@ -343,4 +349,80 @@
   font-size: 12px;
   color: var(--text);
   font-family: 'SF Mono', Monaco, monospace;
+}
+
+// Bulk edit
+.bulk-edit-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+.bulk-edit-preview {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.bulk-edit-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .preview-name {
+    flex: 1;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .preview-value {
+    font-family: 'SF Mono', Monaco, monospace;
+    color: var(--text-dim);
+  }
+
+  .preview-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .preview-status {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+
+    &.new {
+      background: #e6f9f0;
+      color: var(--success);
+    }
+
+    &.modified {
+      background: #fff8e6;
+      color: #b86e00;
+    }
+  }
 }

@@ -9,6 +9,13 @@
   <div class="tabs">
     <button class="tab active" data-tab="table">Table</button>
     <button class="tab" data-tab="json">JSON</button>
+    <div class="spacer"></div>
+    <button id="refresh-btn" class="btn btn-icon" title="Refresh">
+      <span class="icon" data-icon="refresh"></span>
+    </button>
+    <button id="expand-btn" class="btn btn-icon" title="Expand">
+      <span class="icon" data-icon="expand"></span>
+    </button>
   </div>
 
   <!-- Table Tab -->
@@ -47,13 +54,6 @@
       </div>
 
       <span id="status" class="status"></span>
-
-      <button id="refresh-btn" class="btn btn-icon" title="Refresh">
-        <span class="icon" data-icon="refresh"></span>
-      </button>
-      <button id="expand-btn" class="btn btn-icon" title="Expand">
-        <span class="icon" data-icon="expand"></span>
-      </button>
     </div>
 
     <div class="table-container">
@@ -230,6 +230,29 @@
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="window.app.closeColorReferenceModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Edit Modal -->
+  <div id="bulk-edit-modal" class="modal-overlay">
+    <div class="modal" style="width: 480px;">
+      <div class="modal-header">
+        <h3>Edit as Text: <span id="bulk-edit-group-name"></span></h3>
+        <button class="modal-close" onclick="window.app.closeBulkEdit()">
+          <span class="icon" data-icon="close"></span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>One variable per line: <code>name, value</code></label>
+          <textarea id="bulk-edit-textarea" class="bulk-edit-textarea" spellcheck="false" placeholder="50, #FFFFFF&#10;100, #F5F5F5&#10;200, #EEEEEE"></textarea>
+        </div>
+        <div id="bulk-edit-preview" class="bulk-edit-preview"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="window.app.closeBulkEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="window.app.applyBulkEdit()">Apply Changes</button>
       </div>
     </div>
   </div>

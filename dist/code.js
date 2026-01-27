@@ -282,6 +282,46 @@ async function duplicateVariable(id) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+// Bulk update group from CSV
+async function bulkUpdateGroup(collectionId, groupName, updates) {
+    try {
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        const existingVariables = await figma.variables.getLocalVariablesAsync();
+        for (const update of updates) {
+            // Find existing variable with this name
+            const existing = existingVariables.find(v => v.variableCollectionId === collectionId && v.name === update.name);
+            if (existing) {
+                // Update existing variable
+                const parsedValue = await parseValue(update.value, existing.resolvedType);
+                existing.setValueForMode(modeId, parsedValue);
+            }
+            else {
+                // Create new variable - detect type from value
+                let varType = 'STRING';
+                if (update.value.startsWith('#') || update.value.startsWith('rgb') || update.value.startsWith('{')) {
+                    varType = 'COLOR';
+                }
+                else if (!isNaN(Number(update.value))) {
+                    varType = 'FLOAT';
+                }
+                else if (update.value === 'true' || update.value === 'false') {
+                    varType = 'BOOLEAN';
+                }
+                const newVariable = figma.variables.createVariable(update.name, collection, varType);
+                const parsedValue = await parseValue(update.value, varType);
+                newVariable.setValueForMode(modeId, parsedValue);
+            }
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
 // Create color shades
 async function createShades(collectionId, shades) {
     try {
@@ -529,6 +569,9 @@ figma.ui.onmessage = async (msg) => {
             break;
         case 'duplicate-variable':
             await duplicateVariable(msg.id);
+            break;
+        case 'bulk-update-group':
+            await bulkUpdateGroup(msg.collectionId, msg.groupName, msg.updates);
             break;
         case 'update-from-json':
             await updateFromJson(msg.data);

@@ -100,6 +100,10 @@ function init(): void {
     closeStepsModal,
     generateSteps,
     removeSteps,
+    // Bulk edit
+    openBulkEdit,
+    closeBulkEdit,
+    applyBulkEdit,
     // Common
     closeColorPicker,
     confirmColorPicker,
@@ -341,6 +345,20 @@ function showColorReferenceModal(): void {
     });
   });
 
+  // Check if current value is a reference and highlight it
+  const refMatch = currentColorValue.match(/^\{(.+)\}$/);
+  if (refMatch) {
+    const currentRefName = refMatch[1];
+    const selectedItem = list.querySelector(`.color-reference-item[data-name="${currentRefName}"]`) as HTMLElement;
+    if (selectedItem) {
+      selectedItem.classList.add('selected');
+      // Scroll into view after modal is visible
+      setTimeout(() => {
+        selectedItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 100);
+    }
+  }
+
   // Show modal
   const modal = $('color-reference-modal');
   if (modal) modal.classList.add('open');
@@ -444,6 +462,131 @@ function deleteVariable(id: string): void {
 
 function duplicateVariable(id: string): void {
   post({ type: 'duplicate-variable', id });
+}
+
+// Bulk edit
+let currentBulkEditGroup = '';
+
+function openBulkEdit(groupName: string): void {
+  currentBulkEditGroup = groupName;
+
+  const modal = $('bulk-edit-modal');
+  const groupNameEl = $('bulk-edit-group-name');
+  const textarea = $('bulk-edit-textarea') as HTMLTextAreaElement;
+  const preview = $('bulk-edit-preview');
+
+  if (!modal || !textarea) return;
+
+  // Get variables in this group
+  const groupVars = state.variables.filter(v =>
+    v.collectionId === state.selectedCollectionId &&
+    v.name.startsWith(groupName + '/')
+  );
+
+  // Convert to CSV format
+  const csvLines = groupVars.map(v => {
+    const shortName = v.name.replace(groupName + '/', '');
+    return `${shortName}, ${v.value}`;
+  });
+
+  if (groupNameEl) groupNameEl.textContent = groupName;
+  textarea.value = csvLines.join('\n');
+  if (preview) preview.innerHTML = '';
+
+  modal.classList.add('open');
+  textarea.focus();
+
+  // Add input listener for live preview
+  textarea.oninput = () => updateBulkEditPreview();
+  textarea.onkeydown = (e) => {
+    if (e.key === 'Escape') closeBulkEdit();
+  };
+
+  updateBulkEditPreview();
+}
+
+function closeBulkEdit(): void {
+  const modal = $('bulk-edit-modal');
+  if (modal) modal.classList.remove('open');
+  currentBulkEditGroup = '';
+}
+
+function updateBulkEditPreview(): void {
+  const textarea = $('bulk-edit-textarea') as HTMLTextAreaElement;
+  const preview = $('bulk-edit-preview');
+
+  if (!textarea || !preview) return;
+
+  const lines = textarea.value.split('\n').filter(line => line.trim());
+  const existingVars = state.variables.filter(v =>
+    v.collectionId === state.selectedCollectionId &&
+    v.name.startsWith(currentBulkEditGroup + '/')
+  );
+
+  const existingNames = new Set(existingVars.map(v => v.name.replace(currentBulkEditGroup + '/', '')));
+
+  let html = '';
+
+  lines.forEach(line => {
+    const [name, ...valueParts] = line.split(/[,\t]/);
+    const trimmedName = name?.trim();
+    const value = valueParts.join(',').trim();
+
+    if (!trimmedName) return;
+
+    const isNew = !existingNames.has(trimmedName);
+    const existingVar = existingVars.find(v => v.name === currentBulkEditGroup + '/' + trimmedName);
+    const isModified = existingVar && existingVar.value !== value;
+
+    const statusClass = isNew ? 'new' : (isModified ? 'modified' : '');
+    const statusText = isNew ? 'new' : (isModified ? 'modified' : '');
+
+    // Check if it's a color
+    const isColor = value.startsWith('#') || value.startsWith('rgb') || value.startsWith('{');
+
+    html += `
+      <div class="bulk-edit-preview-item">
+        ${isColor ? `<div class="preview-swatch" style="background:${value.startsWith('{') ? '#888' : value}"></div>` : ''}
+        <span class="preview-name">${currentBulkEditGroup}/${trimmedName}</span>
+        <span class="preview-value">${value}</span>
+        ${statusText ? `<span class="preview-status ${statusClass}">${statusText}</span>` : ''}
+      </div>
+    `;
+  });
+
+  preview.innerHTML = html;
+}
+
+function applyBulkEdit(): void {
+  const textarea = $('bulk-edit-textarea') as HTMLTextAreaElement;
+  if (!textarea) return;
+
+  const lines = textarea.value.split('\n').filter(line => line.trim());
+  const updates: { name: string; value: string }[] = [];
+
+  lines.forEach(line => {
+    const [name, ...valueParts] = line.split(/[,\t]/);
+    const trimmedName = name?.trim();
+    const value = valueParts.join(',').trim();
+
+    if (trimmedName && value) {
+      updates.push({
+        name: currentBulkEditGroup + '/' + trimmedName,
+        value
+      });
+    }
+  });
+
+  if (updates.length > 0) {
+    post({
+      type: 'bulk-update-group',
+      collectionId: state.selectedCollectionId,
+      groupName: currentBulkEditGroup,
+      updates
+    });
+  }
+
+  closeBulkEdit();
 }
 
 // Drag and drop reordering

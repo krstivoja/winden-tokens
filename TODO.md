@@ -31,28 +31,16 @@
 
 ---
 
-### 3. Multi-Edit / CSV Text Editor
+### 3. Multi-Edit / CSV Text Editor ✅
 **Edit many variables fast, paste from spreadsheets**
 
-- [ ] Click "Edit as Text" on a group → opens modal
-- [ ] Text area where each line = one variable
-- [ ] Format: `name, value` (comma or tab separated)
-- [ ] Parse and create/update variables on apply
-- [ ] Show preview of changes before applying
+- [x] Click "Edit as Text" on a group → opens modal
+- [x] Text area where each line = one variable
+- [x] Format: `name, value` (comma or tab separated)
+- [x] Parse and create/update variables on apply
+- [x] Show preview of changes before applying
 
-**UI:**
-```
-┌─ Bulk Edit: accent (11 colors) ─────┐
-│ ┌─────────────────────────────────┐ │
-│ │ 50, #FFF5F7                     │ │
-│ │ 100, #FFEAEF                    │ │
-│ │ 200, #FFD5DF                    │ │
-│ └─────────────────────────────────┘ │
-│ [Preview] [Apply] [Cancel]          │
-└─────────────────────────────────────┘
-```
-
-**Files:** New bulkedit.ts, _bulkedit.scss, index.html, code.ts
+**Files:** main.ts, _modals.scss, index.html, code.ts, table.ts
 
 ---
 

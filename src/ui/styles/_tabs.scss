@@ -1,8 +1,11 @@
 // Tab styles
 .tabs {
   display: flex;
+  align-items: center;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
+  padding-right: 8px;
+  gap: 2px;
 }
 
 .tab {

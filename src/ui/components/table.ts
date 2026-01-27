@@ -72,6 +72,7 @@ export function renderTable(): void {
               ${esc(groupName)}
               <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>
             </span>
+            <button class="row-action" onclick="window.app.openBulkEdit('${esc(groupName)}')" title="Edit as text" style="opacity:0;">${icons.edit}</button>
             <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">${icons.trash}</button>
           </div>
         </td>
