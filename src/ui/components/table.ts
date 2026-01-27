@@ -116,10 +116,26 @@ function renderVariableRow(
 
 function renderValueCell(v: VariableData): string {
   if (v.resolvedType === 'COLOR') {
+    // Check if this is a reference (format: {variableName})
+    const refMatch = v.value.match(/^\{(.+)\}$/);
+    let displayColor = v.value;
+
+    if (refMatch) {
+      // This is a reference - look up the actual color
+      const refName = refMatch[1];
+      const refVariable = state.variables.find(rv => rv.name === refName);
+      if (refVariable && refVariable.resolvedType === 'COLOR') {
+        displayColor = refVariable.value;
+      } else {
+        // Reference not found or invalid, show gray
+        displayColor = '#888888';
+      }
+    }
+
     return `
       <div class="color-value-cell">
-        <div class="color-swatch" onclick="window.app.openColorPickerForVariable('${v.id}', '${esc(v.value)}')">
-          <div class="color-swatch-inner" style="background:${esc(v.value)}"></div>
+        <div class="color-swatch" onclick="window.app.showColorValueMenu(event, '${v.id}', '${esc(v.value)}')">
+          <div class="color-swatch-inner" style="background:${esc(displayColor)}"></div>
         </div>
         <input class="cell-input mono" value="${esc(v.value)}"
           onblur="window.app.updateValue('${v.id}', this.value)">

@@ -39,7 +39,7 @@ async function fetchData() {
     name: c.name
   }));
 
-  let variableData: UIVariableData[] = variables.map(variable => {
+  let variableData: UIVariableData[] = await Promise.all(variables.map(async variable => {
     const modeId = Object.keys(variable.valuesByMode)[0];
     const value = variable.valuesByMode[modeId];
 
@@ -48,9 +48,9 @@ async function fetchData() {
       collectionId: variable.variableCollectionId,
       name: variable.name,
       resolvedType: variable.resolvedType,
-      value: formatValue(value, variable.resolvedType)
+      value: await formatValue(value, variable.resolvedType)
     };
-  });
+  }));
 
   // Apply custom order if exists
   const order = getVariableOrder();
@@ -76,12 +76,21 @@ async function fetchData() {
   });
 }
 
-function formatValue(value: any, type: string): string {
+async function formatValue(value: any, type: string): Promise<string> {
   if (value === null || value === undefined) {
     return 'undefined';
   }
 
   if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+    // Look up the referenced variable and return its name in {name} format
+    try {
+      const refVariable = await figma.variables.getVariableByIdAsync(value.id);
+      if (refVariable) {
+        return `{${refVariable.name}}`;
+      }
+    } catch (e) {
+      // If lookup fails, return the ID
+    }
     return `→ ${value.id}`;
   }
 
@@ -114,7 +123,25 @@ function formatValue(value: any, type: string): string {
   }
 }
 
-function parseValue(value: string, type: string): any {
+async function parseValue(value: string, type: string): Promise<any> {
+  // Check if value is a variable reference (format: {variableName})
+  const refMatch = value.match(/^\{(.+)\}$/);
+  if (refMatch) {
+    const refName = refMatch[1];
+    const variables = await figma.variables.getLocalVariablesAsync();
+    const refVariable = variables.find(v => v.name === refName);
+
+    if (!refVariable) {
+      throw new Error(`Referenced variable not found: ${refName}`);
+    }
+
+    // Return a variable alias
+    return {
+      type: 'VARIABLE_ALIAS',
+      id: refVariable.id
+    };
+  }
+
   switch (type) {
     case 'COLOR':
       const rgbaMatch = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
@@ -196,7 +223,7 @@ async function createVariable(
     const variable = figma.variables.createVariable(name, collection, resolvedType);
 
     const modeId = collection.modes[0].modeId;
-    const parsedValue = value ? parseValue(value, varType) : getDefaultValue(varType);
+    const parsedValue = value ? await parseValue(value, varType) : getDefaultValue(varType);
     variable.setValueForMode(modeId, parsedValue);
 
     await fetchData();
@@ -226,7 +253,7 @@ async function updateVariableValue(id: string, newValue: string) {
     const variable = await figma.variables.getVariableByIdAsync(id);
     if (variable) {
       const modeId = Object.keys(variable.valuesByMode)[0];
-      const parsedValue = parseValue(newValue, variable.resolvedType);
+      const parsedValue = await parseValue(newValue, variable.resolvedType);
       variable.setValueForMode(modeId, parsedValue);
       await fetchData();
       figma.ui.postMessage({ type: 'update-success' });
@@ -306,7 +333,7 @@ async function createShades(
 
     for (const shade of shades) {
       const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
-      const parsedValue = parseValue(shade.value, 'COLOR');
+      const parsedValue = await parseValue(shade.value, 'COLOR');
       variable.setValueForMode(modeId, parsedValue);
     }
 
@@ -340,7 +367,7 @@ async function updateShades(
 
     for (const shade of shades) {
       const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
-      const parsedValue = parseValue(shade.value, 'COLOR');
+      const parsedValue = await parseValue(shade.value, 'COLOR');
       variable.setValueForMode(modeId, parsedValue);
     }
 
@@ -372,7 +399,7 @@ async function removeShades(
 
     const modeId = collection.modes[0].modeId;
     const variable = figma.variables.createVariable(newColor.name, collection, 'COLOR');
-    const parsedValue = parseValue(newColor.value, 'COLOR');
+    const parsedValue = await parseValue(newColor.value, 'COLOR');
     variable.setValueForMode(modeId, parsedValue);
 
     await fetchData();
@@ -395,7 +422,7 @@ async function createSteps(
 
     for (const step of steps) {
       const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-      const parsedValue = parseValue(step.value, 'FLOAT');
+      const parsedValue = await parseValue(step.value, 'FLOAT');
       variable.setValueForMode(modeId, parsedValue);
     }
 
@@ -429,7 +456,7 @@ async function updateSteps(
 
     for (const step of steps) {
       const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-      const parsedValue = parseValue(step.value, 'FLOAT');
+      const parsedValue = await parseValue(step.value, 'FLOAT');
       variable.setValueForMode(modeId, parsedValue);
     }
 
@@ -461,7 +488,7 @@ async function removeSteps(
 
     const modeId = collection.modes[0].modeId;
     const variable = figma.variables.createVariable(newNumber.name, collection, 'FLOAT');
-    const parsedValue = parseValue(newNumber.value, 'FLOAT');
+    const parsedValue = await parseValue(newNumber.value, 'FLOAT');
     variable.setValueForMode(modeId, parsedValue);
 
     await fetchData();
@@ -518,7 +545,7 @@ async function updateFromJson(data: { collections: CollectionData[], variables: 
           }
           if (varData.value !== undefined) {
             const modeId = Object.keys(variable.valuesByMode)[0];
-            const parsedValue = parseValue(varData.value, varData.type || variable.resolvedType);
+            const parsedValue = await parseValue(varData.value, varData.type || variable.resolvedType);
             variable.setValueForMode(modeId, parsedValue);
           }
         }
@@ -538,16 +565,16 @@ async function checkForChanges() {
   const variables = await figma.variables.getLocalVariablesAsync();
 
   const collectionData = collections.map(c => ({ id: c.id, name: c.name }));
-  const variableData = variables.map(v => {
+  const variableData = await Promise.all(variables.map(async v => {
     const modeId = Object.keys(v.valuesByMode)[0];
     return {
       id: v.id,
       collectionId: v.variableCollectionId,
       name: v.name,
       resolvedType: v.resolvedType,
-      value: formatValue(v.valuesByMode[modeId], v.resolvedType)
+      value: await formatValue(v.valuesByMode[modeId], v.resolvedType)
     };
-  });
+  }));
 
   const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
 

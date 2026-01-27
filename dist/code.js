@@ -20,7 +20,7 @@ async function fetchData() {
         id: c.id,
         name: c.name
     }));
-    let variableData = variables.map(variable => {
+    let variableData = await Promise.all(variables.map(async (variable) => {
         const modeId = Object.keys(variable.valuesByMode)[0];
         const value = variable.valuesByMode[modeId];
         return {
@@ -28,9 +28,9 @@ async function fetchData() {
             collectionId: variable.variableCollectionId,
             name: variable.name,
             resolvedType: variable.resolvedType,
-            value: formatValue(value, variable.resolvedType)
+            value: await formatValue(value, variable.resolvedType)
         };
-    });
+    }));
     // Apply custom order if exists
     const order = getVariableOrder();
     if (order.length > 0) {
@@ -55,11 +55,21 @@ async function fetchData() {
         variables: variableData
     });
 }
-function formatValue(value, type) {
+async function formatValue(value, type) {
     if (value === null || value === undefined) {
         return 'undefined';
     }
     if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+        // Look up the referenced variable and return its name in {name} format
+        try {
+            const refVariable = await figma.variables.getVariableByIdAsync(value.id);
+            if (refVariable) {
+                return `{${refVariable.name}}`;
+            }
+        }
+        catch (e) {
+            // If lookup fails, return the ID
+        }
         return `→ ${value.id}`;
     }
     switch (type) {
@@ -90,7 +100,22 @@ function formatValue(value, type) {
             return JSON.stringify(value);
     }
 }
-function parseValue(value, type) {
+async function parseValue(value, type) {
+    // Check if value is a variable reference (format: {variableName})
+    const refMatch = value.match(/^\{(.+)\}$/);
+    if (refMatch) {
+        const refName = refMatch[1];
+        const variables = await figma.variables.getLocalVariablesAsync();
+        const refVariable = variables.find(v => v.name === refName);
+        if (!refVariable) {
+            throw new Error(`Referenced variable not found: ${refName}`);
+        }
+        // Return a variable alias
+        return {
+            type: 'VARIABLE_ALIAS',
+            id: refVariable.id
+        };
+    }
     switch (type) {
         case 'COLOR':
             const rgbaMatch = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
@@ -167,7 +192,7 @@ async function createVariable(collectionId, name, varType, value) {
         const resolvedType = varType;
         const variable = figma.variables.createVariable(name, collection, resolvedType);
         const modeId = collection.modes[0].modeId;
-        const parsedValue = value ? parseValue(value, varType) : getDefaultValue(varType);
+        const parsedValue = value ? await parseValue(value, varType) : getDefaultValue(varType);
         variable.setValueForMode(modeId, parsedValue);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
@@ -196,7 +221,7 @@ async function updateVariableValue(id, newValue) {
         const variable = await figma.variables.getVariableByIdAsync(id);
         if (variable) {
             const modeId = Object.keys(variable.valuesByMode)[0];
-            const parsedValue = parseValue(newValue, variable.resolvedType);
+            const parsedValue = await parseValue(newValue, variable.resolvedType);
             variable.setValueForMode(modeId, parsedValue);
             await fetchData();
             figma.ui.postMessage({ type: 'update-success' });
@@ -266,7 +291,7 @@ async function createShades(collectionId, shades) {
         const modeId = collection.modes[0].modeId;
         for (const shade of shades) {
             const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
-            const parsedValue = parseValue(shade.value, 'COLOR');
+            const parsedValue = await parseValue(shade.value, 'COLOR');
             variable.setValueForMode(modeId, parsedValue);
         }
         await fetchData();
@@ -293,7 +318,7 @@ async function updateShades(collectionId, deleteIds, shades) {
         const modeId = collection.modes[0].modeId;
         for (const shade of shades) {
             const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
-            const parsedValue = parseValue(shade.value, 'COLOR');
+            const parsedValue = await parseValue(shade.value, 'COLOR');
             variable.setValueForMode(modeId, parsedValue);
         }
         await fetchData();
@@ -319,7 +344,7 @@ async function removeShades(collectionId, deleteIds, newColor) {
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
         const variable = figma.variables.createVariable(newColor.name, collection, 'COLOR');
-        const parsedValue = parseValue(newColor.value, 'COLOR');
+        const parsedValue = await parseValue(newColor.value, 'COLOR');
         variable.setValueForMode(modeId, parsedValue);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
@@ -337,7 +362,7 @@ async function createSteps(collectionId, steps) {
         const modeId = collection.modes[0].modeId;
         for (const step of steps) {
             const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-            const parsedValue = parseValue(step.value, 'FLOAT');
+            const parsedValue = await parseValue(step.value, 'FLOAT');
             variable.setValueForMode(modeId, parsedValue);
         }
         await fetchData();
@@ -364,7 +389,7 @@ async function updateSteps(collectionId, deleteIds, steps) {
         const modeId = collection.modes[0].modeId;
         for (const step of steps) {
             const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-            const parsedValue = parseValue(step.value, 'FLOAT');
+            const parsedValue = await parseValue(step.value, 'FLOAT');
             variable.setValueForMode(modeId, parsedValue);
         }
         await fetchData();
@@ -390,7 +415,7 @@ async function removeSteps(collectionId, deleteIds, newNumber) {
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
         const variable = figma.variables.createVariable(newNumber.name, collection, 'FLOAT');
-        const parsedValue = parseValue(newNumber.value, 'FLOAT');
+        const parsedValue = await parseValue(newNumber.value, 'FLOAT');
         variable.setValueForMode(modeId, parsedValue);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
@@ -441,7 +466,7 @@ async function updateFromJson(data) {
                     }
                     if (varData.value !== undefined) {
                         const modeId = Object.keys(variable.valuesByMode)[0];
-                        const parsedValue = parseValue(varData.value, varData.type || variable.resolvedType);
+                        const parsedValue = await parseValue(varData.value, varData.type || variable.resolvedType);
                         variable.setValueForMode(modeId, parsedValue);
                     }
                 }
@@ -459,16 +484,16 @@ async function checkForChanges() {
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
     const variables = await figma.variables.getLocalVariablesAsync();
     const collectionData = collections.map(c => ({ id: c.id, name: c.name }));
-    const variableData = variables.map(v => {
+    const variableData = await Promise.all(variables.map(async (v) => {
         const modeId = Object.keys(v.valuesByMode)[0];
         return {
             id: v.id,
             collectionId: v.variableCollectionId,
             name: v.name,
             resolvedType: v.resolvedType,
-            value: formatValue(v.valuesByMode[modeId], v.resolvedType)
+            value: await formatValue(v.valuesByMode[modeId], v.resolvedType)
         };
-    });
+    }));
     const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
     if (lastDataHash && currentHash !== lastDataHash) {
         figma.ui.postMessage({ type: 'changes-detected' });

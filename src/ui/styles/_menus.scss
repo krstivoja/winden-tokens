@@ -1,5 +1,6 @@
 // Menu styles
-.add-menu {
+.add-menu,
+.color-value-menu {
   position: absolute;
   background: white;
   border: 1px solid var(--border);
@@ -25,6 +26,7 @@
     font-size: 12px;
     cursor: pointer;
     border-radius: 4px;
+    white-space: nowrap;
 
     svg {
       flex-shrink: 0;

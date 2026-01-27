@@ -69,6 +69,12 @@
       <button data-type="STRING"><span class="icon" data-icon="type-STRING"></span>String</button>
       <button data-type="BOOLEAN"><span class="icon" data-icon="type-BOOLEAN"></span>Boolean</button>
     </div>
+
+    <!-- Color Value Menu -->
+    <div id="color-value-menu" class="color-value-menu">
+      <button data-action="pick"><span class="icon" data-icon="shades"></span>Pick Color</button>
+      <button data-action="reference"><span class="icon" data-icon="type-COLOR"></span>Reference Color</button>
+    </div>
   </div>
 
   <!-- JSON Tab -->
@@ -160,6 +166,7 @@
         <div class="form-group">
           <label id="input-modal-label">Name</label>
           <input type="text" id="input-modal-input" class="form-input" placeholder="Enter name...">
+          <select id="input-modal-select" class="form-input" style="display:none;"></select>
         </div>
       </div>
       <div class="modal-footer">
@@ -194,6 +201,28 @@
       <div class="modal-footer">
         <button class="btn" onclick="window.app.closeColorPicker()">Cancel</button>
         <button class="btn btn-primary" onclick="window.app.confirmColorPicker()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color Reference Modal -->
+  <div id="color-reference-modal" class="modal-overlay">
+    <div class="modal" style="width: 360px;">
+      <div class="modal-header">
+        <h3>Reference Color</h3>
+        <button class="modal-close" onclick="window.app.closeColorReferenceModal()">
+          <span class="icon" data-icon="close"></span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select a color variable</label>
+          <input type="text" id="color-reference-search" class="form-input" placeholder="Search colors..." oninput="window.app.filterColorReferences(this.value)" onkeydown="window.app.handleColorReferenceSearchKey(event)">
+        </div>
+        <div id="color-reference-list" class="color-reference-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="window.app.closeColorReferenceModal()">Cancel</button>
       </div>
     </div>
   </div>

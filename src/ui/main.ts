@@ -28,7 +28,7 @@ import {
   removeSteps
 } from './components/steps';
 import { initModals, showInputModal, closeInputModal } from './components/modals';
-import { post, $ } from './utils/helpers';
+import { post, $, esc } from './utils/helpers';
 import { hexToRgb } from './utils/color';
 import { icons, typeIcons } from './utils/icons';
 import { VariableType } from './types';
@@ -57,22 +57,28 @@ function init(): void {
   initShadesModal();
   initStepsModal();
   initModals();
+  initColorReferenceModal();
   initTabs();
   initToolbar();
   initResize();
   initCollectionSelect();
   initAddMenu();
+  initColorValueMenu();
   initDragDrop();
 
   // Expose app methods to window for inline handlers
   (window as any).app = {
     showAddMenu,
+    showColorValueMenu,
     toggleGroup,
     deleteGroup,
     updateNameFromDisplay,
     updateValue,
     handleKey,
     openColorPickerForVariable,
+    closeColorReferenceModal,
+    filterColorReferences,
+    handleColorReferenceSearchKey,
     // Shades
     selectSourceColor,
     updateBaseFromHex,
@@ -187,6 +193,211 @@ function showAddMenu(e: Event): void {
     addMenu.style.top = (rect.bottom + 4) + 'px';
     addMenu.style.left = rect.left + 'px';
     addMenu.classList.add('open');
+  }
+}
+
+// Color value menu
+const colorValueMenu = $('color-value-menu');
+let currentColorVariableId = '';
+let currentColorValue = '';
+
+function initColorValueMenu(): void {
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('#color-value-menu') &&
+        !target.closest('.color-swatch')) {
+      colorValueMenu?.classList.remove('open');
+    }
+  });
+
+  colorValueMenu?.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      const action = (btn as HTMLElement).dataset.action;
+      colorValueMenu?.classList.remove('open');
+
+      if (action === 'pick') {
+        openColorPickerForVariable(currentColorVariableId, currentColorValue);
+      } else if (action === 'reference') {
+        showColorReferenceModal();
+      }
+    };
+  });
+}
+
+function showColorValueMenu(e: Event, id: string, value: string): void {
+  e.stopPropagation();
+  const target = e.target as HTMLElement;
+  const swatch = target.closest('.color-swatch') as HTMLElement;
+  if (!swatch) return;
+
+  const rect = swatch.getBoundingClientRect();
+  currentColorVariableId = id;
+  currentColorValue = value;
+
+  if (colorValueMenu) {
+    colorValueMenu.style.top = (rect.bottom + 4) + 'px';
+    colorValueMenu.style.left = rect.left + 'px';
+    colorValueMenu.classList.add('open');
+  }
+}
+
+function showColorReferenceModal(): void {
+  const colorVariables = state.variables.filter(v =>
+    v.resolvedType === 'COLOR' && v.id !== currentColorVariableId
+  );
+
+  if (colorVariables.length === 0) {
+    alert('No other color variables available to reference');
+    return;
+  }
+
+  // Group colors by prefix
+  const grouped: Record<string, typeof colorVariables> = {};
+  const ungrouped: typeof colorVariables = [];
+
+  colorVariables.forEach(v => {
+    const parts = v.name.split('/');
+    if (parts.length > 1) {
+      const groupName = parts.slice(0, -1).join('/');
+      if (!grouped[groupName]) grouped[groupName] = [];
+      grouped[groupName].push(v);
+    } else {
+      ungrouped.push(v);
+    }
+  });
+
+  const list = $('color-reference-list');
+  if (!list) return;
+
+  let html = '';
+
+  // Render ungrouped colors
+  if (ungrouped.length > 0) {
+    html += '<div class="color-reference-group" data-group="">';
+    if (Object.keys(grouped).length > 0) {
+      html += '<div class="color-reference-group-header">Variables</div>';
+    }
+    ungrouped.forEach(v => {
+      html += renderColorReferenceItem(v);
+    });
+    html += '</div>';
+  }
+
+  // Render grouped colors
+  Object.keys(grouped).sort().forEach(groupName => {
+    html += `<div class="color-reference-group" data-group="${esc(groupName)}">`;
+    html += `<div class="color-reference-group-header">${esc(groupName)}</div>`;
+    grouped[groupName].forEach(v => {
+      html += renderColorReferenceItem(v);
+    });
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
+
+  // Add click handlers
+  list.querySelectorAll('.color-reference-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const varName = (item as HTMLElement).dataset.name;
+      if (varName) {
+        updateValue(currentColorVariableId, `{${varName}}`);
+        closeColorReferenceModal();
+      }
+    });
+  });
+
+  // Show modal
+  const modal = $('color-reference-modal');
+  if (modal) modal.classList.add('open');
+
+  // Clear and focus search
+  const search = $('color-reference-search') as HTMLInputElement;
+  if (search) {
+    search.value = '';
+    setTimeout(() => search.focus(), 50);
+  }
+}
+
+function renderColorReferenceItem(v: any): string {
+  const displayName = v.name.includes('/') ? v.name.split('/').pop() : v.name;
+
+  // Check if this color is also a reference
+  const refMatch = v.value.match(/^\{(.+)\}$/);
+  let displayColor = v.value;
+
+  if (refMatch) {
+    const refName = refMatch[1];
+    const refVariable = state.variables.find(rv => rv.name === refName);
+    if (refVariable && refVariable.resolvedType === 'COLOR') {
+      displayColor = refVariable.value;
+    } else {
+      displayColor = '#888888';
+    }
+  }
+
+  return `
+    <div class="color-reference-item" data-name="${esc(v.name)}" data-search="${esc(v.name.toLowerCase())}">
+      <div class="color-reference-swatch">
+        <div class="color-reference-swatch-inner" style="background:${esc(displayColor)}"></div>
+      </div>
+      <span class="color-reference-name">${esc(displayName)}</span>
+    </div>
+  `;
+}
+
+function closeColorReferenceModal(): void {
+  const modal = $('color-reference-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+// Initialize color reference modal
+function initColorReferenceModal(): void {
+  const modal = $('color-reference-modal');
+  if (modal) {
+    modal.onclick = (e) => {
+      if (e.target === modal) closeColorReferenceModal();
+    };
+  }
+}
+
+function filterColorReferences(query: string): void {
+  const list = $('color-reference-list');
+  if (!list) return;
+
+  const lowerQuery = query.toLowerCase();
+  const items = list.querySelectorAll('.color-reference-item');
+  const groups = list.querySelectorAll('.color-reference-group');
+
+  items.forEach(item => {
+    const searchText = (item as HTMLElement).dataset.search || '';
+    if (searchText.includes(lowerQuery)) {
+      item.classList.remove('hidden');
+    } else {
+      item.classList.add('hidden');
+    }
+  });
+
+  // Hide groups that have no visible items
+  groups.forEach(group => {
+    const visibleItems = group.querySelectorAll('.color-reference-item:not(.hidden)');
+    if (visibleItems.length === 0) {
+      group.classList.add('hidden');
+    } else {
+      group.classList.remove('hidden');
+    }
+  });
+}
+
+function handleColorReferenceSearchKey(e: KeyboardEvent): void {
+  if (e.key === 'Enter') {
+    // Select first visible item
+    const list = $('color-reference-list');
+    const firstVisible = list?.querySelector('.color-reference-item:not(.hidden)') as HTMLElement;
+    if (firstVisible) {
+      firstVisible.click();
+    }
+  } else if (e.key === 'Escape') {
+    closeColorReferenceModal();
   }
 }
 

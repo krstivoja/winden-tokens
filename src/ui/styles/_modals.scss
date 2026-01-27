@@ -258,3 +258,89 @@
     font-family: 'SF Mono', Monaco, monospace;
   }
 }
+
+// Color reference list
+.color-reference-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.color-reference-group {
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.color-reference-group-header {
+  padding: 8px 12px;
+  background: var(--bg-alt);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.color-reference-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.color-reference-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg, #ddd 25%, transparent 25%),
+                linear-gradient(-45deg, #ddd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ddd 75%),
+                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+  }
+}
+
+.color-reference-swatch-inner {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.color-reference-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  font-family: 'SF Mono', Monaco, monospace;
+}
