@@ -22,7 +22,8 @@ export const icons = {
   shades: '<svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.2"/><rect x="5" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.5"/><rect x="9" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="13" y="2" width="2" height="12" rx="1" fill="currentColor"/></svg>',
   steps: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 14h3v-3H2v3zm4-5h3v-3H6v3zm4-5h3V1h-3v3z" fill="currentColor"/><path d="M2 14l12-12" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>',
   copy: '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="2" y="5" width="8" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
-  trash: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5.5 2v1h5V2h-5zM4 4v9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4H4zm2.5 2v5m3-5v5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>'
+  trash: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5.5 2v1h5V2h-5zM4 4v9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4H4zm2.5 2v5m3-5v5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>',
+  search: '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="6.5" cy="6.5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
 };
 
 export function getTypeIcon(type: VariableType): string {

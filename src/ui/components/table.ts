@@ -61,11 +61,13 @@ export function renderTable(): void {
   sortedGroups.forEach(groupName => {
     const isCollapsed = state.isGroupCollapsed(groupName);
     const groupIds = grouped[groupName].map(v => v.id).join(',');
+    const groupType = grouped[groupName][0]?.resolvedType || 'STRING';
     html += `
       <tr class="group-row ${isCollapsed ? 'collapsed' : ''}" data-group="${esc(groupName)}">
         <td colspan="3">
           <div class="group-header">
             <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="window.app.toggleGroup('${esc(groupName)}')">${icons.chevronDown}</span>
+            <span class="type-icon ${groupType}">${getTypeIcon(groupType)}</span>
             <span onclick="window.app.toggleGroup('${esc(groupName)}')" style="flex:1;cursor:pointer;">
               ${esc(groupName)}
               <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>

@@ -126,6 +126,7 @@ function initToolbar(): void {
   const refreshBtn = $('refresh-btn');
   const addCollectionBtn = $('add-collection-btn');
   const expandBtn = $('expand-btn');
+  const searchInput = $('search-input') as HTMLInputElement;
 
   if (refreshBtn) {
     refreshBtn.onclick = () => post({ type: 'refresh' });
@@ -142,6 +143,37 @@ function initToolbar(): void {
   if (expandBtn) {
     expandBtn.onclick = toggleExpand;
   }
+
+  if (searchInput) {
+    searchInput.oninput = () => {
+      state.setSearchQuery(searchInput.value);
+      renderTable();
+      updateSearchCount();
+    };
+
+    // Clear search on Escape
+    searchInput.onkeydown = (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        state.setSearchQuery('');
+        renderTable();
+        updateSearchCount();
+      }
+    };
+  }
+}
+
+function updateSearchCount(): void {
+  const countEl = $('search-count');
+  if (!countEl) return;
+
+  const { shown, total } = state.getFilteredCount();
+
+  if (state.searchQuery) {
+    countEl.textContent = `${shown}/${total}`;
+  } else {
+    countEl.textContent = '';
+  }
 }
 
 // Collection select
@@ -151,6 +183,7 @@ function initCollectionSelect(): void {
     select.onchange = () => {
       state.selectedCollectionId = select.value;
       renderTable();
+      updateSearchCount();
     };
   }
 }
@@ -692,6 +725,7 @@ window.onmessage = (e) => {
     state.setData(msg.collections || [], msg.variables || []);
     renderCollections();
     renderTable();
+    updateSearchCount();
     updateJson();
   }
 

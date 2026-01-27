@@ -76,13 +76,23 @@
 .group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 0 10px;
   font-weight: 600;
   font-size: 11px;
   color: var(--text);
   cursor: pointer;
   user-select: none;
+
+  .type-icon {
+    width: 18px;
+    height: 18px;
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
 }
 
 .group-toggle {
