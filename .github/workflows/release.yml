@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      - '[0-9]*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -43,6 +44,7 @@ jobs:
         run: |
           mkdir -p release
           cp manifest.json release/
+          cp icon.png release/
           cp -r dist release/
           cd release
           zip -r ../tokens-manager-plugin.zip .

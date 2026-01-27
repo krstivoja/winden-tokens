@@ -1,4 +1,4 @@
-# Tokens Manager
+# Winden Tokens
 
 A Figma plugin for managing design tokens (variables) with a spreadsheet-style interface. Quickly create, edit, and organize your design system variables.
 
@@ -9,27 +9,29 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 - **Spreadsheet-style editing** - Edit variables inline with a familiar table interface
 - **Search & filter** - Quickly find variables by name with instant search
 - **Color picker** - Visual HSV color picker with saturation-value panel and hue slider
-- **Color shades generator** - Generate color scales (50-950) from any base color
-- **Multi-edit / CSV editor** - Edit groups as text, paste from spreadsheets
+- **Color shades generator** - Generate color scales (50-950) with adjustable curves for lightness, saturation, and hue
+- **Number steps generator** - Create spacing/sizing scales with preset ratios (minor third, golden ratio, etc.) and naming conventions (t-shirt sizes, numeric)
+- **Color references** - Link colors to other variables for semantic token relationships
+- **Multi-edit / CSV editor** - Edit groups as text, paste from spreadsheets with preview
 - **Auto-sync** - Automatically detects and syncs changes made in Figma's native variables panel
 - **JSON editor** - Bulk edit variables via JSON for power users
 - **Variable types** - Support for Color, Number, String, and Boolean variables
 - **Grouped variables** - Organize variables with path-based naming (e.g., `blue/500`)
-- **Resizable window** - Drag the corner to resize the plugin window
+- **Resizable window** - Drag any edge or corner to resize the plugin window
 
 ## Installation
 
 ### From Figma Community
 1. Open Figma
 2. Go to **Plugins** > **Browse plugins in Community**
-3. Search for "Tokens Manager"
+3. Search for "Winden Tokens"
 4. Click **Install**
 
 ### Development / Local Install
 1. Clone this repository:
    ```bash
-   git clone https://github.com/nicvlk/tokens-manager.git
-   cd tokens-manager
+   git clone https://github.com/nicvlk/winden-tokens.git
+   cd winden-tokens
    ```
 
 2. Install dependencies:
@@ -56,7 +58,7 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 
 ### Editing Variables
 - Click on any cell to edit the name or value
-- For colors, click the color swatch to open the color picker
+- For colors, click the color swatch to open the color picker or reference another color
 - For booleans, use the True/False toggle buttons
 
 ### Search & Filter
@@ -64,10 +66,23 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 - Results update instantly as you type
 
 ### Generating Color Shades
-1. Click the **Shades** button
-2. Select an existing color from the dropdown
-3. Adjust lightness range and number of shades
-4. Click **Generate** to create the shade palette
+1. Click the **Shades** button in the toolbar
+2. Select an existing color or enter a custom hex value
+3. Adjust the curve for lightness, saturation, or hue using drag points
+4. Set the number of shades and group name
+5. Click **Generate** to create the shade palette
+
+### Generating Number Steps
+1. Click the **Steps** button in the toolbar
+2. Select an existing number variable or set a base value
+3. Choose a scale ratio (Minor Third, Golden Ratio, etc.)
+4. Select a naming preset (T-shirt sizes, Numeric, Gutenberg) or define custom steps
+5. Click **Generate** to create the scale
+
+### Color References
+1. Click a color cell and select **Reference Color**
+2. Search and select another color variable
+3. The color will now reference that variable (updates automatically)
 
 ### Multi-Edit (CSV Editor)
 1. Click **Edit as Text** on any group header
@@ -89,7 +104,7 @@ Name variables with forward slashes to create groups:
 
 ```bash
 npm run build         # Build the plugin (UI + plugin code)
-npm run dev           # Development mode with hot reload
+npm run dev           # Development mode with watch
 npm run build:ui      # Build UI only
 npm run build:plugin  # Build plugin code only
 ```
@@ -115,19 +130,29 @@ This project uses GitHub Actions for automated builds and releases.
 
 The workflow will:
 - Build the plugin
-- Create a ZIP package with `manifest.json` and `dist/` folder
+- Create a ZIP package with `manifest.json`, `icon.png`, and `dist/` folder
 - Create a GitHub release with the downloadable package
 - Store build artifacts for 90 days
 
 ## Project Structure
 
 ```
-tokens-manager/
-├── manifest.json   # Figma plugin manifest
-├── code.ts         # Plugin sandbox code (Figma API access)
-├── ui.html         # Plugin UI (HTML/CSS/JS)
-├── package.json    # Dependencies and scripts
-└── tsconfig.json   # TypeScript configuration
+winden-tokens/
+├── manifest.json           # Figma plugin manifest
+├── icon.png                # Plugin icon (128x128)
+├── src/
+│   ├── plugin/
+│   │   └── code.ts         # Plugin sandbox code (Figma API)
+│   └── ui/
+│       ├── index.html      # UI entry point
+│       ├── main.ts         # Main UI logic
+│       ├── state.ts        # State management
+│       ├── components/     # UI components
+│       ├── styles/         # SCSS styles
+│       └── utils/          # Helper utilities
+├── dist/                   # Build output
+├── package.json
+└── tsconfig.json
 ```
 
 ## Roadmap
@@ -137,6 +162,10 @@ See [TODO.md](TODO.md) for planned features including:
 - Contrast checker for accessibility
 - Multi-mode support (Light/Dark themes)
 - Export to CSS/Tailwind/JSON
+
+## Author
+
+Marko Krstic
 
 ## License
 
