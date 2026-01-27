@@ -9,7 +9,7 @@
     "build:ui": "vite build",
     "build:plugin": "tsc --project tsconfig.plugin.json"
   },
-  "author": "",
+  "author": "Marko Krstic",
   "license": "MIT",
   "devDependencies": {
     "@figma/plugin-typings": "^1.98.0",
