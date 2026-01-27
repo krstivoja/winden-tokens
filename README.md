@@ -76,11 +76,36 @@ Name variables with forward slashes to create groups:
 ## Build Commands
 
 ```bash
-npm run build      # Compile TypeScript to JavaScript
-npm run watch      # Watch mode - recompile on changes
-npm run lint       # Run ESLint
-npm run lint:fix   # Run ESLint with auto-fix
+npm run build      # Build the plugin (UI + plugin code)
+npm run dev        # Development mode with hot reload
+npm run build:ui   # Build UI only
+npm run build:plugin  # Build plugin code only
 ```
+
+## Releasing
+
+This project uses GitHub Actions for automated builds and releases.
+
+### Creating a Release
+
+1. **Tag-based release** (recommended):
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+   This will automatically trigger the release workflow.
+
+2. **Manual release**:
+   - Go to **Actions** tab in GitHub
+   - Select **Build and Release** workflow
+   - Click **Run workflow**
+   - Enter the version (e.g., `v1.0.0`)
+
+The workflow will:
+- Build the plugin
+- Create a ZIP package with `manifest.json` and `dist/` folder
+- Create a GitHub release with the downloadable package
+- Store build artifacts for 90 days
 
 ## Project Structure
 
