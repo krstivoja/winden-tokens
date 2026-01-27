@@ -1,5 +1,6 @@
 <style>
   :root {
+    /* Colors */
     --bg: #ffffff;
     --bg-alt: #f9f9f9;
     --bg-hover: #f0f0f0;
@@ -10,6 +11,12 @@
     --accent: #18a0fb;
     --danger: #e03e3e;
     --success: #1bc47d;
+
+    /* Unified sizing */
+    --control-height: 28px;
+    --control-padding: 0 10px;
+    --control-radius: 6px;
+    --control-font-size: 11px;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,19 +58,22 @@
   .btn {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    padding: 6px 10px;
+    height: var(--control-height);
+    padding: var(--control-padding);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     background: var(--bg);
-    font-size: 11px;
+    font-size: var(--control-font-size);
     cursor: pointer;
     color: var(--text);
+    white-space: nowrap;
   }
 
   .btn:hover { background: var(--bg-hover); }
-  .btn-icon { padding: 6px; }
-  .btn svg { width: 14px; height: 14px; }
+  .btn-icon { padding: 0; width: var(--control-height); }
+  .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
   .btn-primary {
     background: var(--accent);
@@ -80,11 +90,58 @@
   .btn-danger:hover { background: #c43030; }
 
   .collection-select {
-    padding: 6px 8px;
+    height: var(--control-height);
+    padding: var(--control-padding);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 11px;
+    border-radius: var(--control-radius);
+    font-size: var(--control-font-size);
     min-width: 140px;
+    background: var(--bg);
+  }
+
+  /* Unified search input */
+  .search-input {
+    height: var(--control-height);
+    padding: var(--control-padding);
+    border: 1px solid var(--border);
+    border-radius: var(--control-radius);
+    font-size: var(--control-font-size);
+    background: var(--bg);
+    min-width: 140px;
+    outline: none;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+
+  .search-input::placeholder {
+    color: var(--text-dim);
+  }
+
+  .search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-wrapper svg {
+    position: absolute;
+    left: 8px;
+    width: 12px;
+    height: 12px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+
+  .search-wrapper .search-input {
+    padding-left: 26px;
+  }
+
+  .search-count {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-left: 4px;
   }
 
   .spacer { flex: 1; }
@@ -92,7 +149,7 @@
   .status {
     font-size: 10px;
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--control-radius);
   }
   .status.success { background: #e6f9f0; color: var(--success); }
   .status.warning { background: #fff8e6; color: #b86e00; }
@@ -169,7 +226,7 @@
   .color-swatch {
     width: 24px;
     height: 24px;
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     border: 1px solid var(--border);
     cursor: pointer;
     position: relative;
@@ -258,7 +315,7 @@
   .bool-toggle {
     display: flex;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     overflow: hidden;
   }
 
@@ -369,10 +426,10 @@
   .json-editor {
     flex: 1;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     padding: 12px;
     font-family: 'SF Mono', Monaco, monospace;
-    font-size: 11px;
+    font-size: var(--control-font-size);
     resize: none;
     outline: none;
   }
@@ -385,7 +442,7 @@
     position: absolute;
     background: white;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--control-radius);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     padding: 4px;
     z-index: 100;
@@ -403,9 +460,9 @@
     border: none;
     background: none;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--control-font-size);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--control-radius);
   }
   .add-menu button svg { flex-shrink: 0; }
   .add-menu button[data-type="COLOR"] svg { color: #c41e3a; }
@@ -521,7 +578,7 @@
     border: none;
     background: none;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -553,10 +610,12 @@
   }
 
   .form-input {
-    padding: 8px 10px;
+    height: var(--control-height);
+    padding: var(--control-padding);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 12px;
+    border-radius: var(--control-radius);
+    font-size: var(--control-font-size);
+    background: var(--bg);
     outline: none;
   }
 
@@ -580,9 +639,9 @@
   }
 
   .color-input-preview {
-    width: 32px;
-    height: 32px;
-    border-radius: 4px;
+    width: var(--control-height);
+    height: var(--control-height);
+    border-radius: var(--control-radius);
     border: 1px solid var(--border);
     cursor: pointer;
     position: relative;
@@ -632,9 +691,9 @@
   }
 
   .lightness-preview {
-    width: 32px;
-    height: 32px;
-    border-radius: 4px;
+    width: var(--control-height);
+    height: var(--control-height);
+    border-radius: var(--control-radius);
     border: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -642,9 +701,9 @@
   /* Shades Preview */
   .shades-preview {
     display: flex;
-    border-radius: 4px;
+    border-radius: var(--control-radius);
     overflow: hidden;
-    height: 32px;
+    height: var(--control-height);
     border: 1px solid var(--border);
   }
 
@@ -709,8 +768,6 @@
     box-sizing: border-box;
     text-align: center;
     font-family: 'SF Mono', Monaco, monospace;
-    font-size: 11px;
-    border-radius: 8px;
   }
 
   .picker-sv-panel {
@@ -798,6 +855,14 @@
         Shades
       </button>
     </div>
+
+    <div class="toolbar-divider"></div>
+
+    <div class="search-wrapper">
+      <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5"/></svg>
+      <input type="text" id="search-input" class="search-input" placeholder="Search...">
+    </div>
+    <span id="search-count" class="search-count"></span>
 
     <div class="spacer"></div>
 
@@ -975,6 +1040,9 @@
   const statusEl = document.getElementById('status');
   const addMenu = document.getElementById('add-menu');
   const jsonEditor = document.getElementById('json-editor');
+  const searchInput = document.getElementById('search-input');
+  const searchCountEl = document.getElementById('search-count');
+  let searchQuery = '';
 
   // Type icons (Figma native)
   function getTypeIcon(type) {
@@ -1059,8 +1127,22 @@
     renderTable();
   };
 
+  // Search functionality
+  searchInput.oninput = () => {
+    searchQuery = searchInput.value.toLowerCase().trim();
+    renderTable();
+  };
+
   function renderTable() {
-    const filtered = variables.filter(v => v.collectionId === selectedCollectionId);
+    let filtered = variables.filter(v => v.collectionId === selectedCollectionId);
+
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(v => v.name.toLowerCase().includes(searchQuery));
+      searchCountEl.textContent = `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`;
+    } else {
+      searchCountEl.textContent = '';
+    }
 
     if (!filtered.length) {
       tableBody.innerHTML = `
