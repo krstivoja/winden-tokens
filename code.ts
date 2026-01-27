@@ -381,7 +381,7 @@ async function updateFromJson(data: { collections: CollectionData[], variables: 
   }
 }
 
-// Poll for changes
+// Poll for changes and auto-refresh
 async function checkForChanges() {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const variables = await figma.variables.getLocalVariablesAsync();
@@ -401,7 +401,8 @@ async function checkForChanges() {
   const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
 
   if (lastDataHash && currentHash !== lastDataHash) {
-    figma.ui.postMessage({ type: 'changes-detected' });
+    // Auto-refresh when changes detected
+    await fetchData();
   }
 }
 

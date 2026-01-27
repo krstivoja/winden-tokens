@@ -16,6 +16,8 @@ export const icons = {
   plus: '<svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" fill="none"/></svg>',
   close: '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2"/></svg>',
   refresh: '<svg viewBox="0 0 16 16"><path d="M13.65 2.35A8 8 0 1 0 16 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z" fill="currentColor"/></svg>',
+  expand: '<svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>',
+  collapse: '<svg viewBox="0 0 16 16"><path d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>',
   chevronDown: '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   shades: '<svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.2"/><rect x="5" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.5"/><rect x="9" y="2" width="3" height="12" rx="1" fill="currentColor" opacity="0.8"/><rect x="13" y="2" width="2" height="12" rx="1" fill="currentColor"/></svg>',
   steps: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 14h3v-3H2v3zm4-5h3v-3H6v3zm4-5h3V1h-3v3z" fill="currentColor"/><path d="M2 14l12-12" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>'

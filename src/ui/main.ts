@@ -117,6 +117,7 @@ function initTabs(): void {
 function initToolbar(): void {
   const refreshBtn = $('refresh-btn');
   const addCollectionBtn = $('add-collection-btn');
+  const expandBtn = $('expand-btn');
 
   if (refreshBtn) {
     refreshBtn.onclick = () => post({ type: 'refresh' });
@@ -128,6 +129,10 @@ function initToolbar(): void {
         post({ type: 'create-collection', name });
       });
     };
+  }
+
+  if (expandBtn) {
+    expandBtn.onclick = toggleExpand;
   }
 }
 
@@ -275,26 +280,86 @@ function initDragDrop(): void {
 }
 
 // Resize handling
-function initResize(): void {
-  const resizeHandle = $('resize-handle');
-  let isResizing = false;
-  let startX: number, startY: number, startWidth: number, startHeight: number;
+let isExpanded = false;
+let lastSize = { width: 0, height: 0 };
 
-  if (resizeHandle) {
-    resizeHandle.onmousedown = (e) => {
+function toggleExpand(): void {
+  const expandBtn = $('expand-btn');
+  const iconEl = expandBtn?.querySelector('.icon') as HTMLElement | null;
+
+  if (!isExpanded) {
+    lastSize = { width: window.innerWidth, height: window.innerHeight };
+    // Maximize to screen dimensions with minimal margins
+    // Figma doesn't allow repositioning, but we can maximize size
+    const maxWidth = Math.max(400, window.screen.availWidth - 20);
+    const maxHeight = Math.max(300, window.screen.availHeight - 100);
+    post({ type: 'resize', width: maxWidth, height: maxHeight });
+    isExpanded = true;
+    if (expandBtn) expandBtn.title = 'Collapse';
+    if (iconEl) iconEl.innerHTML = icons.collapse;
+  } else {
+    const width = lastSize.width || 600;
+    const height = lastSize.height || 500;
+    post({ type: 'resize', width, height });
+    isExpanded = false;
+    if (expandBtn) expandBtn.title = 'Expand';
+    if (iconEl) iconEl.innerHTML = icons.expand;
+  }
+}
+
+type ResizeDir = 'top' | 'right' | 'bottom' | 'left' | 'corner';
+
+function initResize(): void {
+  const resizeHandles = document.querySelectorAll('[data-resize]');
+  let isResizing = false;
+  let startX = 0;
+  let startY = 0;
+  let startWidth = 0;
+  let startHeight = 0;
+  let direction: ResizeDir = 'corner';
+
+  resizeHandles.forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      const target = e.currentTarget as HTMLElement;
+      direction = (target.dataset.resize as ResizeDir) || 'corner';
       isResizing = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      startX = (e as MouseEvent).clientX;
+      startY = (e as MouseEvent).clientY;
       startWidth = window.innerWidth;
       startHeight = window.innerHeight;
+      if (isExpanded) {
+        isExpanded = false;
+        const expandBtn = $('expand-btn');
+        const iconEl = expandBtn?.querySelector('.icon') as HTMLElement | null;
+        if (expandBtn) expandBtn.title = 'Expand';
+        if (iconEl) iconEl.innerHTML = icons.expand;
+      }
       e.preventDefault();
-    };
-  }
+    });
+  });
 
   document.onmousemove = (e) => {
     if (!isResizing) return;
-    const newWidth = Math.max(400, startWidth + (e.clientX - startX));
-    const newHeight = Math.max(300, startHeight + (e.clientY - startY));
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+
+    let newWidth = startWidth;
+    let newHeight = startHeight;
+
+    if (direction === 'right' || direction === 'corner') {
+      newWidth = startWidth + deltaX;
+    } else if (direction === 'left') {
+      newWidth = startWidth - deltaX;
+    }
+
+    if (direction === 'bottom' || direction === 'corner') {
+      newHeight = startHeight + deltaY;
+    } else if (direction === 'top') {
+      newHeight = startHeight - deltaY;
+    }
+
+    newWidth = Math.max(400, newWidth);
+    newHeight = Math.max(300, newHeight);
     post({ type: 'resize', width: newWidth, height: newHeight });
   };
 

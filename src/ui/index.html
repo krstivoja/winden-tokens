@@ -45,6 +45,9 @@
       <button id="refresh-btn" class="btn btn-icon" title="Refresh">
         <span class="icon" data-icon="refresh"></span>
       </button>
+      <button id="expand-btn" class="btn btn-icon" title="Expand">
+        <span class="icon" data-icon="expand"></span>
+      </button>
     </div>
 
     <div class="table-container">
@@ -102,30 +105,15 @@
             <input type="text" id="shades-name" class="form-input" placeholder="e.g. blue, primary, brand" value="">
           </div>
 
-          <div class="form-group">
-            <label>Base Color</label>
-            <div class="color-input-wrapper">
-              <div class="color-input-preview" onclick="window.app.openShadesColorPicker()" style="cursor:pointer;">
-                <div class="color-fill" id="shades-base-preview" style="background: transparent"></div>
-              </div>
-              <input type="hidden" id="shades-base-color" value="">
-              <input type="text" id="shades-base-hex" class="form-input mono" value="" placeholder="#000000" oninput="window.app.updateBaseFromHex()">
-            </div>
-          </div>
-
           <div class="form-row">
             <div class="form-group">
-              <label>Lightest</label>
-              <div class="lightness-input-wrapper">
-                <input type="number" id="shades-light-value" class="form-input" value="5" min="0" max="100" oninput="window.app.updateShadesPreview()">
-                <div class="lightness-preview" id="shades-light-preview"></div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Darkest</label>
-              <div class="lightness-input-wrapper">
-                <input type="number" id="shades-dark-value" class="form-input" value="90" min="0" max="100" oninput="window.app.updateShadesPreview()">
-                <div class="lightness-preview" id="shades-dark-preview"></div>
+              <label>Base Color</label>
+              <div class="color-input-wrapper">
+                <div class="color-input-preview" onclick="window.app.openShadesColorPicker()" style="cursor:pointer;">
+                  <div class="color-fill" id="shades-base-preview" style="background: transparent"></div>
+                </div>
+                <input type="hidden" id="shades-base-color" value="">
+                <input type="text" id="shades-base-hex" class="form-input mono" value="" placeholder="#000000" oninput="window.app.updateBaseFromHex()">
               </div>
             </div>
             <div class="form-group">
@@ -290,8 +278,12 @@
     </div>
   </div>
 
-  <!-- Resize Handle -->
-  <div class="resize-handle" id="resize-handle"></div>
+  <!-- Resize Handles -->
+  <div class="resize-handle resize-handle--top" data-resize="top"></div>
+  <div class="resize-handle resize-handle--right" data-resize="right"></div>
+  <div class="resize-handle resize-handle--bottom" data-resize="bottom"></div>
+  <div class="resize-handle resize-handle--left" data-resize="left"></div>
+  <div class="resize-handle resize-handle--corner" data-resize="corner"></div>
 
   <script type="module" src="./main.ts"></script>
 </body>

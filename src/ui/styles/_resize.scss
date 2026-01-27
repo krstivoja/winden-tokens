@@ -1,12 +1,47 @@
-// Resize handle
+// Resize handles
 .resize-handle {
   position: fixed;
+  z-index: 1000;
+}
+
+.resize-handle--top,
+.resize-handle--bottom {
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-handle--top {
+  top: 0;
+}
+
+.resize-handle--bottom {
+  bottom: 0;
+}
+
+.resize-handle--left,
+.resize-handle--right {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.resize-handle--left {
+  left: 0;
+}
+
+.resize-handle--right {
+  right: 0;
+}
+
+.resize-handle--corner {
   bottom: 0;
   right: 0;
   width: 16px;
   height: 16px;
   cursor: nwse-resize;
-  z-index: 1000;
 
   &::before {
     content: '';

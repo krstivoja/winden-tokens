@@ -39,8 +39,20 @@ let hueCurve: CurveHandles = createDefaultHandles();
 type DragTarget = 'handle1' | 'handle2' | 'startNode' | 'endNode';
 let dragState: { startX: number; startY: number; startValue: number; startT: number; property: string; target: DragTarget } | null = null;
 
+// Default lightness range (can be adjusted by dragging curve endpoints)
+const DEFAULT_LIGHT_VALUE = 5;
+const DEFAULT_DARK_VALUE = 90;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function getLightnessRange(): { lightValue: number; darkValue: number } {
+  // The lightness range is defined by the default values plus the curve endpoint adjustments
+  return {
+    lightValue: DEFAULT_LIGHT_VALUE,
+    darkValue: DEFAULT_DARK_VALUE
+  };
 }
 
 function getCurveLayout(count: number, containerWidth: number): {
@@ -60,10 +72,7 @@ function getShadeColorsForCurve(count: number): string[] {
   const baseColor = baseColorInput?.value;
   if (!baseColor) return Array.from({ length: count }, () => 'var(--bg)');
 
-  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
-  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
-  const lightValue = parseInt(lightInput?.value || '0') || 0;
-  const darkValue = parseInt(darkInput?.value || '100') || 100;
+  const { lightValue, darkValue } = getLightnessRange();
 
   const baseRgb = hexToRgbObj(baseColor);
   const lightAdj = evaluateCurveAtNodes(lightnessCurve, count);
@@ -101,8 +110,6 @@ function resetShadesForm(): void {
     baseColor: document.getElementById('shades-base-color') as HTMLInputElement,
     baseHex: document.getElementById('shades-base-hex') as HTMLInputElement,
     basePreview: document.getElementById('shades-base-preview') as HTMLElement,
-    lightValue: document.getElementById('shades-light-value') as HTMLInputElement,
-    darkValue: document.getElementById('shades-dark-value') as HTMLInputElement,
     count: document.getElementById('shades-count') as HTMLInputElement,
     options: document.getElementById('shades-options') as HTMLElement,
     generateBtn: document.getElementById('shades-generate-btn') as HTMLElement,
@@ -114,8 +121,6 @@ function resetShadesForm(): void {
   if (elements.baseColor) elements.baseColor.value = '';
   if (elements.baseHex) elements.baseHex.value = '';
   if (elements.basePreview) elements.basePreview.style.background = 'transparent';
-  if (elements.lightValue) elements.lightValue.value = '5';
-  if (elements.darkValue) elements.darkValue.value = '90';
   if (elements.count) elements.count.value = '11';
   if (elements.options) elements.options.style.display = 'none';
   if (elements.generateBtn) elements.generateBtn.style.display = 'none';
@@ -132,14 +137,10 @@ function resetShadesForm(): void {
 
 function clearShadesPreview(): void {
   const preview = document.getElementById('shades-preview');
-  const lightPreview = document.getElementById('shades-light-preview');
-  const darkPreview = document.getElementById('shades-dark-preview');
 
   if (preview) {
     preview.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px;text-align:center;">Pick a color to preview shades</div>';
   }
-  if (lightPreview) lightPreview.style.background = 'transparent';
-  if (darkPreview) darkPreview.style.background = 'transparent';
 }
 
 function populateColorSourceDropdown(): void {
@@ -216,11 +217,6 @@ export function selectSourceColor(): void {
   if (baseHexInput) baseHexInput.value = hex;
   if (basePreview) basePreview.style.background = hex;
 
-  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
-  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
-  if (lightInput) lightInput.value = '5';
-  if (darkInput) darkInput.value = '90';
-
   if (type === 'group') {
     const count = parseInt(selected.dataset.count || '11');
     const countInput = document.getElementById('shades-count') as HTMLInputElement;
@@ -261,13 +257,10 @@ export function updateShadesPreview(): void {
     return;
   }
 
-  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
-  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
   const countInput = document.getElementById('shades-count') as HTMLInputElement;
   const propertySelect = document.getElementById('shades-curve-property') as HTMLSelectElement;
 
-  const lightValue = parseInt(lightInput?.value || '0') || 0;
-  const darkValue = parseInt(darkInput?.value || '100') || 100;
+  const { lightValue, darkValue } = getLightnessRange();
   const count = parseInt(countInput?.value || '11');
   const property = propertySelect?.value || 'lightness';
 
@@ -277,13 +270,6 @@ export function updateShadesPreview(): void {
   if (baseHexInput) baseHexInput.value = baseColor;
 
   const baseRgb = hexToRgbObj(baseColor);
-  const lightColor = lightnessToColor(baseRgb, lightValue);
-  const darkColor = lightnessToColor(baseRgb, darkValue);
-
-  const lightPreview = document.getElementById('shades-light-preview');
-  const darkPreview = document.getElementById('shades-dark-preview');
-  if (lightPreview) lightPreview.style.background = lightColor;
-  if (darkPreview) darkPreview.style.background = darkColor;
 
   // Generate adjustment values from curves
   const lightAdj = evaluateCurveAtNodes(lightnessCurve, count);
@@ -335,13 +321,10 @@ export function generateShades(): void {
     deleteIds = [singleId];
   }
 
-  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
-  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
   const countInput = document.getElementById('shades-count') as HTMLInputElement;
   const propertySelect = document.getElementById('shades-curve-property') as HTMLSelectElement;
 
-  const lightValue = parseInt(lightInput?.value || '0') || 0;
-  const darkValue = parseInt(darkInput?.value || '100') || 100;
+  const { lightValue, darkValue } = getLightnessRange();
   const count = parseInt(countInput?.value || '11');
   const property = propertySelect?.value || 'lightness';
 
@@ -526,27 +509,43 @@ function renderCurve(): void {
   // Middle line (zero adjustment baseline)
   svgContent += `<line x1="0" y1="${midY}" x2="${containerWidth}" y2="${midY}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>`;
 
-  // Calculate node positions from curve evaluation - centered above each swatch
+  // Get lightness range to calculate actual values
+  const { lightValue, darkValue } = getLightnessRange();
+
+  // Calculate node positions based on ACTUAL lightness values (not just adjustments)
   const adjustments = evaluateCurveAtNodes(curve, count);
   const nodePositions: { x: number; y: number; value: number }[] = [];
 
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
     const x = firstNodeX + rangeX * t;
-    const value = adjustments[i];
-    const y = midY - (value / 50) * valueRange;
-    nodePositions.push({ x, y, value });
+
+    // Calculate actual lightness value (base + adjustment)
+    const baseLightness = lightValue + (darkValue - lightValue) * t;
+    const adjustment = adjustments[i];
+    const actualLightness = Math.max(0, Math.min(100, baseLightness + adjustment));
+
+    // Position Y based on actual lightness (0 = bottom/dark, 100 = top/light)
+    const y = maxY - (actualLightness / 100) * (maxY - minY);
+    nodePositions.push({ x, y, value: actualLightness });
   }
 
   // Calculate handle screen positions (between nodes, fixed X based on t value)
   const firstNode = nodePositions[0];
   const lastNode = nodePositions[count - 1];
 
-  // Handle positions (horizontal, based on handle t values)
-  const handle1X = firstNodeX + rangeX * clamp(curve.handle1.t, 0, 1);
-  const handle1Y = clamp(midY - (curve.handle1.value / 50) * valueRange, minY, maxY);
-  const handle2X = firstNodeX + rangeX * clamp(curve.handle2.t, 0, 1);
-  const handle2Y = clamp(midY - (curve.handle2.value / 50) * valueRange, minY, maxY);
+  // Handle positions - calculate actual lightness at handle t positions
+  const handle1T = clamp(curve.handle1.t, 0, 1);
+  const handle1BaseLightness = lightValue + (darkValue - lightValue) * handle1T;
+  const handle1ActualLightness = Math.max(0, Math.min(100, handle1BaseLightness + curve.handle1.value));
+  const handle1X = firstNodeX + rangeX * handle1T;
+  const handle1Y = clamp(maxY - (handle1ActualLightness / 100) * (maxY - minY), minY, maxY);
+
+  const handle2T = clamp(curve.handle2.t, 0, 1);
+  const handle2BaseLightness = lightValue + (darkValue - lightValue) * handle2T;
+  const handle2ActualLightness = Math.max(0, Math.min(100, handle2BaseLightness + curve.handle2.value));
+  const handle2X = firstNodeX + rangeX * handle2T;
+  const handle2Y = clamp(maxY - (handle2ActualLightness / 100) * (maxY - minY), minY, maxY);
 
   // Draw a smooth curve THROUGH all nodes using Catmull-Rom style
   if (nodePositions.length > 1) {
@@ -654,6 +653,14 @@ function onNodeMouseDown(e: Event): void {
 function onCurveMouseMove(e: MouseEvent): void {
   if (!dragState) return;
 
+  // Get coordinate system constants
+  const svg = document.getElementById('shades-curve-svg') as SVGElement;
+  if (!svg) return;
+  const curveHeight = 100;
+  const minY = 10;
+  const maxY = curveHeight - 10;
+  const yRange = maxY - minY; // 80px
+
   const curve = getCurrentCurve(dragState.property);
   const updatedCurve = { ...curve };
 
@@ -667,8 +674,12 @@ function onCurveMouseMove(e: MouseEvent): void {
     const minGap = 0.05;
 
     let newT = dragState.startT + deltaX / rangeX;
+    // Convert screen deltaY to adjustment value change
+    // yRange (80px) maps to 100 lightness units, so 1px = 1.25 units
     const deltaY = dragState.startY - e.clientY;
-    const newValue = clamp(dragState.startValue + deltaY, -50, 50);
+    const valueChange = (deltaY / yRange) * 100;
+    const newValue = clamp(dragState.startValue + valueChange, -50, 50);
+
     if (dragState.target === 'handle1') {
       const maxT = clamp(curve.handle2.t - minGap, 0, 1 - minGap);
       newT = clamp(newT, 0, maxT);
@@ -679,9 +690,11 @@ function onCurveMouseMove(e: MouseEvent): void {
       updatedCurve.handle2 = { ...curve.handle2, t: newT, value: newValue };
     }
   } else {
+    // Convert screen deltaY to adjustment value change
     const deltaY = dragState.startY - e.clientY;
-    // Scale: 50px drag = 50 units change (1:1)
-    const newValue = clamp(dragState.startValue + deltaY, -50, 50);
+    const valueChange = (deltaY / yRange) * 100;
+    const newValue = clamp(dragState.startValue + valueChange, -50, 50);
+
     if (dragState.target === 'startNode') {
       updatedCurve.startValue = newValue;
     } else {
@@ -706,12 +719,9 @@ function updateShadesPreviewWithCurve(): void {
   const baseColor = baseColorInput?.value;
   if (!baseColor) return;
 
-  const lightInput = document.getElementById('shades-light-value') as HTMLInputElement;
-  const darkInput = document.getElementById('shades-dark-value') as HTMLInputElement;
   const countInput = document.getElementById('shades-count') as HTMLInputElement;
 
-  const lightValue = parseInt(lightInput?.value || '0');
-  const darkValue = parseInt(darkInput?.value || '100');
+  const { lightValue, darkValue } = getLightnessRange();
   const count = parseInt(countInput?.value || '11');
 
   const baseRgb = hexToRgbObj(baseColor);
