@@ -23,12 +23,9 @@ export function renderTable(): void {
 
   if (!filtered.length) {
     tableBody.innerHTML = `
-      <tr class="add-row">
+      <tr class="empty-state-row">
         <td colspan="2">
-          <button class="add-row-btn" onclick="window.app.showAddMenu(event)">
-            ${icons.plus}
-            Add first variable
-          </button>
+          <div class="empty-state">No variables yet</div>
         </td>
       </tr>
     `;

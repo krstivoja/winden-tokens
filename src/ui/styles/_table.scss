@@ -107,33 +107,11 @@ tr.hidden-by-group {
   display: none;
 }
 
-// Add row
-.add-row {
+// Empty state row
+.empty-state-row {
   td {
     background: transparent;
-    border: 1px dashed var(--border);
-  }
-
-  &:hover td {
-    background: var(--bg-hover);
-  }
-}
-
-.add-row-btn {
-  width: 100%;
-  height: 32px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--text-dim);
-  font-size: 11px;
-
-  &:hover {
-    color: var(--accent);
+    border: none;
   }
 }
 
