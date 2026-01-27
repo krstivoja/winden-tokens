@@ -1,40 +1,98 @@
-Below are the steps to get your plugin running. You can also find instructions at:
+# Tokens Manager
 
-  https://www.figma.com/plugin-docs/plugin-quickstart-guide/
+A Figma plugin for managing design tokens (variables) with a spreadsheet-style interface. Quickly create, edit, and organize your design system variables.
 
-This plugin template uses Typescript and NPM, two standard tools in creating JavaScript applications.
+![Figma Plugin](https://img.shields.io/badge/Figma-Plugin-blueviolet)
 
-First, download Node.js which comes with NPM. This will allow you to install TypeScript and other
-libraries. You can find the download link here:
+## Features
 
-  https://nodejs.org/en/download/
+- **Spreadsheet-style editing** - Edit variables inline with a familiar table interface
+- **Color picker** - Visual HSV color picker with saturation-value panel and hue slider
+- **Color shades generator** - Generate color scales (50-950) from any base color
+- **Auto-sync** - Automatically detects and syncs changes made in Figma's native variables panel
+- **JSON editor** - Bulk edit variables via JSON for power users
+- **Variable types** - Support for Color, Number, String, and Boolean variables
+- **Grouped variables** - Organize variables with path-based naming (e.g., `blue/500`)
+- **Resizable window** - Drag the corner to resize the plugin window
 
-Next, install TypeScript using the command:
+## Installation
 
-  npm install -g typescript
+### From Figma Community
+1. Open Figma
+2. Go to **Plugins** > **Browse plugins in Community**
+3. Search for "Tokens Manager"
+4. Click **Install**
 
-Finally, in the directory of your plugin, get the latest type definitions for the plugin API by running:
+### Development / Local Install
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/tokens-manager.git
+   cd tokens-manager
+   ```
 
-  npm install --save-dev @figma/plugin-typings
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-If you are familiar with JavaScript, TypeScript will look very familiar. In fact, valid JavaScript code
-is already valid Typescript code.
+3. Build the plugin:
+   ```bash
+   npm run build
+   ```
 
-TypeScript adds type annotations to variables. This allows code editors such as Visual Studio Code
-to provide information about the Figma API while you are writing code, as well as help catch bugs
-you previously didn't notice.
+4. Import into Figma:
+   - Open Figma Desktop
+   - Go to **Plugins** > **Development** > **Import plugin from manifest...**
+   - Select the `manifest.json` file from this folder
 
-For more information, visit https://www.typescriptlang.org/
+## Usage
 
-Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
-for the browser to run.
+### Creating Variables
+1. Select a collection from the dropdown (or create a new one with the + button)
+2. Click **Add Variable** and choose a type (Color, Number, String, Boolean)
+3. Enter a name and value
 
-We recommend writing TypeScript code using Visual Studio code:
+### Editing Variables
+- Click on any cell to edit the name or value
+- For colors, click the color swatch to open the color picker
+- For booleans, use the True/False toggle buttons
 
-1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.
-2. Open this directory in Visual Studio Code.
-3. Compile TypeScript to JavaScript: Run the "Terminal > Run Build Task..." menu item,
-    then select "npm: watch". You will have to do this again every time
-    you reopen Visual Studio Code.
+### Generating Color Shades
+1. Click the **Shades** button
+2. Select an existing color from the dropdown
+3. Adjust lightness range and number of shades
+4. Click **Generate** to create the shade palette
 
-That's it! Visual Studio Code will regenerate the JavaScript file every time you save.
+### Grouping Variables
+Name variables with forward slashes to create groups:
+- `blue/50`, `blue/100`, `blue/200` will be grouped under "blue"
+- Groups can be collapsed/expanded by clicking the group header
+
+### JSON Editing
+1. Switch to the **JSON** tab
+2. Edit the JSON directly
+3. Click **Update** to apply changes
+
+## Build Commands
+
+```bash
+npm run build      # Compile TypeScript to JavaScript
+npm run watch      # Watch mode - recompile on changes
+npm run lint       # Run ESLint
+npm run lint:fix   # Run ESLint with auto-fix
+```
+
+## Project Structure
+
+```
+tokens-manager/
+├── manifest.json   # Figma plugin manifest
+├── code.ts         # Plugin sandbox code (Figma API access)
+├── ui.html         # Plugin UI (HTML/CSS/JS)
+├── package.json    # Dependencies and scripts
+└── tsconfig.json   # TypeScript configuration
+```
+
+## License
+
+MIT
