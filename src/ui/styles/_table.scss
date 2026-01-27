@@ -37,6 +37,11 @@
     &.col-value {
       padding-left: 10px;
     }
+
+    &.col-actions {
+      width: 80px;
+      text-align: center;
+    }
   }
 
   tbody tr {
@@ -120,26 +125,22 @@ tr.hidden-by-group {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-tr:hover .row-actions {
+  gap: 4px;
   opacity: 1;
 }
 
 .row-action {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: none;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-dim);
+  transition: all 0.15s;
 
   &:hover {
     background: var(--bg-hover);
@@ -152,8 +153,8 @@ tr:hover .row-actions {
   }
 
   svg {
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
   }
 }
 

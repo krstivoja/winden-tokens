@@ -63,14 +63,14 @@ export function renderTable(): void {
     const groupIds = grouped[groupName].map(v => v.id).join(',');
     html += `
       <tr class="group-row ${isCollapsed ? 'collapsed' : ''}" data-group="${esc(groupName)}">
-        <td colspan="2">
+        <td colspan="3">
           <div class="group-header">
             <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" onclick="window.app.toggleGroup('${esc(groupName)}')">${icons.chevronDown}</span>
             <span onclick="window.app.toggleGroup('${esc(groupName)}')" style="flex:1;cursor:pointer;">
               ${esc(groupName)}
               <span style="color:var(--text-dim);font-weight:400;font-size:10px;">(${grouped[groupName].length})</span>
             </span>
-            <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">${icons.close}</button>
+            <button class="row-action danger" onclick="window.app.deleteGroup('${groupIds}')" title="Delete group" style="opacity:0;">${icons.trash}</button>
           </div>
         </td>
       </tr>
@@ -109,6 +109,12 @@ function renderVariableRow(
       </td>
       <td>
         ${renderValueCell(v)}
+      </td>
+      <td>
+        <div class="row-actions">
+          <button class="row-action" onclick="window.app.duplicateVariable('${v.id}')" title="Duplicate">${icons.copy}</button>
+          <button class="row-action danger" onclick="window.app.deleteVariable('${v.id}')" title="Delete">${icons.trash}</button>
+        </div>
       </td>
     </tr>
   `;

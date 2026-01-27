@@ -72,6 +72,8 @@ function init(): void {
     showColorValueMenu,
     toggleGroup,
     deleteGroup,
+    deleteVariable,
+    duplicateVariable,
     updateNameFromDisplay,
     updateValue,
     handleKey,
@@ -399,6 +401,16 @@ function handleColorReferenceSearchKey(e: KeyboardEvent): void {
   } else if (e.key === 'Escape') {
     closeColorReferenceModal();
   }
+}
+
+function deleteVariable(id: string): void {
+  if (confirm('Delete this variable?')) {
+    post({ type: 'delete-variable', id });
+  }
+}
+
+function duplicateVariable(id: string): void {
+  post({ type: 'duplicate-variable', id });
 }
 
 // Drag and drop reordering
