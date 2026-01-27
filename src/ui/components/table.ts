@@ -24,7 +24,7 @@ export function renderTable(): void {
   if (!filtered.length) {
     tableBody.innerHTML = `
       <tr class="empty-state-row">
-        <td colspan="2">
+        <td colspan="3">
           <div class="empty-state">No variables yet</div>
         </td>
       </tr>
