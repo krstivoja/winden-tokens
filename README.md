@@ -7,8 +7,10 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 ## Features
 
 - **Spreadsheet-style editing** - Edit variables inline with a familiar table interface
+- **Search & filter** - Quickly find variables by name with instant search
 - **Color picker** - Visual HSV color picker with saturation-value panel and hue slider
 - **Color shades generator** - Generate color scales (50-950) from any base color
+- **Multi-edit / CSV editor** - Edit groups as text, paste from spreadsheets
 - **Auto-sync** - Automatically detects and syncs changes made in Figma's native variables panel
 - **JSON editor** - Bulk edit variables via JSON for power users
 - **Variable types** - Support for Color, Number, String, and Boolean variables
@@ -26,7 +28,7 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 ### Development / Local Install
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/tokens-manager.git
+   git clone https://github.com/nicvlk/tokens-manager.git
    cd tokens-manager
    ```
 
@@ -57,11 +59,21 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 - For colors, click the color swatch to open the color picker
 - For booleans, use the True/False toggle buttons
 
+### Search & Filter
+- Use the search box in the toolbar to filter variables by name
+- Results update instantly as you type
+
 ### Generating Color Shades
 1. Click the **Shades** button
 2. Select an existing color from the dropdown
 3. Adjust lightness range and number of shades
 4. Click **Generate** to create the shade palette
+
+### Multi-Edit (CSV Editor)
+1. Click **Edit as Text** on any group header
+2. Edit variables as text (one per line: `name, value`)
+3. Paste directly from spreadsheets (tab or comma separated)
+4. Preview changes before applying
 
 ### Grouping Variables
 Name variables with forward slashes to create groups:
@@ -76,9 +88,9 @@ Name variables with forward slashes to create groups:
 ## Build Commands
 
 ```bash
-npm run build      # Build the plugin (UI + plugin code)
-npm run dev        # Development mode with hot reload
-npm run build:ui   # Build UI only
+npm run build         # Build the plugin (UI + plugin code)
+npm run dev           # Development mode with hot reload
+npm run build:ui      # Build UI only
 npm run build:plugin  # Build plugin code only
 ```
 
@@ -117,6 +129,14 @@ tokens-manager/
 ├── package.json    # Dependencies and scripts
 └── tsconfig.json   # TypeScript configuration
 ```
+
+## Roadmap
+
+See [TODO.md](TODO.md) for planned features including:
+- Duplicate group functionality
+- Contrast checker for accessibility
+- Multi-mode support (Light/Dark themes)
+- Export to CSS/Tailwind/JSON
 
 ## License
 

@@ -50,6 +50,11 @@ function initIcons(): void {
   });
 }
 
+// Table navigation state
+let focusedRow = -1;
+let focusedCol: 'name' | 'value' = 'name';
+let isEditing = false;
+
 // Initialize application
 function init(): void {
   initIcons();
@@ -65,6 +70,7 @@ function init(): void {
   initAddMenu();
   initColorValueMenu();
   initDragDrop();
+  initTableNavigation();
 
   // Expose app methods to window for inline handlers
   (window as any).app = {
@@ -678,6 +684,232 @@ function initDragDrop(): void {
   });
 }
 
+// Excel-like table navigation
+function initTableNavigation(): void {
+  const tableContainer = document.querySelector('.table-container');
+  if (!tableContainer) return;
+
+  // Make table container focusable
+  tableContainer.setAttribute('tabindex', '0');
+
+  // Handle keyboard navigation on the table container
+  tableContainer.addEventListener('keydown', handleTableKeydown);
+
+  // Track when user clicks on a cell to enter edit mode
+  tableContainer.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const input = target.closest('.cell-input') as HTMLInputElement;
+
+    if (input) {
+      const row = input.closest('tr[data-id]') as HTMLElement;
+      if (row) {
+        const rows = getNavigableRows();
+        const rowIndex = Array.from(rows).indexOf(row);
+        if (rowIndex >= 0) {
+          focusedRow = rowIndex;
+          focusedCol = input.closest('.name-cell') ? 'name' : 'value';
+          isEditing = true;
+          updateFocusIndicator();
+        }
+      }
+    }
+  });
+
+  // When input loses focus, exit edit mode
+  tableContainer.addEventListener('focusout', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('cell-input')) {
+      // Small delay to allow click events to process
+      setTimeout(() => {
+        const activeEl = document.activeElement;
+        if (!activeEl || !activeEl.classList.contains('cell-input')) {
+          isEditing = false;
+          updateFocusIndicator();
+        }
+      }, 10);
+    }
+  });
+}
+
+function getNavigableRows(): NodeListOf<Element> {
+  const tableBody = $('table-body');
+  return tableBody?.querySelectorAll('tr[data-id]:not(.hidden-by-group)') || document.querySelectorAll('.nonexistent');
+}
+
+function handleTableKeydown(e: KeyboardEvent): void {
+  const rows = getNavigableRows();
+  if (rows.length === 0) return;
+
+  // If we're in an input that's not a cell input (e.g., search), ignore
+  const activeEl = document.activeElement as HTMLElement;
+  if (activeEl?.tagName === 'INPUT' && !activeEl.classList.contains('cell-input')) {
+    return;
+  }
+
+  // If editing, let the input handle most keys
+  if (isEditing) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      exitEditMode(true); // revert
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      exitEditMode(false); // save
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      exitEditMode(false);
+      moveToNextCell(e.shiftKey);
+      enterEditMode();
+    }
+    return;
+  }
+
+  // Navigation mode
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault();
+      if (focusedRow > 0) {
+        focusedRow--;
+        updateFocusIndicator();
+      }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (focusedRow < rows.length - 1) {
+        focusedRow++;
+        updateFocusIndicator();
+      } else if (focusedRow === -1 && rows.length > 0) {
+        focusedRow = 0;
+        updateFocusIndicator();
+      }
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (focusedCol === 'value') {
+        focusedCol = 'name';
+        updateFocusIndicator();
+      }
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      if (focusedCol === 'name') {
+        focusedCol = 'value';
+        updateFocusIndicator();
+      }
+      break;
+    case 'Enter':
+      e.preventDefault();
+      if (focusedRow >= 0) {
+        enterEditMode();
+      }
+      break;
+    case 'Tab':
+      e.preventDefault();
+      if (focusedRow === -1 && rows.length > 0) {
+        focusedRow = 0;
+      }
+      moveToNextCell(e.shiftKey);
+      break;
+  }
+}
+
+function moveToNextCell(reverse: boolean): void {
+  const rows = getNavigableRows();
+  if (rows.length === 0) return;
+
+  if (reverse) {
+    // Move backwards
+    if (focusedCol === 'value') {
+      focusedCol = 'name';
+    } else if (focusedRow > 0) {
+      focusedRow--;
+      focusedCol = 'value';
+    }
+  } else {
+    // Move forwards
+    if (focusedCol === 'name') {
+      focusedCol = 'value';
+    } else if (focusedRow < rows.length - 1) {
+      focusedRow++;
+      focusedCol = 'name';
+    }
+  }
+  updateFocusIndicator();
+}
+
+function enterEditMode(): void {
+  const rows = getNavigableRows();
+  if (focusedRow < 0 || focusedRow >= rows.length) return;
+
+  const row = rows[focusedRow] as HTMLElement;
+  const input = focusedCol === 'name'
+    ? row.querySelector('.name-cell .cell-input') as HTMLInputElement
+    : row.querySelector('.value-cell .cell-input, .color-value-cell .cell-input') as HTMLInputElement;
+
+  if (input) {
+    isEditing = true;
+    input.focus();
+    input.select();
+    updateFocusIndicator();
+  }
+}
+
+function exitEditMode(revert: boolean): void {
+  const activeInput = document.activeElement as HTMLInputElement;
+
+  if (revert && activeInput?.classList.contains('cell-input')) {
+    // Revert to original value by triggering blur without change
+    activeInput.value = activeInput.defaultValue;
+  }
+
+  if (activeInput?.classList.contains('cell-input')) {
+    activeInput.blur();
+  }
+
+  isEditing = false;
+
+  // Return focus to table container
+  const tableContainer = document.querySelector('.table-container') as HTMLElement;
+  if (tableContainer) {
+    tableContainer.focus();
+  }
+
+  updateFocusIndicator();
+}
+
+function updateFocusIndicator(): void {
+  // Remove all existing focus indicators
+  document.querySelectorAll('.cell-focused').forEach(el => {
+    el.classList.remove('cell-focused');
+  });
+  document.querySelectorAll('tr.row-focused').forEach(el => {
+    el.classList.remove('row-focused');
+  });
+
+  if (focusedRow < 0) return;
+
+  const rows = getNavigableRows();
+  if (focusedRow >= rows.length) return;
+
+  const row = rows[focusedRow] as HTMLElement;
+  row.classList.add('row-focused');
+
+  // Find the cell to highlight
+  const cell = focusedCol === 'name'
+    ? row.querySelector('.name-cell')
+    : row.querySelector('.value-cell, .color-value-cell');
+
+  if (cell && !isEditing) {
+    cell.classList.add('cell-focused');
+  }
+}
+
+// Reset focus when table is re-rendered
+function resetTableFocus(): void {
+  focusedRow = -1;
+  focusedCol = 'name';
+  isEditing = false;
+}
+
 // Resize handling
 let isExpanded = false;
 let lastSize = { width: 0, height: 0 };
@@ -816,26 +1048,8 @@ function updateValue(id: string, value: string): void {
 }
 
 function handleKey(e: KeyboardEvent, rowIndex: number, field: string): void {
-  const tableBody = $('table-body');
-  if (!tableBody) return;
-
-  const rows = tableBody.querySelectorAll('tr:not(.add-row):not(.group-row)');
-
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    if (field === 'name') {
-      const valueInput = rows[rowIndex]?.querySelector('td:last-child input') as HTMLInputElement;
-      if (valueInput) valueInput.focus();
-    } else {
-      const nextRow = rows[rowIndex + 1];
-      if (nextRow) {
-        const nameInput = nextRow.querySelector('.name-cell input') as HTMLInputElement;
-        if (nameInput) nameInput.focus();
-      }
-    }
-  } else if (e.key === 'Enter') {
-    (e.target as HTMLElement).blur();
-  }
+  // Legacy handler - keyboard navigation is now handled by initTableNavigation()
+  // This function is kept for compatibility with inline handlers
 }
 
 function openColorPickerForVariable(id: string, currentValue: string): void {
@@ -870,6 +1084,7 @@ window.onmessage = (e) => {
     renderTable();
     updateSearchCount();
     updateJson();
+    resetTableFocus();
   }
 
   if (msg.type === 'update-success') showStatus('Saved', 'success');

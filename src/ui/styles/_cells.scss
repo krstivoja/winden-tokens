@@ -156,3 +156,37 @@
     }
   }
 }
+
+// Excel-like cell focus indicator
+.cell-focused {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border: 2px solid var(--accent);
+    border-radius: 2px;
+    pointer-events: none;
+  }
+}
+
+.name-cell,
+.value-cell,
+.color-value-cell {
+  position: relative;
+}
+
+// Row focus indicator
+tr.row-focused {
+  background: var(--bg-selected) !important;
+}
+
+// Table container focus state
+.table-container:focus {
+  outline: none;
+}
+
+.table-container:focus-visible {
+  outline: none;
+}
