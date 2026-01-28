@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [viteSingleFile()],
+  plugins: [react(), viteSingleFile()],
   root: path.resolve(__dirname, 'src/ui'),
   build: {
     outDir: path.resolve(__dirname, 'dist'),

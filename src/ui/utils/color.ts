@@ -144,3 +144,32 @@ export function getShadeNames(count: number): string[] {
   }
   return names;
 }
+
+// Parse any color format to RGB object
+export function parseColorToRgb(color: string): RGB | null {
+  if (!color) return null;
+
+  // Handle hex
+  if (color.startsWith('#')) {
+    return hexToRgbObj(color);
+  }
+
+  // Handle rgb/rgba
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1]),
+      g: parseInt(rgbMatch[2]),
+      b: parseInt(rgbMatch[3]),
+    };
+  }
+
+  return null;
+}
+
+// RGB values to hex (takes individual r, g, b numbers)
+export function rgbValuesToHex(r: number, g: number, b: number): string {
+  return '#' + [r, g, b]
+    .map(x => Math.round(x).toString(16).padStart(2, '0'))
+    .join('');
+}

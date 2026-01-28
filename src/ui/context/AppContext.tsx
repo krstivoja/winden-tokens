@@ -1,0 +1,102 @@
+// Global application context
+
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { CollectionData, VariableData } from '../types';
+
+interface AppState {
+  collections: CollectionData[];
+  variables: VariableData[];
+  selectedCollectionId: string | null;
+  collapsedGroups: Set<string>;
+  searchQuery: string;
+}
+
+interface AppContextValue extends AppState {
+  setData: (collections: CollectionData[], variables: VariableData[]) => void;
+  setSelectedCollectionId: (id: string | null) => void;
+  setSearchQuery: (query: string) => void;
+  toggleGroup: (groupName: string) => void;
+  isGroupCollapsed: (groupName: string) => boolean;
+  getFilteredVariables: () => VariableData[];
+  getFilteredCount: () => { shown: number; total: number };
+}
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [collections, setCollections] = useState<CollectionData[]>([]);
+  const [variables, setVariables] = useState<VariableData[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQueryState] = useState('');
+
+  const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[]) => {
+    setCollections(newCollections);
+    setVariables(newVariables);
+    setSelectedCollectionId(prev => {
+      if (!prev && newCollections.length) {
+        return newCollections[0].id;
+      }
+      return prev;
+    });
+  }, []);
+
+  const setSearchQuery = useCallback((query: string) => {
+    setSearchQueryState(query.toLowerCase().trim());
+  }, []);
+
+  const toggleGroup = useCallback((groupName: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  }, []);
+
+  const isGroupCollapsed = useCallback((groupName: string) => {
+    return collapsedGroups.has(groupName);
+  }, [collapsedGroups]);
+
+  const getFilteredVariables = useCallback(() => {
+    let filtered = variables.filter(v => v.collectionId === selectedCollectionId);
+    if (searchQuery) {
+      filtered = filtered.filter(v => v.name.toLowerCase().includes(searchQuery));
+    }
+    return filtered;
+  }, [variables, selectedCollectionId, searchQuery]);
+
+  const getFilteredCount = useCallback(() => {
+    const total = variables.filter(v => v.collectionId === selectedCollectionId).length;
+    const shown = getFilteredVariables().length;
+    return { shown, total };
+  }, [variables, selectedCollectionId, getFilteredVariables]);
+
+  const value: AppContextValue = {
+    collections,
+    variables,
+    selectedCollectionId,
+    collapsedGroups,
+    searchQuery,
+    setData,
+    setSelectedCollectionId,
+    setSearchQuery,
+    toggleGroup,
+    isGroupCollapsed,
+    getFilteredVariables,
+    getFilteredCount,
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useAppContext() {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within AppProvider');
+  }
+  return context;
+}
