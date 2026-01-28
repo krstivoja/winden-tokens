@@ -1,6 +1,6 @@
 "use strict";
 // Tokens Manager - Figma Plugin
-figma.showUI(__html__, { width: 600, height: 500, themeColors: true });
+figma.showUI(__html__, { width: 750, height: 500, themeColors: true });
 // Track variable state for change detection
 let lastDataHash = '';
 // Get stored variable order

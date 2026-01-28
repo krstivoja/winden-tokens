@@ -1,6 +1,6 @@
 // Tokens Manager - Figma Plugin
 
-figma.showUI(__html__, { width: 600, height: 500, themeColors: true } as any);
+figma.showUI(__html__, { width: 750, height: 500, themeColors: true } as any);
 
 // Track variable state for change detection
 let lastDataHash = '';

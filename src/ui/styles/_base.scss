@@ -19,3 +19,23 @@ body {
 .spacer {
   flex: 1;
 }
+
+// Unified form control base
+.form-control,
+select,
+input[type="text"]:not(.search-input),
+input[type="number"] {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
