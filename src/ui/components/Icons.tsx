@@ -139,6 +139,14 @@ export function EditIcon() {
   );
 }
 
+export function FolderIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path fill="currentColor" d="M4 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-8l-2-2H4z" />
+    </svg>
+  );
+}
+
 // Helper to get type icon
 export function TypeIcon({ type }: { type: VariableType }) {
   return TypeIcons[type] || null;

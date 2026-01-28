@@ -82,11 +82,16 @@
 }
 
 .form-input {
-  padding: 8px 10px;
+  height: 28px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
   outline: none;
+  width: 100%;
 
   &:focus {
     border-color: var(--accent);

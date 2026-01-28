@@ -83,16 +83,6 @@
   color: var(--text);
   cursor: pointer;
   user-select: none;
-
-  .type-icon {
-    width: 18px;
-    height: 18px;
-
-    svg {
-      width: 18px;
-      height: 18px;
-    }
-  }
 }
 
 .group-toggle {

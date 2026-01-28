@@ -138,9 +138,11 @@ export function Toolbar({ status }: ToolbarProps) {
         </span>
       </div>
 
-      <span id="status" className={`status ${status.type}`}>
-        {status.message}
-      </span>
+      {status.message && (
+        <span id="status" className={`status ${status.type}`}>
+          {status.message}
+        </span>
+      )}
 
       {showAddMenu && (
         <AddMenu
