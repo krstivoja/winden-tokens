@@ -13,6 +13,7 @@ interface GroupedGraphProps {
 interface VariableNode {
   id: string;
   name: string;
+  shortName: string;
   displayName: string;
   color: string;
   value: string;
@@ -45,6 +46,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 50, panY: 50 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   const [groupPositions, setGroupPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const [draggingGroup, setDraggingGroup] = useState<{ name: string; offsetX: number; offsetY: number } | null>(null);
   const [dragState, setDragState] = useState<{
@@ -56,6 +58,27 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     currentX: number;
     currentY: number;
   } | null>(null);
+
+  // Track space key for pan mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setIsSpaceHeld(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpaceHeld(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // Build groups and connections (without auto-positioning)
   const { groupsData, connections, variableMap } = useMemo(() => {
@@ -97,6 +120,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
       const node: VariableNode = {
         id: v.id,
         name: v.name,
+        shortName: displayName,
         displayName: isReference ? `{${referenceName}}` : hexColor.toUpperCase(),
         color: hexColor,
         value: v.value,
@@ -212,12 +236,20 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     });
   }, [groupsData, groupPositions]);
 
-  // Pan handling
+  // Pan handling - start panning on background click or when space is held
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('graph-bg')) {
+    // Pan if space is held (anywhere) or clicking directly on background
+    if (isSpaceHeld) {
+      e.preventDefault();
+      setIsPanning(true);
+      return;
+    }
+    // Only pan if clicking directly on the container or SVG background
+    const tagName = (e.target as Element).tagName.toLowerCase();
+    if (e.target === e.currentTarget || tagName === 'svg') {
       setIsPanning(true);
     }
-  }, []);
+  }, [isSpaceHeld]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning) {
@@ -273,12 +305,23 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
   }, [viewState]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setViewState(prev => ({
-      ...prev,
-      zoom: Math.max(0.2, Math.min(3, prev.zoom * delta)),
-    }));
+    // Zoom with Cmd/Ctrl + scroll
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setViewState(prev => ({
+        ...prev,
+        zoom: Math.max(0.2, Math.min(3, prev.zoom * delta)),
+      }));
+    } else {
+      // Pan with regular scroll
+      e.preventDefault();
+      setViewState(prev => ({
+        ...prev,
+        panX: prev.panX - e.deltaX,
+        panY: prev.panY - e.deltaY,
+      }));
+    }
   }, []);
 
   // Connection point drag start
@@ -333,7 +376,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     }
   }, [variableMap]);
 
-  // Calculate connection path (circles are now at edge: 0 and GROUP_WIDTH)
+  // Calculate connection path (circles are at 6px from edges)
   const getConnectionPath = (fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
     const fromY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
     const toY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -341,11 +384,11 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     let fromX: number, toX: number;
 
     if (fromGroup.x > toGroup.x) {
-      fromX = fromGroup.x;
-      toX = toGroup.x + GROUP_WIDTH;
+      fromX = fromGroup.x + 6;
+      toX = toGroup.x + GROUP_WIDTH - 6;
     } else {
-      fromX = fromGroup.x + GROUP_WIDTH;
-      toX = toGroup.x;
+      fromX = fromGroup.x + GROUP_WIDTH - 6;
+      toX = toGroup.x + 6;
     }
 
     const dx = Math.abs(toX - fromX);
@@ -361,7 +404,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
   return (
     <div
       ref={containerRef}
-      className={`grouped-graph ${isPanning ? 'panning' : ''} ${draggingGroup ? 'dragging-group' : ''} ${dragState ? 'dragging' : ''}`}
+      className={`grouped-graph ${isPanning ? 'panning' : ''} ${isSpaceHeld ? 'space-pan' : ''} ${draggingGroup ? 'dragging-group' : ''} ${dragState ? 'dragging' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -496,7 +539,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
                       {/* Left connection point (INPUT - receives value) */}
                       <circle
-                        cx={0}
+                        cx={6}
                         cy={ROW_HEIGHT / 2}
                         r={5}
                         fill={hasInput ? '#1877f2' : '#888'}
@@ -504,7 +547,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'left', group.x, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'left', group.x + 6, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
@@ -524,7 +567,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         strokeWidth={0.5}
                       />
 
-                      {/* Label */}
+                      {/* Label - hex/reference value */}
                       <text
                         x={42}
                         y={ROW_HEIGHT / 2 + 4}
@@ -535,9 +578,21 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         {v.displayName}
                       </text>
 
+                      {/* Short name on right */}
+                      <text
+                        x={GROUP_WIDTH - 16}
+                        y={ROW_HEIGHT / 2 + 4}
+                        fontSize={12}
+                        fontFamily="monospace"
+                        fill="#999"
+                        textAnchor="end"
+                      >
+                        {v.shortName}
+                      </text>
+
                       {/* Right connection point (OUTPUT - sends value) */}
                       <circle
-                        cx={GROUP_WIDTH}
+                        cx={GROUP_WIDTH - 6}
                         cy={ROW_HEIGHT / 2}
                         r={5}
                         fill={hasOutput ? '#1877f2' : '#888'}
@@ -545,7 +600,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH - 6, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
