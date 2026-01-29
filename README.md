@@ -9,13 +9,19 @@ A Figma plugin for managing design tokens (variables) with a spreadsheet-style i
 <img width="1920" height="1080" alt="Cover 1" src="https://github.com/user-attachments/assets/7f332cbf-75f0-4858-a41a-2add6d7a3342" />
 
 ### Create shades
-<img width="1920" height="1080" alt="Cover 2" src="https://github.com/user-attachments/assets/8ee45fd0-1e33-4efa-9792-9533a22b1f0b" />
+<img width="1920" height="1080" alt="Cover - Shades" src="https://github.com/user-attachments/assets/4f643f95-0d10-43f4-88a4-f7bc6fc3e60a" />
 
 ### Scale ratio
-<img width="1920" height="1080" alt="Cover 3" src="https://github.com/user-attachments/assets/087330a2-fcf1-44c8-a332-090d3a32dd8c" />
+<img width="1920" height="1080" alt="Cover - Scale" src="https://github.com/user-attachments/assets/5e1f2af4-db22-4787-b85f-2edf14df4ffd" />
 
 ### Bulk editing
-<img width="1920" height="1080" alt="Cover 4" src="https://github.com/user-attachments/assets/eaacdeaf-6509-46a3-8b6e-9226582ba3b3" />
+<img width="1920" height="1080" alt="Cover - Bulk Edit" src="https://github.com/user-attachments/assets/6607bdc9-8d1a-4c3d-a5c6-f6a8623159d3" />
+
+### Nodes
+<img width="1920" height="1080" alt="Cover - Nodes" src="https://github.com/user-attachments/assets/56ba62b0-4d8b-4041-bc63-8bba162331bb" />
+
+### Contrast checker
+<img width="1920" height="1080" alt="Cover - Contrast checker" src="https://github.com/user-attachments/assets/ba86420b-6cb1-4af3-b355-f9862914ce7f" />
 
 
 
