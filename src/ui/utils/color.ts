@@ -277,3 +277,32 @@ export function hslToRgb(h: number, s: number, l: number): RGB {
     b: Math.round(b * 255),
   };
 }
+
+export function generateShadeColorsWithCurves(
+  lightValue: number,
+  darkValue: number,
+  baseRgb: RGB,
+  count: number,
+  lightAdj: number[],
+  satAdj: number[],
+  hueAdj: number[]
+): string[] {
+  const shades: string[] = [];
+  const baseHsv = rgbToHsv(baseRgb.r, baseRgb.g, baseRgb.b);
+
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const baseLightness = lightValue + (darkValue - lightValue) * t;
+
+    // Apply all adjustments
+    const lightness = Math.max(0, Math.min(100, baseLightness + (lightAdj[i] || 0)));
+    const saturation = Math.max(0, Math.min(100, baseHsv.s + (satAdj[i] || 0)));
+    const hue = (baseHsv.h + (hueAdj[i] || 0) + 360) % 360;
+
+    // Generate color: first apply hue/saturation, then lightness
+    const rgb = hsvToRgb(hue, saturation, baseHsv.v);
+    shades.push(lightnessToColor(rgb, lightness));
+  }
+
+  return shades;
+}

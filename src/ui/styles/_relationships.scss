@@ -1,0 +1,225 @@
+// Relationships graph styles - Grouped view
+
+.relationships-view {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #f5f5f5;
+}
+
+// Grouped graph container
+.grouped-graph {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+
+  &.panning {
+    cursor: grabbing;
+  }
+
+  &.dragging-group {
+    cursor: move;
+  }
+
+  &.dragging {
+    cursor: crosshair;
+
+    .connection-point {
+      opacity: 1;
+    }
+  }
+}
+
+// Group box styles
+.group-box {
+  .connection-point {
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  .variable-row {
+    .row-hover-bg {
+      transition: fill 0.1s ease;
+    }
+
+    &:hover .row-hover-bg {
+      fill: rgba(0, 0, 0, 0.05);
+    }
+
+    &.drop-target:hover .row-hover-bg {
+      fill: rgba(24, 119, 242, 0.15);
+    }
+  }
+}
+
+// Connection line hover
+.connection-group {
+  .connection-line {
+    transition: stroke 0.15s ease;
+  }
+
+  &:hover .connection-line {
+    stroke: #e53935;
+  }
+}
+
+.relationships-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  display: block;
+
+  &.panning {
+    cursor: grabbing;
+  }
+}
+
+// Group box styles
+.group-box {
+  .group-title {
+    font-family: var(--font-family);
+  }
+
+  .variable-row {
+    cursor: default;
+
+    .row-hover-bg {
+      transition: fill 0.1s ease;
+    }
+
+    &:hover .row-hover-bg {
+      fill: var(--bg-hover);
+    }
+
+    &.drop-target:hover .row-hover-bg {
+      fill: rgba(24, 119, 242, 0.15);
+    }
+  }
+
+  .connection-point {
+    opacity: 0.6;
+    transition: opacity 0.15s ease, transform 0.15s ease, r 0.15s ease;
+
+    &:hover {
+      opacity: 1;
+      r: 5;
+    }
+  }
+}
+
+// Drag preview line
+.drag-preview-line {
+  pointer-events: none;
+}
+
+// Canvas during dragging
+.relationships-canvas.dragging {
+  cursor: crosshair;
+
+  .connection-point {
+    opacity: 1;
+  }
+}
+
+// Connection line styles
+.connection-group {
+  &:hover .connection-line {
+    opacity: 1;
+    stroke: var(--danger);
+    stroke-width: 2;
+  }
+}
+
+.connection-line {
+  transition: opacity 0.15s ease, stroke 0.15s ease;
+}
+
+// Stats overlay
+.graph-stats {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+// Instructions
+.graph-instructions {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+// Empty state
+.graph-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: var(--text-dim);
+
+  p {
+    margin: 0;
+    font-size: 13px;
+  }
+}
+
+// Zoom controls
+.zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+
+  button {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 500;
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+  }
+
+  span {
+    min-width: 40px;
+    text-align: center;
+  }
+}

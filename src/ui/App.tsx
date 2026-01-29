@@ -14,8 +14,9 @@ import { ColorPickerModal } from './components/Modals/ColorPickerModal';
 import { ColorReferenceModal } from './components/Modals/ColorReferenceModal';
 import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
+import { RelationshipsView } from './components/Relationships/RelationshipsView';
 
-export type ActiveTab = 'table' | 'json';
+export type ActiveTab = 'table' | 'json' | 'relationships';
 
 export function App() {
   const { setData } = useAppContext();
@@ -61,6 +62,12 @@ export function App() {
       {activeTab === 'json' && (
         <div id="json-tab" className="tab-content active">
           <JsonEditor />
+        </div>
+      )}
+
+      {activeTab === 'relationships' && (
+        <div id="relationships-tab" className="tab-content active">
+          <RelationshipsView />
         </div>
       )}
 

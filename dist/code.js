@@ -290,6 +290,18 @@ async function bulkUpdateGroup(collectionId, groupName, updates) {
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
         const existingVariables = await figma.variables.getLocalVariablesAsync();
+        // Find all variables in this group (matching groupName/ prefix)
+        const groupPrefix = groupName + '/';
+        const groupVariables = existingVariables.filter(v => v.variableCollectionId === collectionId && v.name.startsWith(groupPrefix));
+        // Get set of names that should exist after update
+        const updateNames = new Set(updates.map(u => u.name));
+        // Delete variables that are in the group but not in updates
+        for (const variable of groupVariables) {
+            if (!updateNames.has(variable.name)) {
+                variable.remove();
+            }
+        }
+        // Update or create variables
         for (const update of updates) {
             // Find existing variable with this name
             const existing = existingVariables.find(v => v.variableCollectionId === collectionId && v.name === update.name);
@@ -496,6 +508,19 @@ async function reorderVariable(draggedId, targetId, insertBefore) {
 // Update from JSON
 async function updateFromJson(data) {
     try {
+        // Get collection IDs from the data
+        const collectionIds = new Set(data.collections.map(c => c.id));
+        // Get all current variables from those collections
+        const allVariables = await figma.variables.getLocalVariablesAsync();
+        const currentVarsInCollections = allVariables.filter(v => collectionIds.has(v.variableCollectionId));
+        // Get IDs of variables in the JSON data
+        const jsonVarIds = new Set(data.variables.map(v => v.id).filter(Boolean));
+        // Delete variables that exist in Figma but not in the JSON
+        for (const variable of currentVarsInCollections) {
+            if (!jsonVarIds.has(variable.id)) {
+                variable.remove();
+            }
+        }
         // Update existing variables
         for (const varData of data.variables) {
             if (varData.id) {

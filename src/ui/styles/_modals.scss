@@ -20,6 +20,10 @@
   width: 360px;
   max-height: 90vh;
   overflow: auto;
+
+  &.modal-wide {
+    width: 480px;
+  }
 }
 
 .modal-header {
@@ -175,10 +179,19 @@
 // Combined curve editor + preview
 .curve-preview-combined {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
+  .curve-editor-container {
+    background: var(--bg-input);
+  }
+
+  .shades-preview {
+    border: none;
+    border-radius: 0;
+  }
 }
 
 .curve-svg {

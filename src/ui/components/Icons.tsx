@@ -151,3 +151,14 @@ export function FolderIcon() {
 export function TypeIcon({ type }: { type: VariableType }) {
   return TypeIcons[type] || null;
 }
+
+export function RelationshipsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14">
+      <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5.5 5.5L7 10M10.5 5.5L9 10M6 4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}

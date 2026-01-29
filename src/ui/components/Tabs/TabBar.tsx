@@ -5,8 +5,8 @@ import { RefreshIcon, ExpandIcon, CollapseIcon } from '../Icons';
 import { post } from '../../hooks/usePluginMessages';
 
 interface TabBarProps {
-  activeTab: 'table' | 'json';
-  onTabChange: (tab: 'table' | 'json') => void;
+  activeTab: 'table' | 'json' | 'relationships';
+  onTabChange: (tab: 'table' | 'json' | 'relationships') => void;
 }
 
 export function TabBar({ activeTab, onTabChange }: TabBarProps) {
@@ -45,6 +45,12 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         onClick={() => onTabChange('json')}
       >
         JSON
+      </button>
+      <button
+        className={`tab ${activeTab === 'relationships' ? 'active' : ''}`}
+        onClick={() => onTabChange('relationships')}
+      >
+        Relationships
       </button>
       <div className="spacer" />
       <button
