@@ -22,7 +22,7 @@ export function ColorReferenceModal() {
   const colorVariables = useMemo(() => {
     if (!config) return [];
     return variables.filter(v =>
-      v.resolvedType === 'COLOR' && v.id !== config.currentVariableId
+      v.resolvedType === 'COLOR' && v.id !== (config.currentVariableId || '')
     );
   }, [variables, config]);
 
@@ -61,8 +61,12 @@ export function ColorReferenceModal() {
     return name.toLowerCase().includes(searchQuery.toLowerCase());
   };
 
-  const handleSelect = (varName: string) => {
-    config?.onSelect(varName);
+  const handleSelect = (variable: typeof colorVariables[0]) => {
+    if (config?.onConfirm) {
+      config.onConfirm(variable.id);
+    } else if (config?.onSelect) {
+      config.onSelect(variable.name);
+    }
     closeColorReference();
   };
 
@@ -71,7 +75,7 @@ export function ColorReferenceModal() {
       const firstMatch = [...ungrouped, ...sortedGroups.flatMap(g => grouped[g])]
         .find(v => matchesSearch(v.name));
       if (firstMatch) {
-        handleSelect(firstMatch.name);
+        handleSelect(firstMatch);
       }
     } else if (e.key === 'Escape') {
       closeColorReference();
@@ -80,7 +84,7 @@ export function ColorReferenceModal() {
 
   if (!config) return null;
 
-  const currentRefMatch = config.currentValue.match(/^\{(.+)\}$/);
+  const currentRefMatch = config.currentValue?.match(/^\{(.+)\}$/);
   const currentRefName = currentRefMatch?.[1];
 
   return (
@@ -116,7 +120,7 @@ export function ColorReferenceModal() {
                   <div
                     key={v.id}
                     className={`color-reference-item ${v.name === currentRefName ? 'selected' : ''}`}
-                    onClick={() => handleSelect(v.name)}
+                    onClick={() => handleSelect(v)}
                   >
                     <div className="color-reference-swatch">
                       <div
@@ -144,7 +148,7 @@ export function ColorReferenceModal() {
                       <div
                         key={v.id}
                         className={`color-reference-item ${v.name === currentRefName ? 'selected' : ''}`}
-                        onClick={() => handleSelect(v.name)}
+                        onClick={() => handleSelect(v)}
                       >
                         <div className="color-reference-swatch">
                           <div

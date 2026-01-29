@@ -11,8 +11,19 @@
   border-radius: 8px;
   position: relative;
   cursor: crosshair;
-  background: linear-gradient(to right, #fff, hsl(0, 100%, 50%));
 
+  // White-to-transparent gradient (saturation)
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, #fff, transparent);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  // Transparent-to-black gradient (value/brightness)
   &::after {
     content: '';
     position: absolute;
@@ -20,6 +31,7 @@
     background: linear-gradient(to bottom, transparent, #000);
     border-radius: 8px;
     pointer-events: none;
+    z-index: 1;
   }
 }
 
@@ -66,17 +78,83 @@
   pointer-events: none;
 }
 
+.color-mode-selector {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-alt);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.color-mode-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+}
+
 .color-picker-inputs {
   display: flex;
   gap: 8px;
   align-items: center;
 
   .form-input {
-    width: 100%;
     box-sizing: border-box;
     text-align: center;
     font-family: 'SF Mono', Monaco, monospace;
     font-size: 11px;
-    border-radius: 8px;
+    border-radius: 6px;
+  }
+
+  .hex-input {
+    width: 100%;
+  }
+}
+
+.color-input-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.color-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .form-input {
+    width: 100%;
+    text-align: center;
+    -moz-appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+  }
+
+  label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-align: center;
   }
 }

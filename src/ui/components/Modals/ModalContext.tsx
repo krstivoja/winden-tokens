@@ -16,9 +16,10 @@ interface ColorPickerConfig {
 }
 
 interface ColorReferenceConfig {
-  currentVariableId: string;
-  currentValue: string;
-  onSelect: (refName: string) => void;
+  currentVariableId?: string;
+  currentValue?: string;
+  onSelect?: (refName: string) => void;
+  onConfirm?: (variableId: string) => void;
 }
 
 interface BulkEditConfig {

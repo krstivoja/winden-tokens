@@ -1,11 +1,12 @@
 // Table row component
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { TypeIcon, DragIcon, CopyIcon, TrashIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
+import { parseColorToRgb, checkContrast } from '../../utils/color';
 
 interface TableRowProps {
   variable: VariableData;
@@ -14,6 +15,7 @@ interface TableRowProps {
   isHidden?: boolean;
   groupName?: string;
   onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
+  contrastColor: string | null;
 }
 
 export function TableRow({
@@ -23,8 +25,18 @@ export function TableRow({
   isHidden = false,
   groupName = '',
   onShowColorMenu,
+  contrastColor,
 }: TableRowProps) {
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
+
+  // Calculate contrast for color variables
+  const contrastResult = useMemo(() => {
+    if (variable.resolvedType !== 'COLOR' || !contrastColor) return null;
+    const colorRgb = parseColorToRgb(variable.value);
+    const contrastRgb = parseColorToRgb(contrastColor);
+    if (!colorRgb || !contrastRgb) return null;
+    return checkContrast(colorRgb, contrastRgb);
+  }, [variable.value, variable.resolvedType, contrastColor]);
 
   const handleNameBlur = useCallback(() => {
     const parts = variable.name.split('/');
@@ -82,6 +94,19 @@ export function TableRow({
           variable={variable}
           onShowColorMenu={onShowColorMenu}
         />
+      </td>
+      <td className="accessibility-cell">
+        {contrastResult && (
+          <div className="contrast-info">
+            <span className="contrast-ratio">{contrastResult.ratio}:1</span>
+            <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
+              {contrastResult.aa ? '✓' : '✗'}AA
+            </span>
+            <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
+              {contrastResult.aaa ? '✓' : '✗'}AAA
+            </span>
+          </div>
+        )}
       </td>
       <td>
         <div className="row-actions">

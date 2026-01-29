@@ -1,6 +1,7 @@
 // Menu styles
 .add-menu,
-.color-value-menu {
+.color-value-menu,
+.contrast-picker {
   position: absolute;
   background: white;
   border: 1px solid var(--border);
@@ -8,11 +9,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 4px;
   z-index: 100;
-  display: none;
-
-  &.open {
-    display: block;
-  }
+  display: block;
 
   button {
     display: flex;

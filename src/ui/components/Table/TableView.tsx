@@ -8,11 +8,8 @@ import { GroupHeader } from './GroupHeader';
 import { ColorValueMenu } from './ColorValueMenu';
 
 export function TableView() {
-  const { getFilteredVariables, isGroupCollapsed } = useAppContext();
+  const { getFilteredVariables, isGroupCollapsed, getGroupContrastColor } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const [focusedRow, setFocusedRow] = useState(-1);
-  const [focusedCol, setFocusedCol] = useState<'name' | 'value'>('name');
-  const [isEditing, setIsEditing] = useState(false);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
     position: { top: number; left: number };
@@ -61,7 +58,7 @@ export function TableView() {
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
 
-  // Close color menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -79,14 +76,15 @@ export function TableView() {
         <table className="spreadsheet">
           <thead>
             <tr>
-              <th className="col-name">Name</th>
-              <th className="col-value">Value</th>
-              <th className="col-actions">Actions</th>
+              <th className="col-name">NAME</th>
+              <th className="col-value">VALUE</th>
+              <th className="col-accessibility">ACCESSIBILITY</th>
+              <th className="col-actions">ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             <tr className="empty-state-row">
-              <td colSpan={3}>
+              <td colSpan={4}>
                 <div className="empty-state">No variables yet</div>
               </td>
             </tr>
@@ -103,9 +101,10 @@ export function TableView() {
       <table className="spreadsheet">
         <thead>
           <tr>
-            <th className="col-name">Name</th>
-            <th className="col-value">Value</th>
-            <th className="col-actions">Actions</th>
+            <th className="col-name">NAME</th>
+            <th className="col-value">VALUE</th>
+            <th className="col-accessibility">ACCESSIBILITY</th>
+            <th className="col-actions">ACTIONS</th>
           </tr>
         </thead>
         <tbody id="table-body">
@@ -117,6 +116,7 @@ export function TableView() {
               rowIndex={rowIndex++}
               isGrouped={false}
               onShowColorMenu={showColorMenu}
+              contrastColor={null}
             />
           ))}
 
@@ -124,6 +124,7 @@ export function TableView() {
           {sortedGroups.map(groupName => {
             const isCollapsed = isGroupCollapsed(groupName);
             const groupVars = grouped[groupName];
+            const groupContrastColor = getGroupContrastColor(groupName);
 
             return (
               <React.Fragment key={groupName}>
@@ -141,6 +142,7 @@ export function TableView() {
                     isHidden={isCollapsed}
                     groupName={groupName}
                     onShowColorMenu={showColorMenu}
+                    contrastColor={groupContrastColor}
                   />
                 ))}
               </React.Fragment>

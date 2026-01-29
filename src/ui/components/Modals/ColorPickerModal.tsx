@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useModalContext } from './ModalContext';
 import { CloseIcon } from '../Icons';
-import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb } from '../../utils/color';
+import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb, rgbToHsl, hslToRgb, RGB } from '../../utils/color';
+
+type ColorMode = 'HEX' | 'RGB' | 'HSL';
 
 export function ColorPickerModal() {
   const { modals, closeColorPicker } = useModalContext();
@@ -12,7 +14,12 @@ export function ColorPickerModal() {
   const [hue, setHue] = useState(0);
   const [saturation, setSaturation] = useState(100);
   const [value, setValue] = useState(100);
+  const [colorMode, setColorMode] = useState<ColorMode>('HEX');
+
+  // Input states
   const [hexInput, setHexInput] = useState('#000000');
+  const [rgbInputs, setRgbInputs] = useState({ r: 0, g: 0, b: 0 });
+  const [hslInputs, setHslInputs] = useState({ h: 0, s: 0, l: 0 });
 
   const svPanelRef = useRef<HTMLDivElement>(null);
   const hueSliderRef = useRef<HTMLDivElement>(null);
@@ -28,16 +35,23 @@ export function ColorPickerModal() {
         setHue(hsv.h);
         setSaturation(hsv.s);
         setValue(hsv.v);
-        setHexInput(rgbObjToHex(rgb));
+        updateAllInputs(rgb);
       }
     }
   }, [config]);
 
-  // Update hex when HSV changes
+  const updateAllInputs = useCallback((rgb: RGB) => {
+    setHexInput(rgbObjToHex(rgb));
+    setRgbInputs({ r: rgb.r, g: rgb.g, b: rgb.b });
+    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    setHslInputs(hsl);
+  }, []);
+
+  // Update inputs when HSV changes
   useEffect(() => {
     const rgb = hsvToRgb(hue, saturation, value);
-    setHexInput(rgbObjToHex(rgb));
-  }, [hue, saturation, value]);
+    updateAllInputs(rgb);
+  }, [hue, saturation, value, updateAllInputs]);
 
   const updateSVFromMouse = useCallback((clientX: number, clientY: number) => {
     if (!svPanelRef.current) return;
@@ -78,16 +92,36 @@ export function ColorPickerModal() {
     };
   }, [updateSVFromMouse, updateHueFromMouse]);
 
+  const updateFromRgb = useCallback((rgb: RGB) => {
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    setHue(hsv.h);
+    setSaturation(hsv.s);
+    setValue(hsv.v);
+  }, []);
+
   const handleHexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const hex = e.target.value;
     setHexInput(hex);
     const rgb = hexToRgbObj(hex);
-    if (rgb) {
-      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-      setHue(hsv.h);
-      setSaturation(hsv.s);
-      setValue(hsv.v);
+    if (rgb && hex.length === 7) {
+      updateFromRgb(rgb);
     }
+  };
+
+  const handleRgbChange = (channel: 'r' | 'g' | 'b', val: string) => {
+    const num = Math.max(0, Math.min(255, parseInt(val) || 0));
+    const newRgb = { ...rgbInputs, [channel]: num };
+    setRgbInputs(newRgb);
+    updateFromRgb(newRgb);
+  };
+
+  const handleHslChange = (channel: 'h' | 's' | 'l', val: string) => {
+    const max = channel === 'h' ? 360 : 100;
+    const num = Math.max(0, Math.min(max, parseInt(val) || 0));
+    const newHsl = { ...hslInputs, [channel]: num };
+    setHslInputs(newHsl);
+    const rgb = hslToRgb(newHsl.h, newHsl.s, newHsl.l);
+    updateFromRgb(rgb);
   };
 
   const handleConfirm = () => {
@@ -140,14 +174,105 @@ export function ColorPickerModal() {
                 style={{ left: `${(hue / 360) * 100}%` }}
               />
             </div>
+
+            <div className="color-mode-selector">
+              {(['HEX', 'RGB', 'HSL'] as ColorMode[]).map(mode => (
+                <button
+                  key={mode}
+                  className={`color-mode-btn ${colorMode === mode ? 'active' : ''}`}
+                  onClick={() => setColorMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
             <div className="color-picker-inputs">
-              <input
-                type="text"
-                className="form-input"
-                placeholder="#000000"
-                value={hexInput}
-                onChange={handleHexChange}
-              />
+              {colorMode === 'HEX' && (
+                <input
+                  type="text"
+                  className="form-input hex-input"
+                  placeholder="#000000"
+                  value={hexInput}
+                  onChange={handleHexChange}
+                />
+              )}
+
+              {colorMode === 'RGB' && (
+                <div className="color-input-row">
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="255"
+                      value={rgbInputs.r}
+                      onChange={e => handleRgbChange('r', e.target.value)}
+                    />
+                    <label>R</label>
+                  </div>
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="255"
+                      value={rgbInputs.g}
+                      onChange={e => handleRgbChange('g', e.target.value)}
+                    />
+                    <label>G</label>
+                  </div>
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="255"
+                      value={rgbInputs.b}
+                      onChange={e => handleRgbChange('b', e.target.value)}
+                    />
+                    <label>B</label>
+                  </div>
+                </div>
+              )}
+
+              {colorMode === 'HSL' && (
+                <div className="color-input-row">
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="360"
+                      value={hslInputs.h}
+                      onChange={e => handleHslChange('h', e.target.value)}
+                    />
+                    <label>H</label>
+                  </div>
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="100"
+                      value={hslInputs.s}
+                      onChange={e => handleHslChange('s', e.target.value)}
+                    />
+                    <label>S</label>
+                  </div>
+                  <div className="color-input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      max="100"
+                      value={hslInputs.l}
+                      onChange={e => handleHslChange('l', e.target.value)}
+                    />
+                    <label>L</label>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
