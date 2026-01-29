@@ -8,7 +8,7 @@ import { GroupHeader } from './GroupHeader';
 import { ColorValueMenu } from './ColorValueMenu';
 
 export function TableView() {
-  const { getFilteredVariables, isGroupCollapsed, getGroupContrastColor, getSingleContrastColor } = useAppContext();
+  const { filteredVariables, colorVariables, isGroupCollapsed, getGroupContrastColor, getSingleContrastColor } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
@@ -17,14 +17,12 @@ export function TableView() {
     value: string;
   }>({ show: false, position: { top: 0, left: 0 }, variableId: '', value: '' });
 
-  const filtered = getFilteredVariables();
-
   // Group variables by path prefix
   const { grouped, ungrouped, sortedGroups } = React.useMemo(() => {
     const grouped: Record<string, VariableData[]> = {};
     const ungrouped: VariableData[] = [];
 
-    filtered.forEach(v => {
+    filteredVariables.forEach(v => {
       const parts = v.name.split('/');
       if (parts.length > 1) {
         const groupName = parts.slice(0, -1).join('/');
@@ -40,7 +38,7 @@ export function TableView() {
       ungrouped,
       sortedGroups: Object.keys(grouped).sort(),
     };
-  }, [filtered]);
+  }, [filteredVariables]);
 
   const showColorMenu = useCallback((e: React.MouseEvent, variableId: string, value: string) => {
     e.stopPropagation();
@@ -70,7 +68,7 @@ export function TableView() {
     return () => document.removeEventListener('click', handleClick);
   }, [hideColorMenu]);
 
-  if (!filtered.length) {
+  if (!filteredVariables.length) {
     return (
       <div className="table-container">
         <table className="spreadsheet">
@@ -117,6 +115,7 @@ export function TableView() {
               isGrouped={false}
               onShowColorMenu={showColorMenu}
               contrastColor={v.resolvedType === 'COLOR' ? getSingleContrastColor(v.id) : null}
+              colorVariables={colorVariables}
             />
           ))}
 
@@ -143,6 +142,7 @@ export function TableView() {
                     groupName={groupName}
                     onShowColorMenu={showColorMenu}
                     contrastColor={groupContrastColor}
+                    colorVariables={colorVariables}
                   />
                 ))}
               </React.Fragment>

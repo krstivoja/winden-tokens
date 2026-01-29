@@ -1,6 +1,6 @@
 // Table row component
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, memo } from 'react';
 import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
@@ -18,9 +18,10 @@ interface TableRowProps {
   groupName?: string;
   onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
   contrastColor: string | null;
+  colorVariables: VariableData[];
 }
 
-export function TableRow({
+export const TableRow = memo(function TableRow({
   variable,
   rowIndex,
   isGrouped,
@@ -28,18 +29,13 @@ export function TableRow({
   groupName = '',
   onShowColorMenu,
   contrastColor,
+  colorVariables,
 }: TableRowProps) {
-  const { setSingleContrastColor, variables, selectedCollectionId } = useAppContext();
+  const { setSingleContrastColor } = useAppContext();
   const { openColorPicker, openColorReference } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
-
-  // Get color variables for reference picker
-  const colorVariables = useMemo(() =>
-    variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'),
-    [variables, selectedCollectionId]
-  );
 
   // Calculate contrast for color variables
   const contrastResult = useMemo(() => {
@@ -208,4 +204,4 @@ export function TableRow({
       </td>
     </tr>
   );
-}
+});

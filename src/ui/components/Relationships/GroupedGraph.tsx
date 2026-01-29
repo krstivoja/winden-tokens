@@ -82,10 +82,14 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
   }, []);
 
   // Build groups and connections (without auto-positioning)
-  const { groupsData, connections, variableMap } = useMemo(() => {
+  const { groupsData, connections, variableMap, groupsLookup } = useMemo(() => {
     const colorVars = variables.filter(
       v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'
     );
+
+    // Build name -> variable map for O(1) reference lookups
+    const colorVarsByName = new Map<string, VariableData>();
+    colorVars.forEach(v => colorVarsByName.set(v.name, v));
 
     const refPattern = /^\{(.+)\}$/;
     const groupsMap = new Map<string, VariableNode[]>();
@@ -103,11 +107,11 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
       let displayColor = v.value;
       if (isReference && referenceName) {
-        const refVar = colorVars.find(cv => cv.name === referenceName);
+        const refVar = colorVarsByName.get(referenceName);
         if (refVar) {
           const refRefMatch = refVar.value.match(refPattern);
           if (refRefMatch) {
-            const deepRef = colorVars.find(cv => cv.name === refRefMatch[1]);
+            const deepRef = colorVarsByName.get(refRefMatch[1]);
             if (deepRef) displayColor = deepRef.value;
           } else {
             displayColor = refVar.value;
@@ -141,6 +145,10 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
       groupsArray.push({ name, variables: vars, x: 0, y: 0 });
     });
 
+    // Build group name -> GroupData map for O(1) lookups during render
+    const groupsLookupMap = new Map<string, GroupData>();
+    groupsArray.forEach(g => groupsLookupMap.set(g.name, g));
+
     // Build connections
     const conns: Connection[] = [];
     groupsArray.forEach(g => {
@@ -159,7 +167,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
       });
     });
 
-    return { groupsData: groupsArray, connections: conns, variableMap: varMap };
+    return { groupsData: groupsArray, connections: conns, variableMap: varMap, groupsLookup: groupsLookupMap };
   }, [variables, selectedCollectionId]);
 
   // Track which variables have connections (for blue coloring)
@@ -229,12 +237,15 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     });
   }, [groupsData]);
 
-  // Apply positions to groups
-  const groups = useMemo(() => {
-    return groupsData.map(g => {
+  // Apply positions to groups and build lookup map
+  const { groups, groupsMap } = useMemo(() => {
+    const groupsArray = groupsData.map(g => {
       const pos = groupPositions.get(g.name) || { x: 0, y: 0 };
       return { ...g, x: pos.x, y: pos.y };
     });
+    const groupsMapWithPos = new Map<string, GroupData>();
+    groupsArray.forEach(g => groupsMapWithPos.set(g.name, g));
+    return { groups: groupsArray, groupsMap: groupsMapWithPos };
   }, [groupsData, groupPositions]);
 
   // Pan handling - start panning on background click or when space is held
@@ -422,13 +433,16 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
           {/* Connection lines */}
           <g className="connections-layer">
             {connections.map((conn, i) => {
-              const fromGroup = groups.find(g => g.name === conn.fromGroup);
-              const toGroup = groups.find(g => g.name === conn.toGroup);
+              const fromGroup = groupsMap.get(conn.fromGroup);
+              const toGroup = groupsMap.get(conn.toGroup);
               if (!fromGroup || !toGroup) return null;
 
-              const fromVarIdx = fromGroup.variables.findIndex(v => v.name === conn.fromVar);
-              const toVarIdx = toGroup.variables.findIndex(v => v.name === conn.toVar);
-              if (fromVarIdx < 0 || toVarIdx < 0) return null;
+              // Use variableMap for O(1) index lookup
+              const fromVarInfo = variableMap.get(conn.fromVar);
+              const toVarInfo = variableMap.get(conn.toVar);
+              if (!fromVarInfo || !toVarInfo) return null;
+              const fromVarIdx = fromVarInfo.index;
+              const toVarIdx = toVarInfo.index;
 
               const path = getConnectionPath(fromGroup, fromVarIdx, toGroup, toVarIdx);
 

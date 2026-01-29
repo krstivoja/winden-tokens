@@ -1,6 +1,6 @@
 // Global application context
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { CollectionData, VariableData } from '../types';
 
 interface AppState {
@@ -19,7 +19,8 @@ interface AppContextValue extends AppState {
   setSearchQuery: (query: string) => void;
   toggleGroup: (groupName: string) => void;
   isGroupCollapsed: (groupName: string) => boolean;
-  getFilteredVariables: () => VariableData[];
+  filteredVariables: VariableData[];
+  colorVariables: VariableData[];
   getFilteredCount: () => { shown: number; total: number };
   setGroupContrastColor: (groupName: string, color: string | null) => void;
   getGroupContrastColor: (groupName: string) => string | null;
@@ -69,7 +70,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return collapsedGroups.has(groupName);
   }, [collapsedGroups]);
 
-  const getFilteredVariables = useCallback(() => {
+  const filteredVariables = useMemo(() => {
     let filtered = variables.filter(v => v.collectionId === selectedCollectionId);
     if (searchQuery) {
       filtered = filtered.filter(v => v.name.toLowerCase().includes(searchQuery));
@@ -77,11 +78,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return filtered;
   }, [variables, selectedCollectionId, searchQuery]);
 
+  const colorVariables = useMemo(() => {
+    return variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
+  }, [variables, selectedCollectionId]);
+
   const getFilteredCount = useCallback(() => {
     const total = variables.filter(v => v.collectionId === selectedCollectionId).length;
-    const shown = getFilteredVariables().length;
-    return { shown, total };
-  }, [variables, selectedCollectionId, getFilteredVariables]);
+    return { shown: filteredVariables.length, total };
+  }, [variables, selectedCollectionId, filteredVariables.length]);
 
   const setGroupContrastColor = useCallback((groupName: string, color: string | null) => {
     setGroupContrastColors(prev => {
@@ -124,7 +128,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSearchQuery,
     toggleGroup,
     isGroupCollapsed,
-    getFilteredVariables,
+    filteredVariables,
+    colorVariables,
     getFilteredCount,
     setGroupContrastColor,
     getGroupContrastColor,
