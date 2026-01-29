@@ -4,27 +4,35 @@ import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { GroupedGraph } from './GroupedGraph';
 
-export function RelationshipsView() {
+interface RelationshipsViewProps {
+  variableType: 'COLOR' | 'FLOAT';
+}
+
+export function RelationshipsView({ variableType }: RelationshipsViewProps) {
   const { variables, selectedCollectionId } = useAppContext();
 
   // Count stats
-  const colorVars = variables.filter(
-    v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'
+  const filteredVars = variables.filter(
+    v => v.collectionId === selectedCollectionId && v.resolvedType === variableType
   );
 
   const refPattern = /^\{(.+)\}$/;
-  const refCount = colorVars.filter(v => refPattern.test(v.value)).length;
+  const refCount = filteredVars.filter(v => refPattern.test(v.value)).length;
+
+  const typeLabel = variableType === 'COLOR' ? 'colors' : 'numbers';
+  const emptyLabel = variableType === 'COLOR' ? 'color' : 'number';
 
   return (
     <div className="relationships-view">
       <GroupedGraph
         variables={variables}
         selectedCollectionId={selectedCollectionId}
+        variableType={variableType}
       />
 
       {/* Stats overlay */}
       <div className="graph-stats">
-        <span>{colorVars.length} colors</span>
+        <span>{filteredVars.length} {typeLabel}</span>
         <span>{refCount} references</span>
       </div>
 
@@ -34,9 +42,9 @@ export function RelationshipsView() {
       </div>
 
       {/* Empty state */}
-      {colorVars.length === 0 && (
+      {filteredVars.length === 0 && (
         <div className="graph-empty">
-          <p>No color variables in this collection</p>
+          <p>No {emptyLabel} variables in this collection</p>
         </div>
       )}
     </div>

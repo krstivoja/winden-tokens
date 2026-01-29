@@ -16,7 +16,7 @@ import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
 import { RelationshipsView } from './components/Relationships/RelationshipsView';
 
-export type ActiveTab = 'table' | 'json' | 'relationships';
+export type ActiveTab = 'table' | 'json' | 'node-colors' | 'node-numbers';
 
 export function App() {
   const { setData } = useAppContext();
@@ -65,9 +65,15 @@ export function App() {
         </div>
       )}
 
-      {activeTab === 'relationships' && (
-        <div id="relationships-tab" className="tab-content active">
-          <RelationshipsView />
+      {activeTab === 'node-colors' && (
+        <div id="node-colors-tab" className="tab-content active">
+          <RelationshipsView variableType="COLOR" />
+        </div>
+      )}
+
+      {activeTab === 'node-numbers' && (
+        <div id="node-numbers-tab" className="tab-content active">
+          <RelationshipsView variableType="FLOAT" />
         </div>
       )}
 

@@ -8,6 +8,7 @@ import { post } from '../../hooks/usePluginMessages';
 interface GroupedGraphProps {
   variables: VariableData[];
   selectedCollectionId: string | null;
+  variableType: 'COLOR' | 'FLOAT';
 }
 
 interface VariableNode {
@@ -17,6 +18,7 @@ interface VariableNode {
   displayName: string;
   color: string;
   value: string;
+  resolvedValue: string;
   isReference: boolean;
   referenceName: string | null;
 }
@@ -42,7 +44,8 @@ const GROUP_PADDING = 8;
 const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
 
-export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphProps) {
+export function GroupedGraph({ variables, selectedCollectionId, variableType }: GroupedGraphProps) {
+  const isColorType = variableType === 'COLOR';
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 50, panY: 50 });
   const [isPanning, setIsPanning] = useState(false);
@@ -83,20 +86,20 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
   // Build groups and connections (without auto-positioning)
   const { groupsData, connections, variableMap, groupsLookup } = useMemo(() => {
-    const colorVars = variables.filter(
-      v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'
+    const filteredVars = variables.filter(
+      v => v.collectionId === selectedCollectionId && v.resolvedType === variableType
     );
 
     // Build name -> variable map for O(1) reference lookups
-    const colorVarsByName = new Map<string, VariableData>();
-    colorVars.forEach(v => colorVarsByName.set(v.name, v));
+    const varsByName = new Map<string, VariableData>();
+    filteredVars.forEach(v => varsByName.set(v.name, v));
 
     const refPattern = /^\{(.+)\}$/;
     const groupsMap = new Map<string, VariableNode[]>();
     const varMap = new Map<string, { group: string; index: number; node: VariableNode }>();
 
     // Group variables
-    colorVars.forEach(v => {
+    filteredVars.forEach(v => {
       const parts = v.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : v.name;
       const displayName = parts[parts.length - 1];
@@ -105,30 +108,39 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
       const isReference = !!refMatch;
       const referenceName = refMatch ? refMatch[1] : null;
 
-      let displayColor = v.value;
+      let resolvedValue = v.value;
       if (isReference && referenceName) {
-        const refVar = colorVarsByName.get(referenceName);
+        const refVar = varsByName.get(referenceName);
         if (refVar) {
           const refRefMatch = refVar.value.match(refPattern);
           if (refRefMatch) {
-            const deepRef = colorVarsByName.get(refRefMatch[1]);
-            if (deepRef) displayColor = deepRef.value;
+            const deepRef = varsByName.get(refRefMatch[1]);
+            if (deepRef) resolvedValue = deepRef.value;
           } else {
-            displayColor = refVar.value;
+            resolvedValue = refVar.value;
           }
         }
       }
 
-      const rgb = parseColorToRgb(displayColor);
-      const hexColor = rgb ? rgbObjToHex(rgb) : '#888888';
+      // For colors, convert to hex; for numbers, use the value directly
+      let displayColor = '#888888';
+      let displayValue = resolvedValue;
+      if (isColorType) {
+        const rgb = parseColorToRgb(resolvedValue);
+        displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
+        displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
+      } else {
+        displayValue = isReference ? `{${referenceName}}` : resolvedValue;
+      }
 
       const node: VariableNode = {
         id: v.id,
         name: v.name,
         shortName: displayName,
-        displayName: isReference ? `{${referenceName}}` : hexColor.toUpperCase(),
-        color: hexColor,
+        displayName: displayValue,
+        color: displayColor,
         value: v.value,
+        resolvedValue: isColorType ? displayColor : resolvedValue,
         isReference,
         referenceName,
       };
@@ -168,7 +180,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     });
 
     return { groupsData: groupsArray, connections: conns, variableMap: varMap, groupsLookup: groupsLookupMap };
-  }, [variables, selectedCollectionId]);
+  }, [variables, selectedCollectionId, variableType, isColorType]);
 
   // Track which variables have connections (for blue coloring)
   const connectedVars = useMemo(() => {
@@ -381,10 +393,10 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
   }, [dragState, variableMap]);
 
   // Disconnect a reference
-  const handleDisconnect = useCallback((varName: string, resolvedColor: string) => {
+  const handleDisconnect = useCallback((varName: string, resolvedValue: string) => {
     const varInfo = variableMap.get(varName);
     if (varInfo) {
-      post({ type: 'update-variable-value', id: varInfo.node.id, value: resolvedColor });
+      post({ type: 'update-variable-value', id: varInfo.node.id, value: resolvedValue });
     }
   }, [variableMap]);
 
@@ -457,7 +469,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                     onClick={() => {
                       const fromVar = fromGroup.variables[fromVarIdx];
                       if (confirm(`Disconnect ${fromVar.name.split('/').pop()}?`)) {
-                        handleDisconnect(conn.fromVar, fromVar.color);
+                        handleDisconnect(conn.fromVar, fromVar.resolvedValue);
                       }
                     }}
                   />
@@ -569,21 +581,23 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         }}
                       />
 
-                      {/* Color swatch */}
-                      <rect
-                        x={14}
-                        y={(ROW_HEIGHT - 20) / 2}
-                        width={20}
-                        height={20}
-                        rx={2}
-                        fill={v.color}
-                        stroke="#ccc"
-                        strokeWidth={0.5}
-                      />
+                      {/* Color swatch (only for colors) */}
+                      {isColorType && (
+                        <rect
+                          x={14}
+                          y={(ROW_HEIGHT - 20) / 2}
+                          width={20}
+                          height={20}
+                          rx={2}
+                          fill={v.color}
+                          stroke="#ccc"
+                          strokeWidth={0.5}
+                        />
+                      )}
 
-                      {/* Short name after swatch */}
+                      {/* Short name */}
                       <text
-                        x={42}
+                        x={isColorType ? 42 : 14}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
