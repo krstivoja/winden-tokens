@@ -8,7 +8,7 @@ import { GroupHeader } from './GroupHeader';
 import { ColorValueMenu } from './ColorValueMenu';
 
 export function TableView() {
-  const { getFilteredVariables, isGroupCollapsed, getGroupContrastColor } = useAppContext();
+  const { getFilteredVariables, isGroupCollapsed, getGroupContrastColor, getSingleContrastColor } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
@@ -116,7 +116,7 @@ export function TableView() {
               rowIndex={rowIndex++}
               isGrouped={false}
               onShowColorMenu={showColorMenu}
-              contrastColor={null}
+              contrastColor={v.resolvedType === 'COLOR' ? getSingleContrastColor(v.id) : null}
             />
           ))}
 

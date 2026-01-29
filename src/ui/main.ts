@@ -604,6 +604,11 @@ function initDragDrop(): void {
 
   tableBody.addEventListener('dragstart', (e) => {
     const target = e.target as HTMLElement;
+    // Only allow drag from the drag handle
+    if (!target.classList.contains('drag-handle')) {
+      e.preventDefault();
+      return;
+    }
     const row = target.closest('tr[data-id]') as HTMLTableRowElement;
     if (!row) return;
 

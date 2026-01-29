@@ -10,6 +10,7 @@ interface AppState {
   collapsedGroups: Set<string>;
   searchQuery: string;
   groupContrastColors: Record<string, string>;
+  singleContrastColors: Record<string, string>;
 }
 
 interface AppContextValue extends AppState {
@@ -22,6 +23,8 @@ interface AppContextValue extends AppState {
   getFilteredCount: () => { shown: number; total: number };
   setGroupContrastColor: (groupName: string, color: string | null) => void;
   getGroupContrastColor: (groupName: string) => string | null;
+  setSingleContrastColor: (variableId: string, color: string | null) => void;
+  getSingleContrastColor: (variableId: string) => string | null;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -33,6 +36,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQueryState] = useState('');
   const [groupContrastColors, setGroupContrastColors] = useState<Record<string, string>>({});
+  const [singleContrastColors, setSingleContrastColors] = useState<Record<string, string>>({});
 
   const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[]) => {
     setCollections(newCollections);
@@ -93,6 +97,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return groupContrastColors[groupName] || null;
   }, [groupContrastColors]);
 
+  const setSingleContrastColor = useCallback((variableId: string, color: string | null) => {
+    setSingleContrastColors(prev => {
+      if (color === null) {
+        const { [variableId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [variableId]: color };
+    });
+  }, []);
+
+  const getSingleContrastColor = useCallback((variableId: string): string | null => {
+    return singleContrastColors[variableId] || null;
+  }, [singleContrastColors]);
+
   const value: AppContextValue = {
     collections,
     variables,
@@ -100,6 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     collapsedGroups,
     searchQuery,
     groupContrastColors,
+    singleContrastColors,
     setData,
     setSelectedCollectionId,
     setSearchQuery,
@@ -109,6 +128,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getFilteredCount,
     setGroupContrastColor,
     getGroupContrastColor,
+    setSingleContrastColor,
+    getSingleContrastColor,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

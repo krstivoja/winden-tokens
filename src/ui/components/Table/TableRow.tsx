@@ -1,11 +1,13 @@
 // Table row component
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
+import { useModalContext } from '../Modals/ModalContext';
 import { TypeIcon, DragIcon, CopyIcon, TrashIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
+import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
 
 interface TableRowProps {
@@ -27,7 +29,17 @@ export function TableRow({
   onShowColorMenu,
   contrastColor,
 }: TableRowProps) {
+  const { setSingleContrastColor, variables, selectedCollectionId } = useAppContext();
+  const { openColorPicker, openColorReference } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
+  const [showContrastPicker, setShowContrastPicker] = useState(false);
+  const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
+
+  // Get color variables for reference picker
+  const colorVariables = useMemo(() =>
+    variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR'),
+    [variables, selectedCollectionId]
+  );
 
   // Calculate contrast for color variables
   const contrastResult = useMemo(() => {
@@ -62,6 +74,52 @@ export function TableRow({
     post({ type: 'duplicate-variable', id: variable.id });
   }, [variable.id]);
 
+  // Contrast picker handlers for ungrouped color variables
+  const handleContrastClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setContrastPickerPosition({ top: rect.bottom + 4, left: rect.left });
+    setShowContrastPicker(true);
+  }, []);
+
+  const handlePickContrastColor = useCallback(() => {
+    setShowContrastPicker(false);
+    openColorPicker({
+      initialColor: contrastColor || '#ffffff',
+      onConfirm: (color) => setSingleContrastColor(variable.id, color),
+    });
+  }, [openColorPicker, contrastColor, setSingleContrastColor, variable.id]);
+
+  const handleReferenceContrastColor = useCallback(() => {
+    setShowContrastPicker(false);
+    openColorReference({
+      onConfirm: (variableId) => {
+        const colorVar = colorVariables.find(v => v.id === variableId);
+        if (colorVar) {
+          setSingleContrastColor(variable.id, colorVar.value);
+        }
+      },
+    });
+  }, [openColorReference, colorVariables, setSingleContrastColor, variable.id]);
+
+  const handleClearContrastColor = useCallback(() => {
+    setShowContrastPicker(false);
+    setSingleContrastColor(variable.id, null);
+  }, [setSingleContrastColor, variable.id]);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    if (!showContrastPicker) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#contrast-picker') && !target.closest('.single-contrast-trigger')) {
+        setShowContrastPicker(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showContrastPicker]);
+
   const hiddenClass = isHidden ? 'hidden-by-group' : '';
   const groupedClass = isGrouped ? 'grouped-item' : '';
 
@@ -70,11 +128,10 @@ export function TableRow({
       data-id={variable.id}
       className={`${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
-      draggable
     >
       <td>
         <div className="name-cell">
-          <span className="drag-handle" title="Drag to reorder">
+          <span className="drag-handle" title="Drag to reorder" draggable>
             <DragIcon />
           </span>
           <span className={`type-icon ${variable.resolvedType}`}>
@@ -96,7 +153,7 @@ export function TableRow({
         />
       </td>
       <td className="accessibility-cell">
-        {contrastResult && (
+        {contrastResult ? (
           <div className="contrast-info">
             <span className="contrast-ratio">{contrastResult.ratio}:1</span>
             <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
@@ -106,7 +163,30 @@ export function TableRow({
               {contrastResult.aaa ? '✓' : '✗'}AAA
             </span>
           </div>
-        )}
+        ) : !isGrouped && variable.resolvedType === 'COLOR' ? (
+          <>
+            <div
+              className="single-contrast-trigger"
+              onClick={handleContrastClick}
+              title="Set contrast color"
+            >
+              {contrastColor && (
+                <span className="contrast-swatch" style={{ background: contrastColor }} />
+              )}
+              <span className="contrast-label">Contrast</span>
+              <span className="dropdown-arrow">▾</span>
+            </div>
+            {showContrastPicker && (
+              <ContrastPicker
+                position={contrastPickerPosition}
+                contrastColor={contrastColor}
+                onPickColor={handlePickContrastColor}
+                onReferenceColor={handleReferenceContrastColor}
+                onClear={handleClearContrastColor}
+              />
+            )}
+          </>
+        ) : null}
       </td>
       <td>
         <div className="row-actions">
