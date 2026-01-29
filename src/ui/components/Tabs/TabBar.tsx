@@ -50,7 +50,7 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         className={`tab ${activeTab === 'relationships' ? 'active' : ''}`}
         onClick={() => onTabChange('relationships')}
       >
-        Relationships
+        Relationships (Experimental)
       </button>
       <div className="spacer" />
       <button
