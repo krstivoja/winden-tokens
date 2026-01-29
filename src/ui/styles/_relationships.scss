@@ -40,30 +40,28 @@
     cursor: default;
 
     .row-hover-bg {
-      transition: fill 0.1s ease;
+      transition: stroke 0.15s ease, stroke-width 0.15s ease;
+      stroke: transparent;
+      stroke-width: 0;
     }
 
-    &:hover .row-hover-bg {
-      fill: rgba(0, 0, 0, 0.05);
-    }
-
-    &.drop-target:hover .row-hover-bg {
-      fill: rgba(24, 119, 242, 0.15);
+    &.drag-source .row-hover-bg,
+    &.drop-target .row-hover-bg {
+      stroke: #1877f2;
+      stroke-width: 2;
     }
   }
 
   .connection-point {
-    transition: r 0.15s ease;
+    transition: r 0.15s ease, fill 0.15s ease;
 
     &:hover {
-      r: 7;
+      r: 6;
     }
 
     &.connected {
-      r: 6;
-
       &:hover {
-        r: 8;
+        r: 6;
       }
     }
   }

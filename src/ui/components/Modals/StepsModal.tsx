@@ -45,6 +45,29 @@ export function StepsModal() {
     [variables, selectedCollectionId]
   );
 
+  // Get unique number groups (like ShadesModal)
+  const numberGroups = useMemo(() => {
+    const groupMap = new Map<string, { count: number; firstVar: typeof numberVariables[0] | null }>();
+
+    numberVariables.forEach(v => {
+      const parts = v.name.split('/');
+      const groupName = parts.length > 1 ? parts[0] : v.name;
+
+      const existing = groupMap.get(groupName);
+      if (existing) {
+        existing.count++;
+      } else {
+        groupMap.set(groupName, { count: 1, firstVar: v });
+      }
+    });
+
+    return Array.from(groupMap.entries()).map(([name, data]) => ({
+      name,
+      count: data.count,
+      firstVar: data.firstVar,
+    }));
+  }, [numberVariables]);
+
   const stepsArray = useMemo(() =>
     stepsList.split(',').map(s => s.trim()).filter(Boolean),
     [stepsList]
@@ -64,22 +87,17 @@ export function StepsModal() {
   }, [stepsArray, baseStep, baseValue, ratio]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value;
-    setSourceNumberId(id);
+    const selectedGroupName = e.target.value;
+    setSourceNumberId(selectedGroupName);
 
-    if (id) {
-      const v = numberVariables.find(n => n.id === id);
-      if (v) {
-        const parts = v.name.split('/');
-        const baseName = parts.length > 1 ? parts.slice(0, -1).join('/') : v.name;
-        setGroupName(baseName);
-        setBaseValue(parseFloat(v.value) || 16);
+    if (selectedGroupName) {
+      const group = numberGroups.find(g => g.name === selectedGroupName);
+      if (group && group.firstVar) {
+        setGroupName(selectedGroupName);
+        setBaseValue(parseFloat(group.firstVar.value) || 16);
 
-        // Check existing group
-        const existingSteps = numberVariables.filter(nv =>
-          nv.name.startsWith(baseName + '/')
-        );
-        setExistingGroup(existingSteps.length > 0);
+        // Check existing group (has more than 1 variable means steps exist)
+        setExistingGroup(group.count > 1);
       }
     }
   };
@@ -141,32 +159,23 @@ export function StepsModal() {
         </div>
         <div className="modal-body">
           <div className="form-group">
-            <label>Select Number Variable</label>
+            <label>Select Number Group</label>
             <select
               className="form-input"
               value={sourceNumberId}
               onChange={handleSourceChange}
             >
-              <option value="">-- Select a number --</option>
-              {numberVariables.map(v => (
-                <option key={v.id} value={v.id}>{v.name}</option>
+              <option value="">-- Select a group --</option>
+              {numberGroups.map(g => (
+                <option key={g.name} value={g.name}>
+                  {g.name} ({g.count})
+                </option>
               ))}
             </select>
           </div>
 
           {sourceNumberId && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="form-group">
-                <label>Group Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. spacing"
-                  value={groupName}
-                  onChange={e => setGroupName(e.target.value)}
-                />
-              </div>
-
               <div className="form-row">
                 <div className="form-group">
                   <label>Base Value</label>
@@ -245,7 +254,7 @@ export function StepsModal() {
                 <label>Preview</label>
                 <div className="steps-preview">
                   {preview.map(p => (
-                    <div key={p.name} className="step-item">
+                    <div key={p.name} className={`steps-preview-item ${p.name === baseStep ? 'base' : ''}`}>
                       <span className="step-name">{p.name}</span>
                       <span className="step-value">{p.value}</span>
                     </div>

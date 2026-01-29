@@ -58,6 +58,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     currentX: number;
     currentY: number;
   } | null>(null);
+  const [hoveredVar, setHoveredVar] = useState<string | null>(null);
 
   // Track space key for pan mode
   useEffect(() => {
@@ -376,7 +377,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     }
   }, [variableMap]);
 
-  // Calculate connection path (circles are at 6px from edges)
+  // Calculate connection path (circles are at edges: 0 and GROUP_WIDTH)
   const getConnectionPath = (fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
     const fromY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
     const toY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -384,15 +385,15 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     let fromX: number, toX: number;
 
     if (fromGroup.x > toGroup.x) {
-      fromX = fromGroup.x + 6;
-      toX = toGroup.x + GROUP_WIDTH - 6;
+      fromX = fromGroup.x;
+      toX = toGroup.x + GROUP_WIDTH;
     } else {
-      fromX = fromGroup.x + GROUP_WIDTH - 6;
-      toX = toGroup.x + 6;
+      fromX = fromGroup.x + GROUP_WIDTH;
+      toX = toGroup.x;
     }
 
     const dx = Math.abs(toX - fromX);
-    const controlOffset = Math.max(40, Math.min(dx * 0.4, 80));
+    const controlOffset = dx / 2; // Smooth S-curve like in mockup
 
     if (fromX < toX) {
       return `M ${fromX} ${fromY} C ${fromX + controlOffset} ${fromY}, ${toX - controlOffset} ${toY}, ${toX} ${toY}`;
@@ -483,23 +484,13 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                   height={height}
                   rx={4}
                   fill="white"
-                  stroke="#333"
+                  stroke="black"
                   strokeWidth={1}
                 />
 
-                {/* Header - draggable */}
-                <rect
-                  width={GROUP_WIDTH}
-                  height={HEADER_HEIGHT}
-                  rx={4}
-                  fill="#f0f0f0"
-                  style={{ cursor: 'move' }}
-                  onMouseDown={(e) => handleGroupDragStart(e, group.name, group.x, group.y)}
-                />
-                <rect
-                  y={HEADER_HEIGHT - 4}
-                  width={GROUP_WIDTH}
-                  height={4}
+                {/* Header - draggable (inset to not cover border) */}
+                <path
+                  d={`M 4 1 L ${GROUP_WIDTH - 4} 1 Q ${GROUP_WIDTH - 1} 1 ${GROUP_WIDTH - 1} 4 L ${GROUP_WIDTH - 1} ${HEADER_HEIGHT} L 1 ${HEADER_HEIGHT} L 1 4 Q 1 1 4 1 Z`}
                   fill="#f0f0f0"
                   style={{ cursor: 'move' }}
                   onMouseDown={(e) => handleGroupDragStart(e, group.name, group.x, group.y)}
@@ -522,32 +513,41 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                   const hasInput = varConnections?.hasInput || false;
                   const hasOutput = varConnections?.hasOutput || false;
 
+                  const isSource = dragState?.fromVar === v.name;
+                  const isHoveredTarget = dragState && hoveredVar === v.name && !isSource;
+
                   return (
                     <g
                       key={v.id}
                       transform={`translate(0, ${rowY})`}
-                      className={`variable-row ${dragState ? 'drop-target' : ''}`}
+                      className={`variable-row ${isSource ? 'drag-source' : ''} ${isHoveredTarget ? 'drop-target' : ''}`}
+                      onMouseEnter={() => setHoveredVar(v.name)}
+                      onMouseLeave={() => setHoveredVar(null)}
                     >
                       {/* Hover background */}
                       <rect
                         x={1}
+                        y={1}
                         width={GROUP_WIDTH - 2}
-                        height={ROW_HEIGHT}
+                        height={ROW_HEIGHT - 2}
+                        rx={2}
                         fill="transparent"
                         className="row-hover-bg"
                       />
 
                       {/* Left connection point (INPUT - receives value) */}
                       <circle
-                        cx={6}
+                        cx={0}
                         cy={ROW_HEIGHT / 2}
-                        r={5}
-                        fill={hasInput ? '#1877f2' : '#888'}
+                        r={4}
+                        fill={hasInput ? '#1877f2' : 'white'}
+                        stroke={hasInput ? '#1877f2' : 'black'}
+                        strokeWidth={1}
                         className={`connection-point ${hasInput ? 'connected' : ''}`}
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'left', group.x + 6, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'left', group.x, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
@@ -567,40 +567,42 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                         strokeWidth={0.5}
                       />
 
-                      {/* Label - hex/reference value */}
+                      {/* Short name after swatch */}
                       <text
                         x={42}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
-                        fill={v.isReference ? '#666' : '#333'}
+                        fill="#333"
                       >
-                        {v.displayName}
+                        {v.shortName}
                       </text>
 
-                      {/* Short name on right */}
+                      {/* Hex/reference value on right */}
                       <text
                         x={GROUP_WIDTH - 16}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
-                        fill="#999"
+                        fill={v.isReference ? '#666' : '#999'}
                         textAnchor="end"
                       >
-                        {v.shortName}
+                        {v.displayName}
                       </text>
 
                       {/* Right connection point (OUTPUT - sends value) */}
                       <circle
-                        cx={GROUP_WIDTH - 6}
+                        cx={GROUP_WIDTH}
                         cy={ROW_HEIGHT / 2}
-                        r={5}
-                        fill={hasOutput ? '#1877f2' : '#888'}
+                        r={4}
+                        fill={hasOutput ? '#1877f2' : 'white'}
+                        stroke={hasOutput ? '#1877f2' : 'black'}
+                        strokeWidth={1}
                         className={`connection-point ${hasOutput ? 'connected' : ''}`}
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH - 6, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
