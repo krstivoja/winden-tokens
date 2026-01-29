@@ -137,6 +137,22 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     return { groupsData: groupsArray, connections: conns, variableMap: varMap };
   }, [variables, selectedCollectionId]);
 
+  // Track which variables have connections (for blue coloring)
+  const connectedVars = useMemo(() => {
+    const connected = new Map<string, { hasInput: boolean; hasOutput: boolean }>();
+    connections.forEach(conn => {
+      // fromVar has an input (it references something)
+      const from = connected.get(conn.fromVar) || { hasInput: false, hasOutput: false };
+      from.hasInput = true;
+      connected.set(conn.fromVar, from);
+      // toVar has an output (something references it)
+      const to = connected.get(conn.toVar) || { hasInput: false, hasOutput: false };
+      to.hasOutput = true;
+      connected.set(conn.toVar, to);
+    });
+    return connected;
+  }, [connections]);
+
   // Initialize positions only for new groups
   useEffect(() => {
     setGroupPositions(prev => {
@@ -317,7 +333,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     }
   }, [variableMap]);
 
-  // Calculate connection path
+  // Calculate connection path (circles are now at edge: 0 and GROUP_WIDTH)
   const getConnectionPath = (fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
     const fromY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
     const toY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -325,11 +341,11 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
     let fromX: number, toX: number;
 
     if (fromGroup.x > toGroup.x) {
-      fromX = fromGroup.x + 12;
-      toX = toGroup.x + GROUP_WIDTH - 12;
+      fromX = fromGroup.x;
+      toX = toGroup.x + GROUP_WIDTH;
     } else {
-      fromX = fromGroup.x + GROUP_WIDTH - 12;
-      toX = toGroup.x + 12;
+      fromX = fromGroup.x + GROUP_WIDTH;
+      toX = toGroup.x;
     }
 
     const dx = Math.abs(toX - fromX);
@@ -355,9 +371,8 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
       <svg
         width="100%"
         height="100%"
-        style={{ display: 'block' }}
+        style={{ display: 'block', background: 'transparent' }}
       >
-        <rect className="graph-bg" width="100%" height="100%" fill="#f5f5f5" />
 
         <g transform={`translate(${viewState.panX}, ${viewState.panY}) scale(${viewState.zoom})`}>
           {/* Connection lines */}
@@ -391,7 +406,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                   <path
                     d={path}
                     fill="none"
-                    stroke="#333"
+                    stroke="#1877f2"
                     strokeWidth={2}
                     className="connection-line"
                     style={{ pointerEvents: 'none' }}
@@ -460,6 +475,9 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
                 {/* Variables */}
                 {group.variables.map((v, idx) => {
                   const rowY = HEADER_HEIGHT + GROUP_PADDING + idx * ROW_HEIGHT;
+                  const varConnections = connectedVars.get(v.name);
+                  const hasInput = varConnections?.hasInput || false;
+                  const hasOutput = varConnections?.hasOutput || false;
 
                   return (
                     <g
@@ -478,15 +496,15 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
                       {/* Left connection point (INPUT - receives value) */}
                       <circle
-                        cx={12}
+                        cx={0}
                         cy={ROW_HEIGHT / 2}
                         r={5}
-                        fill="#333"
-                        className="connection-point"
+                        fill={hasInput ? '#1877f2' : '#888'}
+                        className={`connection-point ${hasInput ? 'connected' : ''}`}
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'left', group.x + 12, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'left', group.x, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
@@ -496,7 +514,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
                       {/* Color swatch */}
                       <rect
-                        x={26}
+                        x={14}
                         y={(ROW_HEIGHT - 20) / 2}
                         width={20}
                         height={20}
@@ -508,7 +526,7 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
                       {/* Label */}
                       <text
-                        x={54}
+                        x={42}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
@@ -519,15 +537,15 @@ export function GroupedGraph({ variables, selectedCollectionId }: GroupedGraphPr
 
                       {/* Right connection point (OUTPUT - sends value) */}
                       <circle
-                        cx={GROUP_WIDTH - 12}
+                        cx={GROUP_WIDTH}
                         cy={ROW_HEIGHT / 2}
                         r={5}
-                        fill="#333"
-                        className="connection-point"
+                        fill={hasOutput ? '#1877f2' : '#888'}
+                        className={`connection-point ${hasOutput ? 'connected' : ''}`}
                         style={{ cursor: 'crosshair' }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH - 12, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH, group.y + rowY + ROW_HEIGHT / 2);
                         }}
                         onMouseUp={(e) => {
                           e.stopPropagation();
