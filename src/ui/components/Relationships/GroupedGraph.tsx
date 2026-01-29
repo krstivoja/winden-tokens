@@ -401,28 +401,25 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
   }, [variableMap]);
 
   // Calculate connection path (circles are at edges: 0 and GROUP_WIDTH)
+  // Connection semantics: fromVar has the reference (input on left), toVar is referenced (output on right)
+  // So connection always goes: toVar's RIGHT (output) -> fromVar's LEFT (input)
   const getConnectionPath = (fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
-    const fromY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
-    const toY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
+    // fromVar's INPUT is on the LEFT side of fromGroup
+    const inputX = fromGroup.x;
+    const inputY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-    let fromX: number, toX: number;
+    // toVar's OUTPUT is on the RIGHT side of toGroup
+    const outputX = toGroup.x + GROUP_WIDTH;
+    const outputY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-    if (fromGroup.x > toGroup.x) {
-      fromX = fromGroup.x;
-      toX = toGroup.x + GROUP_WIDTH;
-    } else {
-      fromX = fromGroup.x + GROUP_WIDTH;
-      toX = toGroup.x;
-    }
+    // Calculate control points for smooth bezier curve
+    const dx = Math.abs(outputX - inputX);
+    const minOffset = 50;
+    const controlOffset = Math.max(minOffset, dx / 2);
 
-    const dx = Math.abs(toX - fromX);
-    const controlOffset = dx / 2; // Smooth S-curve like in mockup
-
-    if (fromX < toX) {
-      return `M ${fromX} ${fromY} C ${fromX + controlOffset} ${fromY}, ${toX - controlOffset} ${toY}, ${toX} ${toY}`;
-    } else {
-      return `M ${fromX} ${fromY} C ${fromX - controlOffset} ${fromY}, ${toX + controlOffset} ${toY}, ${toX} ${toY}`;
-    }
+    // Curve from output (right) to input (left)
+    // Control points extend horizontally from each endpoint
+    return `M ${outputX} ${outputY} C ${outputX + controlOffset} ${outputY}, ${inputX - controlOffset} ${inputY}, ${inputX} ${inputY}`;
   };
 
   return (
