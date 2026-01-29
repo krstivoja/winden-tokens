@@ -40,12 +40,13 @@
 
     &.col-accessibility {
       width: 140px;
-      padding: 0;
+      padding-left: 10px;
     }
 
     &.col-actions {
       width: 80px;
       text-align: center;
+      padding-left: 10px;
     }
   }
 
@@ -260,7 +261,11 @@ tr.drag-over-below {
 }
 
 .accessibility-cell {
-  padding: 0 8px;
+  padding: 0 10px !important;
+  .group-contrast-trigger {
+    padding: 0 !important;
+  }
+
 }
 
 .contrast-info {
