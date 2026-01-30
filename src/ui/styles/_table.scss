@@ -232,6 +232,7 @@ tr.drag-over-below {
   margin-left: auto;
 }
 
+.single-contrast-trigger,
 .group-contrast-trigger {
   display: flex;
   align-items: center;
@@ -262,10 +263,11 @@ tr.drag-over-below {
 
 .accessibility-cell {
   padding: 0 10px !important;
+
+  .single-contrast-trigger,
   .group-contrast-trigger {
     padding: 0 !important;
   }
-
 }
 
 .contrast-info {

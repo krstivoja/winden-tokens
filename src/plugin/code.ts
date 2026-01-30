@@ -34,23 +34,35 @@ async function fetchData() {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const variables = await figma.variables.getLocalVariablesAsync();
 
+  // Debug: log what we get from API
+  console.log('[Plugin] Collections:', collections.map(c => ({ name: c.name, variableIds: c.variableIds })));
+  console.log('[Plugin] Variables from API:', variables.map(v => v.name));
+
   const collectionData: CollectionData[] = collections.map(c => ({
     id: c.id,
     name: c.name
   }));
 
-  let variableData: UIVariableData[] = await Promise.all(variables.map(async variable => {
-    const modeId = Object.keys(variable.valuesByMode)[0];
-    const value = variable.valuesByMode[modeId];
+  // Build variable data using collection's variableIds order (Figma's native order)
+  let variableData: UIVariableData[] = [];
+  for (const collection of collections) {
+    for (const varId of collection.variableIds) {
+      const variable = variables.find(v => v.id === varId);
+      if (variable) {
+        const modeId = Object.keys(variable.valuesByMode)[0];
+        const value = variable.valuesByMode[modeId];
+        variableData.push({
+          id: variable.id,
+          collectionId: variable.variableCollectionId,
+          name: variable.name,
+          resolvedType: variable.resolvedType,
+          value: await formatValue(value, variable.resolvedType)
+        });
+      }
+    }
+  }
 
-    return {
-      id: variable.id,
-      collectionId: variable.variableCollectionId,
-      name: variable.name,
-      resolvedType: variable.resolvedType,
-      value: await formatValue(value, variable.resolvedType)
-    };
-  }));
+  console.log('[Plugin] Variables after collection order:', variableData.map(v => v.name));
 
   // Apply custom order if exists
   const order = getVariableOrder();
@@ -69,6 +81,7 @@ async function fetchData() {
   // Update hash for change detection
   lastDataHash = JSON.stringify({ collections: collectionData, variables: variableData });
 
+  console.log('[Plugin] Sending data-loaded with', collectionData.length, 'collections and', variableData.length, 'variables');
   figma.ui.postMessage({
     type: 'data-loaded',
     collections: collectionData,
@@ -563,15 +576,14 @@ async function removeSteps(
   }
 }
 
-// Reorder variable
+// Reorder variable (plugin-only - Figma API doesn't support native reordering)
 async function reorderVariable(draggedId: string, targetId: string, insertBefore: boolean) {
   try {
-    const variables = await figma.variables.getLocalVariablesAsync();
-    let order = getVariableOrder();
-
-    // Initialize order if empty
-    if (order.length === 0) {
-      order = variables.map(v => v.id);
+    // Get current Figma order from collections
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    let order: string[] = [];
+    for (const collection of collections) {
+      order = order.concat(collection.variableIds);
     }
 
     // Remove dragged item from current position
@@ -580,19 +592,19 @@ async function reorderVariable(draggedId: string, targetId: string, insertBefore
       order.splice(draggedIndex, 1);
     }
 
-    // Find target position
+    // Find target position and insert
     let targetIndex = order.indexOf(targetId);
     if (!insertBefore) {
       targetIndex++;
     }
-
-    // Insert at new position
     order.splice(targetIndex, 0, draggedId);
 
+    // Save custom order (Note: this only affects plugin display, not Figma's native panel)
     setVariableOrder(order);
     await fetchData();
     figma.ui.postMessage({ type: 'update-success' });
   } catch (error: any) {
+    console.error('[Plugin] Reorder error:', error);
     figma.ui.postMessage({ type: 'update-error', error: error.message });
   }
 }
@@ -647,16 +659,24 @@ async function checkForChanges() {
   const variables = await figma.variables.getLocalVariablesAsync();
 
   const collectionData = collections.map(c => ({ id: c.id, name: c.name }));
-  const variableData = await Promise.all(variables.map(async v => {
-    const modeId = Object.keys(v.valuesByMode)[0];
-    return {
-      id: v.id,
-      collectionId: v.variableCollectionId,
-      name: v.name,
-      resolvedType: v.resolvedType,
-      value: await formatValue(v.valuesByMode[modeId], v.resolvedType)
-    };
-  }));
+
+  // Build variable data using same collection order as fetchData
+  let variableData: { id: string; collectionId: string; name: string; resolvedType: string; value: string }[] = [];
+  for (const collection of collections) {
+    for (const varId of collection.variableIds) {
+      const variable = variables.find(v => v.id === varId);
+      if (variable) {
+        const modeId = Object.keys(variable.valuesByMode)[0];
+        variableData.push({
+          id: variable.id,
+          collectionId: variable.variableCollectionId,
+          name: variable.name,
+          resolvedType: variable.resolvedType,
+          value: await formatValue(variable.valuesByMode[modeId], variable.resolvedType)
+        });
+      }
+    }
+  }
 
   const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
 
@@ -675,7 +695,10 @@ fetchData();
 figma.ui.onmessage = async (msg: any) => {
   switch (msg.type) {
     case 'refresh':
+      console.log('[Plugin] Refresh received');
+      setVariableOrder([]); // Clear custom order on refresh to match Figma's order
       await fetchData();
+      console.log('[Plugin] Refresh complete');
       break;
 
     case 'create-collection':
@@ -740,6 +763,11 @@ figma.ui.onmessage = async (msg: any) => {
 
     case 'reorder-variable':
       await reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore);
+      break;
+
+    case 'reset-order':
+      setVariableOrder([]);
+      await fetchData();
       break;
 
     case 'resize':

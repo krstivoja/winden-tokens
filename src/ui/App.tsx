@@ -26,7 +26,9 @@ export function App() {
   // Handle plugin messages
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
+      console.log('[UI] data-loaded received:', msg.collections?.length, 'collections,', msg.variables?.length, 'variables');
       setData(msg.collections || [], msg.variables || []);
+      setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },
     'update-success': () => {
       showStatus('Saved', 'success');

@@ -5,14 +5,13 @@ import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
-import { TypeIcon, DragIcon, CopyIcon, TrashIcon } from '../Icons';
+import { TypeIcon, CopyIcon, TrashIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
 
 interface TableRowProps {
   variable: VariableData;
-  rowIndex: number;
   isGrouped: boolean;
   isHidden?: boolean;
   groupName?: string;
@@ -23,7 +22,6 @@ interface TableRowProps {
 
 export const TableRow = memo(function TableRow({
   variable,
-  rowIndex,
   isGrouped,
   isHidden = false,
   groupName = '',
@@ -127,9 +125,6 @@ export const TableRow = memo(function TableRow({
     >
       <td>
         <div className="name-cell">
-          <span className="drag-handle" title="Drag to reorder" draggable="true">
-            <DragIcon />
-          </span>
           <span className={`type-icon ${variable.resolvedType}`}>
             <TypeIcon type={variable.resolvedType} />
           </span>
