@@ -127,7 +127,7 @@ export const TableRow = memo(function TableRow({
     >
       <td>
         <div className="name-cell">
-          <span className="drag-handle" title="Drag to reorder" draggable>
+          <span className="drag-handle" title="Drag to reorder" draggable="true">
             <DragIcon />
           </span>
           <span className={`type-icon ${variable.resolvedType}`}>
