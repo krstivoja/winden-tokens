@@ -3,12 +3,11 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*.*.*'
       - '[0-9]*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: 'Release version (e.g., 1.0.0)'
         required: true
         type: string
 
@@ -94,3 +93,14 @@ jobs:
           name: tokens-manager-plugin-${{ steps.get_version.outputs.version }}
           path: tokens-manager-plugin.zip
           retention-days: 90
+
+      - name: Deploy to Figma Community
+        uses: typper-io/figma-plugin-deploy@v1
+        with:
+          plugin-id: '1597659998667042080'
+          team-id: ${{ secrets.FIGMA_TEAM_ID }}
+          release-notes: 'Release ${{ steps.get_version.outputs.version }}'
+        env:
+          FIGMA_EMAIL: ${{ secrets.FIGMA_EMAIL }}
+          FIGMA_PASSWORD: ${{ secrets.FIGMA_PASSWORD }}
+          FIGMA_TOTP_SECRET: ${{ secrets.FIGMA_TOTP_SECRET }}
