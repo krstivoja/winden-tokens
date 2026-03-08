@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { PlusIcon, ShadesIcon, StepsIcon, SearchIcon } from '../Icons';
+import { PlusIcon, SearchIcon } from '../Icons';
 import { AddMenu } from './AddMenu';
 import { useModalContext } from '../Modals/ModalContext';
 
@@ -13,7 +13,7 @@ interface ToolbarProps {
 
 export function Toolbar({ status }: ToolbarProps) {
   const { collections, selectedCollectionId, setSelectedCollectionId, setSearchQuery, getFilteredCount, searchQuery } = useAppContext();
-  const { openInputModal, openShadesModal, openStepsModal } = useModalContext();
+  const { openInputModal } = useModalContext();
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [addMenuPosition, setAddMenuPosition] = useState({ top: 0, left: 0 });
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -100,24 +100,6 @@ export function Toolbar({ status }: ToolbarProps) {
         >
           <span className="icon"><PlusIcon /></span>
           Add Variable
-        </button>
-        <button
-          id="shades-btn"
-          className="btn"
-          title="Generate Color Shades"
-          onClick={() => openShadesModal()}
-        >
-          <span className="icon"><ShadesIcon /></span>
-          Shades
-        </button>
-        <button
-          id="steps-btn"
-          className="btn"
-          title="Generate Number Steps"
-          onClick={() => openStepsModal()}
-        >
-          <span className="icon"><StepsIcon /></span>
-          Steps
         </button>
       </div>
 

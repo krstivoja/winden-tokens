@@ -5,7 +5,7 @@ import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
-import { TypeIcon, CopyIcon, TrashIcon } from '../Icons';
+import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
@@ -30,7 +30,7 @@ export const TableRow = memo(function TableRow({
   colorVariables,
 }: TableRowProps) {
   const { setSingleContrastColor } = useAppContext();
-  const { openColorPicker, openColorReference } = useModalContext();
+  const { openColorPicker, openColorReference, openShadesModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
@@ -100,6 +100,11 @@ export const TableRow = memo(function TableRow({
     setShowContrastPicker(false);
     setSingleContrastColor(variable.id, null);
   }, [setSingleContrastColor, variable.id]);
+
+  const handleShadesClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    openShadesModal({ groupName: variable.name });
+  }, [openShadesModal, variable.name]);
 
   // Close picker when clicking outside
   useEffect(() => {
@@ -195,6 +200,18 @@ export const TableRow = memo(function TableRow({
             )}
           </>
         ) : null}
+      </td>
+      <td className="modifier-cell">
+        {!isGrouped && variable.resolvedType === 'COLOR' && (
+          <button
+            className="modifier-btn"
+            onClick={handleShadesClick}
+            title="Generate shades"
+          >
+            <span className="icon"><ShadesIcon /></span>
+            Shades
+          </button>
+        )}
       </td>
       <td>
         <div className="row-actions">

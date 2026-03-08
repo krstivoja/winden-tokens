@@ -58,6 +58,50 @@ async function fetchData() {
             return indexA - indexB;
         });
     }
+    // Sort shades numerically within each group (e.g., color/50, color/100, color/200)
+    // Group by base name (everything before the last slash)
+    const groupMap = new Map();
+    const nonGrouped = [];
+    for (const variable of variableData) {
+        const match = variable.name.match(/^(.+)\/(\d+)$/);
+        if (match) {
+            const baseName = match[1];
+            if (!groupMap.has(baseName)) {
+                groupMap.set(baseName, []);
+            }
+            groupMap.get(baseName).push(variable);
+        }
+        else {
+            nonGrouped.push(variable);
+        }
+    }
+    // Sort each group numerically
+    const extractNumber = (name) => {
+        const match = name.match(/\/(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+    };
+    for (const group of groupMap.values()) {
+        group.sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
+    }
+    // Rebuild variableData with sorted groups
+    // Maintain the original position of the first item in each group
+    const sortedVariableData = [];
+    const processedGroups = new Set();
+    for (const variable of variableData) {
+        const match = variable.name.match(/^(.+)\/\d+$/);
+        if (match) {
+            const baseName = match[1];
+            if (!processedGroups.has(baseName)) {
+                processedGroups.add(baseName);
+                // Add all variables from this group in sorted order
+                sortedVariableData.push(...groupMap.get(baseName));
+            }
+        }
+        else {
+            sortedVariableData.push(variable);
+        }
+    }
+    variableData = sortedVariableData;
     // Update hash for change detection
     lastDataHash = JSON.stringify({ collections: collectionData, variables: variableData });
     console.log('[Plugin] Sending data-loaded with', collectionData.length, 'collections and', variableData.length, 'variables');
@@ -380,9 +424,13 @@ async function updateShades(collectionId, deleteIds, shades) {
                 existingVars.push({ id, variable });
             }
         }
-        // Sort both existing variables and new shades by name to match them up
-        existingVars.sort((a, b) => a.variable.name.localeCompare(b.variable.name));
-        const sortedShades = [...shades].sort((a, b) => a.name.localeCompare(b.name));
+        // Sort both existing variables and new shades by numeric suffix to match them up
+        const extractNumber = (name) => {
+            const match = name.match(/\/(\d+)$/);
+            return match ? parseInt(match[1], 10) : 0;
+        };
+        existingVars.sort((a, b) => extractNumber(a.variable.name) - extractNumber(b.variable.name));
+        const sortedShades = [...shades].sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
         // Update existing variables where possible
         const reusedCount = Math.min(existingVars.length, sortedShades.length);
         for (let i = 0; i < reusedCount; i++) {
@@ -470,14 +518,12 @@ async function updateSteps(collectionId, deleteIds, steps) {
                 existingVars.push({ id, variable });
             }
         }
-        // Sort both existing variables and new steps by name to match them up
-        existingVars.sort((a, b) => a.variable.name.localeCompare(b.variable.name));
-        const sortedSteps = [...steps].sort((a, b) => a.name.localeCompare(b.name));
-        // Update existing variables where possible
-        const reusedCount = Math.min(existingVars.length, sortedSteps.length);
+        // Steps arrive in the correct order from UI, so preserve that order
+        // Match existing variables to new steps by index position
+        const reusedCount = Math.min(existingVars.length, steps.length);
         for (let i = 0; i < reusedCount; i++) {
             const variable = existingVars[i].variable;
-            const step = sortedSteps[i];
+            const step = steps[i];
             // Update name and value
             variable.name = step.name;
             const parsedValue = await parseValue(step.value, 'FLOAT');
@@ -488,8 +534,8 @@ async function updateSteps(collectionId, deleteIds, steps) {
             existingVars[i].variable.remove();
         }
         // Create new variables if we need more than we had
-        for (let i = reusedCount; i < sortedSteps.length; i++) {
-            const step = sortedSteps[i];
+        for (let i = reusedCount; i < steps.length; i++) {
+            const step = steps[i];
             const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
             const parsedValue = await parseValue(step.value, 'FLOAT');
             variable.setValueForMode(modeId, parsedValue);
@@ -617,6 +663,56 @@ async function checkForChanges() {
             }
         }
     }
+    // Apply custom order if exists (same as fetchData)
+    const order = getVariableOrder();
+    if (order.length > 0) {
+        variableData.sort((a, b) => {
+            const indexA = order.indexOf(a.id);
+            const indexB = order.indexOf(b.id);
+            if (indexA === -1 && indexB === -1)
+                return 0;
+            if (indexA === -1)
+                return 1;
+            if (indexB === -1)
+                return -1;
+            return indexA - indexB;
+        });
+    }
+    // Sort shades numerically within each group (same as fetchData)
+    const groupMap = new Map();
+    const extractNumber = (name) => {
+        const match = name.match(/\/(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+    };
+    for (const variable of variableData) {
+        const match = variable.name.match(/^(.+)\/(\d+)$/);
+        if (match) {
+            const baseName = match[1];
+            if (!groupMap.has(baseName)) {
+                groupMap.set(baseName, []);
+            }
+            groupMap.get(baseName).push(variable);
+        }
+    }
+    for (const group of groupMap.values()) {
+        group.sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
+    }
+    const sortedVariableData = [];
+    const processedGroups = new Set();
+    for (const variable of variableData) {
+        const match = variable.name.match(/^(.+)\/\d+$/);
+        if (match) {
+            const baseName = match[1];
+            if (!processedGroups.has(baseName)) {
+                processedGroups.add(baseName);
+                sortedVariableData.push(...groupMap.get(baseName));
+            }
+        }
+        else {
+            sortedVariableData.push(variable);
+        }
+    }
+    variableData = sortedVariableData;
     const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
     if (lastDataHash && currentHash !== lastDataHash) {
         figma.ui.postMessage({ type: 'changes-detected' });

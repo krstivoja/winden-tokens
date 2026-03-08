@@ -93,11 +93,13 @@ const DEFAULT_DARK_VALUE = 90;
 export function ShadesModal() {
   const { modals, closeShadesModal, openColorPicker } = useModalContext();
   const { variables, selectedCollectionId } = useAppContext();
-  const isOpen = modals.shadesModal;
+  const isOpen = !!modals.shadesModal;
+  const preSelectedGroup = modals.shadesModal?.groupName || '';
 
   const [sourceColorId, setSourceColorId] = useState('');
   const [groupName, setGroupName] = useState('');
   const [baseColor, setBaseColor] = useState('#000000');
+  const [originalBaseColor, setOriginalBaseColor] = useState('#000000'); // Store original color for restore
   const [shadeCount, setShadeCount] = useState(11);
   const [existingGroup, setExistingGroup] = useState(false);
 
@@ -165,15 +167,40 @@ export function ShadesModal() {
     }));
   }, [variables, selectedCollectionId]);
 
-  // Reset curves when modal opens
+  // Reset curves when modal opens and auto-select group
   useEffect(() => {
     if (isOpen) {
       setLightnessCurve(createDefaultHandles());
       setSaturationCurve(createDefaultHandles());
       setHueCurve(createDefaultHandles());
       setActiveProperty('lightness');
+      setExistingGroup(false); // Reset existing group flag
+
+      // Auto-select the pre-selected group
+      if (preSelectedGroup) {
+        setSourceColorId(preSelectedGroup);
+        setGroupName(preSelectedGroup);
+
+        const group = colorGroups.find(g => g.name === preSelectedGroup);
+        if (group?.firstColor) {
+          const rgb = parseColorToRgb(group.firstColor.value);
+          if (rgb) {
+            const hexColor = rgbObjToHex(rgb);
+            setBaseColor(hexColor);
+            setOriginalBaseColor(hexColor); // Store original for restore
+          }
+        }
+
+        const allColors = variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
+        const shadePattern = new RegExp(`^${preSelectedGroup}/\\d+$`);
+        const existingShades = allColors.filter(cv => shadePattern.test(cv.name));
+        setExistingGroup(existingShades.length > 0);
+        if (existingShades.length > 0) {
+          setShadeCount(existingShades.length);
+        }
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, preSelectedGroup, colorGroups, variables, selectedCollectionId]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const name = e.target.value;
@@ -187,7 +214,9 @@ export function ShadesModal() {
         if (group.firstColor) {
           const rgb = parseColorToRgb(group.firstColor.value);
           if (rgb) {
-            setBaseColor(rgbObjToHex(rgb));
+            const hexColor = rgbObjToHex(rgb);
+            setBaseColor(hexColor);
+            setOriginalBaseColor(hexColor); // Store original for restore
           }
         }
 
@@ -289,7 +318,7 @@ export function ShadesModal() {
       deleteIds: existingShadeIds,
       newColor: {
         name: groupName,
-        value: hexToRgb(baseColor),
+        value: hexToRgb(originalBaseColor), // Use original color to restore
       },
     });
     closeShadesModal();
@@ -557,19 +586,21 @@ export function ShadesModal() {
           </button>
         </div>
         <div className="modal-body">
-          <div className="form-group">
-            <label>Select Color Group</label>
-            <select
-              className="form-input"
-              value={sourceColorId}
-              onChange={handleSourceChange}
-            >
-              <option value="">-- Select a group --</option>
-              {colorGroups.map(g => (
-                <option key={g.name} value={g.name}>{g.name}</option>
-              ))}
-            </select>
-          </div>
+          {!preSelectedGroup && (
+            <div className="form-group">
+              <label>Select Color Group</label>
+              <select
+                className="form-input"
+                value={sourceColorId}
+                onChange={handleSourceChange}
+              >
+                <option value="">-- Select a group --</option>
+                {colorGroups.map(g => (
+                  <option key={g.name} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {sourceColorId && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

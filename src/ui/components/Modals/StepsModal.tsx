@@ -28,7 +28,8 @@ const STEPS_PRESETS = [
 export function StepsModal() {
   const { modals, closeStepsModal } = useModalContext();
   const { variables, selectedCollectionId } = useAppContext();
-  const isOpen = modals.stepsModal;
+  const isOpen = !!modals.stepsModal;
+  const preSelectedGroup = modals.stepsModal?.groupName || '';
 
   const [sourceNumberId, setSourceNumberId] = useState('');
   const [groupName, setGroupName] = useState('');
@@ -67,6 +68,20 @@ export function StepsModal() {
       firstVar: data.firstVar,
     }));
   }, [numberVariables]);
+
+  // Auto-select pre-selected group when modal opens
+  React.useEffect(() => {
+    if (isOpen && preSelectedGroup) {
+      setSourceNumberId(preSelectedGroup);
+      setGroupName(preSelectedGroup);
+
+      const group = numberGroups.find(g => g.name === preSelectedGroup);
+      if (group?.firstVar) {
+        setBaseValue(parseFloat(group.firstVar.value) || 16);
+        setExistingGroup(group.count > 1);
+      }
+    }
+  }, [isOpen, preSelectedGroup, numberGroups]);
 
   const stepsArray = useMemo(() =>
     stepsList.split(',').map(s => s.trim()).filter(Boolean),
@@ -158,21 +173,23 @@ export function StepsModal() {
           </button>
         </div>
         <div className="modal-body">
-          <div className="form-group">
-            <label>Select Number Group</label>
-            <select
-              className="form-input"
-              value={sourceNumberId}
-              onChange={handleSourceChange}
-            >
-              <option value="">-- Select a group --</option>
-              {numberGroups.map(g => (
-                <option key={g.name} value={g.name}>
-                  {g.name} ({g.count})
-                </option>
-              ))}
-            </select>
-          </div>
+          {!preSelectedGroup && (
+            <div className="form-group">
+              <label>Select Number Group</label>
+              <select
+                className="form-input"
+                value={sourceNumberId}
+                onChange={handleSourceChange}
+              >
+                <option value="">-- Select a group --</option>
+                {numberGroups.map(g => (
+                  <option key={g.name} value={g.name}>
+                    {g.name} ({g.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {sourceNumberId && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

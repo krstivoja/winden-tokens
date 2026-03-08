@@ -5,7 +5,7 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon } from '../Icons';
+import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
 import { ContrastPicker } from './ContrastPicker';
 
 interface GroupHeaderProps {
@@ -16,7 +16,7 @@ interface GroupHeaderProps {
 
 export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderProps) {
   const { toggleGroup, getGroupContrastColor, setGroupContrastColor, variables: allVariables, selectedCollectionId } = useAppContext();
-  const { openBulkEdit, openColorPicker, openColorReference } = useModalContext();
+  const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
 
@@ -78,6 +78,16 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     setGroupContrastColor(groupName, null);
   }, [setGroupContrastColor, groupName]);
 
+  const handleShadesClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    openShadesModal({ groupName });
+  }, [openShadesModal, groupName]);
+
+  const handleStepsClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    openStepsModal({ groupName });
+  }, [openStepsModal, groupName]);
+
   // Close picker when clicking outside
   React.useEffect(() => {
     if (!showContrastPicker) return;
@@ -138,6 +148,28 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
             onReferenceColor={handleReferenceContrastColor}
             onClear={handleClearContrastColor}
           />
+        )}
+      </td>
+      <td className="modifier-cell">
+        {groupType === 'COLOR' && (
+          <button
+            className="modifier-btn"
+            onClick={handleShadesClick}
+            title="Generate shades"
+          >
+            <span className="icon"><ShadesIcon /></span>
+            Shades
+          </button>
+        )}
+        {groupType === 'FLOAT' && (
+          <button
+            className="modifier-btn"
+            onClick={handleStepsClick}
+            title="Generate steps"
+          >
+            <span className="icon"><StepsIcon /></span>
+            Steps
+          </button>
         )}
       </td>
       <td>

@@ -26,13 +26,21 @@ interface BulkEditConfig {
   groupName: string;
 }
 
+interface ShadesModalConfig {
+  groupName: string;
+}
+
+interface StepsModalConfig {
+  groupName: string;
+}
+
 interface ModalState {
   inputModal: InputModalConfig | null;
   colorPicker: ColorPickerConfig | null;
   colorReference: ColorReferenceConfig | null;
   bulkEdit: BulkEditConfig | null;
-  shadesModal: boolean;
-  stepsModal: boolean;
+  shadesModal: ShadesModalConfig | null;
+  stepsModal: StepsModalConfig | null;
 }
 
 interface ModalContextValue {
@@ -45,9 +53,9 @@ interface ModalContextValue {
   closeColorReference: () => void;
   openBulkEdit: (config: BulkEditConfig) => void;
   closeBulkEdit: () => void;
-  openShadesModal: () => void;
+  openShadesModal: (config: ShadesModalConfig) => void;
   closeShadesModal: () => void;
-  openStepsModal: () => void;
+  openStepsModal: (config: StepsModalConfig) => void;
   closeStepsModal: () => void;
 }
 
@@ -59,8 +67,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     colorPicker: null,
     colorReference: null,
     bulkEdit: null,
-    shadesModal: false,
-    stepsModal: false,
+    shadesModal: null,
+    stepsModal: null,
   });
 
   const openInputModal = useCallback((config: InputModalConfig) => {
@@ -95,20 +103,20 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     setModals(prev => ({ ...prev, bulkEdit: null }));
   }, []);
 
-  const openShadesModal = useCallback(() => {
-    setModals(prev => ({ ...prev, shadesModal: true }));
+  const openShadesModal = useCallback((config: ShadesModalConfig) => {
+    setModals(prev => ({ ...prev, shadesModal: config }));
   }, []);
 
   const closeShadesModal = useCallback(() => {
-    setModals(prev => ({ ...prev, shadesModal: false }));
+    setModals(prev => ({ ...prev, shadesModal: null }));
   }, []);
 
-  const openStepsModal = useCallback(() => {
-    setModals(prev => ({ ...prev, stepsModal: true }));
+  const openStepsModal = useCallback((config: StepsModalConfig) => {
+    setModals(prev => ({ ...prev, stepsModal: config }));
   }, []);
 
   const closeStepsModal = useCallback(() => {
-    setModals(prev => ({ ...prev, stepsModal: false }));
+    setModals(prev => ({ ...prev, stepsModal: null }));
   }, []);
 
   const value: ModalContextValue = {

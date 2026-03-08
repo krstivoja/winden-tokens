@@ -43,6 +43,11 @@
       padding-left: 10px;
     }
 
+    &.col-modifier {
+      width: 100px;
+      padding-left: 10px;
+    }
+
     &.col-actions {
       width: 80px;
       text-align: center;
@@ -314,4 +319,42 @@ tr.drag-over-below {
   border-radius: 3px;
   border: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+// Modifier cell and button
+.modifier-cell {
+  padding: 0 10px !important;
+}
+
+.modifier-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
 }
