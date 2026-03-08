@@ -365,22 +365,41 @@ async function createShades(collectionId, shades) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
-// Update color shades (delete old, create new)
+// Update color shades (update existing, delete extras, create new ones as needed)
 async function updateShades(collectionId, deleteIds, shades) {
     try {
-        // Delete old shades
-        for (const id of deleteIds) {
-            const variable = await figma.variables.getVariableByIdAsync(id);
-            if (variable) {
-                variable.remove();
-            }
-        }
-        // Create new shades
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
-        for (const shade of shades) {
+        // Get existing variables from the deleteIds list
+        const existingVars = [];
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                existingVars.push({ id, variable });
+            }
+        }
+        // Sort both existing variables and new shades by name to match them up
+        existingVars.sort((a, b) => a.variable.name.localeCompare(b.variable.name));
+        const sortedShades = [...shades].sort((a, b) => a.name.localeCompare(b.name));
+        // Update existing variables where possible
+        const reusedCount = Math.min(existingVars.length, sortedShades.length);
+        for (let i = 0; i < reusedCount; i++) {
+            const variable = existingVars[i].variable;
+            const shade = sortedShades[i];
+            // Update name and value
+            variable.name = shade.name;
+            const parsedValue = await parseValue(shade.value, 'COLOR');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        // Delete excess variables if we have more existing than needed
+        for (let i = reusedCount; i < existingVars.length; i++) {
+            existingVars[i].variable.remove();
+        }
+        // Create new variables if we need more than we had
+        for (let i = reusedCount; i < sortedShades.length; i++) {
+            const shade = sortedShades[i];
             const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
             const parsedValue = await parseValue(shade.value, 'COLOR');
             variable.setValueForMode(modeId, parsedValue);
@@ -436,22 +455,41 @@ async function createSteps(collectionId, steps) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
-// Update number steps (delete old, create new)
+// Update number steps (update existing, delete extras, create new ones as needed)
 async function updateSteps(collectionId, deleteIds, steps) {
     try {
-        // Delete old steps
-        for (const id of deleteIds) {
-            const variable = await figma.variables.getVariableByIdAsync(id);
-            if (variable) {
-                variable.remove();
-            }
-        }
-        // Create new steps
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
-        for (const step of steps) {
+        // Get existing variables from the deleteIds list
+        const existingVars = [];
+        for (const id of deleteIds) {
+            const variable = await figma.variables.getVariableByIdAsync(id);
+            if (variable) {
+                existingVars.push({ id, variable });
+            }
+        }
+        // Sort both existing variables and new steps by name to match them up
+        existingVars.sort((a, b) => a.variable.name.localeCompare(b.variable.name));
+        const sortedSteps = [...steps].sort((a, b) => a.name.localeCompare(b.name));
+        // Update existing variables where possible
+        const reusedCount = Math.min(existingVars.length, sortedSteps.length);
+        for (let i = 0; i < reusedCount; i++) {
+            const variable = existingVars[i].variable;
+            const step = sortedSteps[i];
+            // Update name and value
+            variable.name = step.name;
+            const parsedValue = await parseValue(step.value, 'FLOAT');
+            variable.setValueForMode(modeId, parsedValue);
+        }
+        // Delete excess variables if we have more existing than needed
+        for (let i = reusedCount; i < existingVars.length; i++) {
+            existingVars[i].variable.remove();
+        }
+        // Create new variables if we need more than we had
+        for (let i = reusedCount; i < sortedSteps.length; i++) {
+            const step = sortedSteps[i];
             const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
             const parsedValue = await parseValue(step.value, 'FLOAT');
             variable.setValueForMode(modeId, parsedValue);
