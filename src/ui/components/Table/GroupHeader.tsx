@@ -98,12 +98,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     >
       <td>
         <div className="group-header">
-          <span
-            className={`group-toggle ${isCollapsed ? 'collapsed' : ''}`}
-            onClick={handleToggle}
-          >
-            <ChevronDownIcon />
-          </span>
           <span className={`type-icon ${groupType}`}>
             <TypeIcon type={groupType} />
           </span>
@@ -112,6 +106,12 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
             <span style={{ color: 'var(--text-dim)', fontWeight: 400, fontSize: '10px' }}>
               {' '}({variables.length})
             </span>
+          </span>
+          <span
+            className={`group-toggle ${isCollapsed ? 'collapsed' : ''}`}
+            onClick={handleToggle}
+          >
+            <ChevronDownIcon />
           </span>
         </div>
       </td>

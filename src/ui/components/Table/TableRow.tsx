@@ -145,15 +145,32 @@ export const TableRow = memo(function TableRow({
       </td>
       <td className="accessibility-cell">
         {contrastResult ? (
-          <div className="contrast-info">
-            <span className="contrast-ratio">{contrastResult.ratio}:1</span>
-            <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
-              {contrastResult.aa ? '✓' : '✗'}AA
-            </span>
-            <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
-              {contrastResult.aaa ? '✓' : '✗'}AAA
-            </span>
-          </div>
+          <>
+            <div
+              className="contrast-info"
+              onClick={handleContrastClick}
+              style={{ cursor: 'pointer' }}
+              title="Change contrast color"
+            >
+              <span className="contrast-ratio">{contrastResult.ratio}:1</span>
+              <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
+                {contrastResult.aa ? '✓' : '✗'}AA
+              </span>
+              <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
+                {contrastResult.aaa ? '✓' : '✗'}AAA
+              </span>
+              <span className="dropdown-arrow">▾</span>
+            </div>
+            {showContrastPicker && (
+              <ContrastPicker
+                position={contrastPickerPosition}
+                contrastColor={contrastColor}
+                onPickColor={handlePickContrastColor}
+                onReferenceColor={handleReferenceContrastColor}
+                onClear={handleClearContrastColor}
+              />
+            )}
+          </>
         ) : !isGrouped && variable.resolvedType === 'COLOR' ? (
           <>
             <div

@@ -39,7 +39,7 @@
     }
 
     &.col-accessibility {
-      width: 140px;
+      width: 200px;
       padding-left: 10px;
     }
 
@@ -82,7 +82,7 @@
 .group-header {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 0 10px;
   font-weight: 600;
   font-size: 12px;
@@ -92,8 +92,8 @@
 }
 
 .group-toggle {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,12 +101,12 @@
   transition: transform 0.15s;
 
   &.collapsed {
-    transform: rotate(-90deg);
+    transform: rotate(90deg);
   }
 
   svg {
-    width: 10px;
-    height: 10px;
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -227,9 +227,10 @@ tr.drag-over-below {
 }
 
 .dropdown-arrow {
-  font-size: 10px;
+  font-size: 15px;
   color: var(--text-dim);
   margin-left: auto;
+  line-height: 1;
 }
 
 .single-contrast-trigger,
@@ -238,10 +239,11 @@ tr.drag-over-below {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 0;
   border-radius: 4px;
   font-size: 11px;
   color: var(--text-dim);
+  height: 100%;
 
   &:hover {
     background: var(--bg-hover);
@@ -262,11 +264,10 @@ tr.drag-over-below {
 }
 
 .accessibility-cell {
-  padding: 0 10px !important;
+  padding: 0 !important;
 
-  .single-contrast-trigger,
-  .group-contrast-trigger {
-    padding: 0 !important;
+  > * {
+    padding: 0 10px;
   }
 }
 
@@ -275,6 +276,14 @@ tr.drag-over-below {
   align-items: center;
   gap: 6px;
   font-size: 11px;
+  padding: 0;
+  border-radius: 4px;
+  transition: background 0.15s;
+  height: 100%;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
 }
 
 .contrast-ratio {
