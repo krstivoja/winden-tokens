@@ -5,7 +5,7 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { ShadeCurveHandles, VariableData } from '../../types';
-import { CloseIcon } from '../Icons';
+import { CloseIcon, RefreshIcon } from '../Icons';
 import {
   rgbObjToHex,
   parseColorToRgb,
@@ -57,22 +57,6 @@ function curveYToValue(y: number, property: CurveProperty, minY: number, maxY: n
   const clampedY = clamp(y, minY, maxY);
   const normalized = (clampedY - minY) / (maxY - minY);
   return clamp(min + normalized * (max - min), min, max);
-}
-
-function formatCurveRange(property: CurveProperty): string {
-  if (property === 'lightness') {
-    return '0 = white, 50 = source, 100 = black';
-  }
-
-  const { min, max, unit } = getCurvePropertyValueRange(property);
-  const formatValue = (value: number) => {
-    if (unit === 'deg') {
-      return `${value > 0 ? '+' : ''}${value}${String.fromCharCode(176)}`;
-    }
-    return `${value > 0 ? '+' : ''}${value}${unit}`;
-  };
-
-  return `${formatValue(min)} to ${formatValue(max)}`;
 }
 
 function getCurvePropertyLabel(property: CurveProperty): string {
@@ -773,40 +757,46 @@ export function ShadesModal() {
                 </div>
                 <div className="form-group">
                   <label>Curve Property</label>
-                  <select
-                    className="form-input"
-                    value={activeProperty}
-                    onChange={e => setActiveProperty(e.target.value as CurveProperty)}
-                    style={{ width: 120 }}
-                  >
-                    <option value="lightness">Lightness</option>
-                    <option value="saturation">Saturation</option>
-                    <option value="hue">Hue</option>
-                  </select>
+                  <div className="curve-property-toggle" role="tablist" aria-label="Curve Property">
+                    {CURVE_PROPERTIES.map(property => {
+                      const label = getCurvePropertyLabel(property);
+                      const isActive = activeProperty === property;
+                      const isEdited = curveResetState[property];
+
+                      return (
+                        <div
+                          key={property}
+                          className={`curve-property-item ${isActive ? 'active' : ''} ${isEdited ? 'has-reset' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className={`curve-property-btn ${isActive ? 'active' : ''}`}
+                            onClick={() => setActiveProperty(property)}
+                            aria-pressed={isActive}
+                          >
+                            {label}
+                          </button>
+                          {isEdited && (
+                            <button
+                              type="button"
+                              className="curve-property-reset"
+                              onClick={() => handleResetCurve(property)}
+                              aria-label={`Reset ${label}`}
+                              title={`Reset ${label}`}
+                            >
+                              <RefreshIcon />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
 	              {/* Curve Editor + Preview Combined */}
 	              <div className="form-group">
-	                <div className="curve-toolbar">
-	                  <span className="curve-range-hint">
-	                    {getCurvePropertyLabel(activeProperty)}: {formatCurveRange(activeProperty)}
-	                  </span>
-	                  <div className="curve-reset-group">
-	                    {CURVE_PROPERTIES.map(property => (
-	                      <button
-	                        key={property}
-	                        type="button"
-	                        className="btn curve-reset-btn"
-	                        onClick={() => handleResetCurve(property)}
-	                        disabled={!curveResetState[property]}
-	                      >
-	                        Reset {getCurvePropertyLabel(property)}
-	                      </button>
-	                    ))}
-	                  </div>
-	                </div>
-	                <div className="curve-preview-combined">
+		                <div className="curve-preview-combined">
 	                  <div
 	                    ref={containerRef}
                     className="curve-editor-container"
@@ -841,7 +831,7 @@ export function ShadesModal() {
             onClick={handleGenerate}
             disabled={!groupName || generatedShades.length === 0}
           >
-            Generate
+            {existingGroup ? 'Update' : 'Generate'}
           </button>
         </div>
       </div>

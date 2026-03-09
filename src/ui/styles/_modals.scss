@@ -22,7 +22,7 @@
   overflow: auto;
 
   &.modal-wide {
-    width: 480px;
+    width: 600px;
   }
 }
 
@@ -194,31 +194,78 @@
   }
 }
 
-.curve-toolbar {
+.curve-property-toggle {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
-  margin-bottom: 8px;
+  overflow-x: auto;
 }
 
-.curve-range-hint {
+.curve-property-item {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+.curve-property-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
   font-size: 11px;
-  color: var(--text-dim);
-}
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 
-.curve-reset-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.curve-reset-btn {
-  &:disabled {
-    opacity: 0.45;
-    cursor: default;
+  &:hover {
+    background: var(--bg-hover);
   }
+
+  &.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+}
+
+.curve-property-item.has-reset .curve-property-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.curve-property-reset {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 999px 999px 0;
+  background: var(--bg);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.curve-property-item.active .curve-property-reset {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 .curve-svg {
