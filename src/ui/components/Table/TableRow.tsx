@@ -29,11 +29,16 @@ export const TableRow = memo(function TableRow({
   contrastColor,
   colorVariables,
 }: TableRowProps) {
-  const { setSingleContrastColor } = useAppContext();
+  const { setSingleContrastColor, getShadeGroupBySourceId } = useAppContext();
   const { openColorPicker, openColorReference, openShadesModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
+
+  const shadeGroup = useMemo(() => {
+    if (isGrouped || variable.resolvedType !== 'COLOR') return null;
+    return getShadeGroupBySourceId(variable.id);
+  }, [getShadeGroupBySourceId, isGrouped, variable.id, variable.resolvedType]);
 
   // Calculate contrast for color variables
   const contrastResult = useMemo(() => {
@@ -204,9 +209,9 @@ export const TableRow = memo(function TableRow({
       <td className="modifier-cell">
         {!isGrouped && variable.resolvedType === 'COLOR' && (
           <button
-            className="modifier-btn"
+            className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
             onClick={handleShadesClick}
-            title="Generate shades"
+            title={shadeGroup?.status === 'dirty' ? 'Managed shades need refresh' : 'Generate shades'}
           >
             <span className="icon"><ShadesIcon /></span>
             Shades

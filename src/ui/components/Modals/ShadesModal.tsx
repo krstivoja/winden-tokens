@@ -4,109 +4,64 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
+import { ShadeCurveHandles, VariableData } from '../../types';
 import { CloseIcon } from '../Icons';
 import {
-  rgbToHsv,
-  hsvToRgb,
   rgbObjToHex,
-  hexToRgbObj,
   parseColorToRgb,
   hexToRgb,
-  getShadeNames,
-  generateShadeColorsWithCurves,
-  RGB,
+  rgbToHex,
 } from '../../utils/color';
-
-// Curve handles for bezier curve control
-interface CurveHandles {
-  startValue: number;
-  handle1: { t: number; value: number };
-  handle2: { t: number; value: number };
-  endValue: number;
-}
+import {
+  buildShadePayload,
+  clamp,
+  createDefaultCurveHandles,
+  DEFAULT_SHADE_DARK_VALUE,
+  DEFAULT_SHADE_LIGHT_VALUE,
+  evaluateCurveAtNodes,
+} from '../../utils/shades';
 
 type CurveProperty = 'lightness' | 'saturation' | 'hue';
 type DragTarget = 'handle1' | 'handle2' | 'startNode' | 'endNode';
 
-// Default curve (flat line - no adjustment)
-function createDefaultHandles(): CurveHandles {
-  return {
-    startValue: 0,
-    handle1: { t: 0.25, value: 0 },
-    handle2: { t: 0.75, value: 0 },
-    endValue: 0,
-  };
+function isShadeVariableName(name: string): boolean {
+  return /^(.+)\/(\d+)$/.test(name);
 }
 
-// Cubic bezier math
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function cubicBezierAt(p0: number, p1: number, p2: number, p3: number, t: number): number {
-  const mt = 1 - t;
-  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
-}
+function getLegacyBaseColor(shades: VariableData[]): string {
+  const preferred =
+    shades.find(shade => /\/500$/.test(shade.name)) ||
+    shades[Math.floor(shades.length / 2)] ||
+    shades[0];
 
-function cubicBezierDerivative(p0: number, p1: number, p2: number, p3: number, t: number): number {
-  const mt = 1 - t;
-  return 3 * mt * mt * (p1 - p0) + 6 * mt * t * (p2 - p1) + 3 * t * t * (p3 - p2);
+  const rgb = preferred ? parseColorToRgb(preferred.value) : null;
+  return rgb ? rgbObjToHex(rgb) : '#000000';
 }
-
-function solveBezierTForX(x: number, x1: number, x2: number): number {
-  let t = clamp(x, 0, 1);
-  for (let i = 0; i < 5; i++) {
-    const xAt = cubicBezierAt(0, x1, x2, 1, t);
-    const dx = xAt - x;
-    if (Math.abs(dx) < 1e-4) break;
-    const d = cubicBezierDerivative(0, x1, x2, 1, t);
-    if (d === 0) break;
-    t = clamp(t - dx / d, 0, 1);
-  }
-  return t;
-}
-
-function evaluateCubicBezier(handles: CurveHandles, t: number): number {
-  const p0y = handles.startValue;
-  const p1y = handles.handle1.value;
-  const p2y = handles.handle2.value;
-  const p3y = handles.endValue;
-  const p1x = clamp(handles.handle1.t, 0, 1);
-  const p2x = clamp(handles.handle2.t, 0, 1);
-  const u = solveBezierTForX(t, p1x, p2x);
-  return cubicBezierAt(p0y, p1y, p2y, p3y, u);
-}
-
-function evaluateCurveAtNodes(handles: CurveHandles, count: number): number[] {
-  const values: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const t = count > 1 ? i / (count - 1) : 0;
-    values.push(evaluateCubicBezier(handles, t));
-  }
-  return values;
-}
-
-// Default lightness range
-const DEFAULT_LIGHT_VALUE = 5;
-const DEFAULT_DARK_VALUE = 90;
 
 export function ShadesModal() {
   const { modals, closeShadesModal, openColorPicker } = useModalContext();
-  const { variables, selectedCollectionId } = useAppContext();
+  const {
+    variables,
+    selectedCollectionId,
+    getShadeGroupByGroupName,
+    getShadeGroupBySourceId,
+  } = useAppContext();
   const isOpen = !!modals.shadesModal;
   const preSelectedGroup = modals.shadesModal?.groupName || '';
 
   const [sourceColorId, setSourceColorId] = useState('');
   const [groupName, setGroupName] = useState('');
   const [baseColor, setBaseColor] = useState('#000000');
-  const [originalBaseColor, setOriginalBaseColor] = useState('#000000'); // Store original color for restore
   const [shadeCount, setShadeCount] = useState(11);
-  const [existingGroup, setExistingGroup] = useState(false);
 
   // Curve states
-  const [lightnessCurve, setLightnessCurve] = useState<CurveHandles>(createDefaultHandles);
-  const [saturationCurve, setSaturationCurve] = useState<CurveHandles>(createDefaultHandles);
-  const [hueCurve, setHueCurve] = useState<CurveHandles>(createDefaultHandles);
+  const [lightnessCurve, setLightnessCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
+  const [saturationCurve, setSaturationCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
+  const [hueCurve, setHueCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
   const [activeProperty, setActiveProperty] = useState<CurveProperty>('lightness');
 
   // Drag state for curve editor
@@ -124,7 +79,7 @@ export function ShadesModal() {
 
   // Track container width for proper curve rendering
   useEffect(() => {
-    if (!isOpen || !sourceColorId) return;
+    if (!isOpen || !groupName) return;
 
     const updateWidth = () => {
       if (containerRef.current) {
@@ -142,110 +97,135 @@ export function ShadesModal() {
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', updateWidth);
     };
-  }, [isOpen, sourceColorId]);
+  }, [isOpen, groupName]);
 
-  // Get unique color groups
-  const colorGroups = useMemo(() => {
-    const allColors = variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
-    const groupMap = new Map<string, { count: number; firstColor: typeof allColors[0] | null }>();
-
-    allColors.forEach(v => {
-      const parts = v.name.split('/');
-      const groupName = parts.length > 1 ? parts[0] : v.name;
-      const existing = groupMap.get(groupName);
-      if (existing) {
-        existing.count++;
-      } else {
-        groupMap.set(groupName, { count: 1, firstColor: v });
-      }
-    });
-
-    return Array.from(groupMap.entries()).map(([name, data]) => ({
-      name,
-      count: data.count,
-      firstColor: data.firstColor,
-    }));
+  const sourceColors = useMemo(() => {
+    return variables
+      .filter(
+        variable =>
+          variable.collectionId === selectedCollectionId &&
+          variable.resolvedType === 'COLOR' &&
+          !isShadeVariableName(variable.name)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [variables, selectedCollectionId]);
 
-  // Reset curves when modal opens and auto-select group
-  useEffect(() => {
-    if (isOpen) {
-      setLightnessCurve(createDefaultHandles());
-      setSaturationCurve(createDefaultHandles());
-      setHueCurve(createDefaultHandles());
-      setActiveProperty('lightness');
-      setExistingGroup(false); // Reset existing group flag
+  const selectedSourceVariable = useMemo(() => {
+    if (!sourceColorId) return null;
+    return sourceColors.find(variable => variable.id === sourceColorId) || null;
+  }, [sourceColorId, sourceColors]);
 
-      // Auto-select the pre-selected group
-      if (preSelectedGroup) {
-        setSourceColorId(preSelectedGroup);
-        setGroupName(preSelectedGroup);
+  const legacyShadeVariables = useMemo(() => {
+    if (!groupName || !selectedCollectionId) return [];
+    const shadePattern = new RegExp(`^${escapeRegExp(groupName)}/\\d+$`);
+    return variables.filter(
+      variable =>
+        variable.collectionId === selectedCollectionId &&
+        variable.resolvedType === 'COLOR' &&
+        shadePattern.test(variable.name)
+    );
+  }, [groupName, selectedCollectionId, variables]);
 
-        const group = colorGroups.find(g => g.name === preSelectedGroup);
-        if (group?.firstColor) {
-          const rgb = parseColorToRgb(group.firstColor.value);
-          if (rgb) {
-            const hexColor = rgbObjToHex(rgb);
-            setBaseColor(hexColor);
-            setOriginalBaseColor(hexColor); // Store original for restore
-          }
-        }
-
-        const allColors = variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
-        const shadePattern = new RegExp(`^${preSelectedGroup}/\\d+$`);
-        const existingShades = allColors.filter(cv => shadePattern.test(cv.name));
-        setExistingGroup(existingShades.length > 0);
-        if (existingShades.length > 0) {
-          setShadeCount(existingShades.length);
-        }
-      }
+  const managedShadeGroup = useMemo(() => {
+    if (selectedSourceVariable) {
+      return getShadeGroupBySourceId(selectedSourceVariable.id);
     }
-  }, [isOpen, preSelectedGroup, colorGroups, variables, selectedCollectionId]);
+    if (groupName) {
+      return getShadeGroupByGroupName(groupName);
+    }
+    return null;
+  }, [selectedSourceVariable, groupName, getShadeGroupBySourceId, getShadeGroupByGroupName]);
+
+  const existingShadeIds = useMemo(() => {
+    if (managedShadeGroup) {
+      return managedShadeGroup.deleteIds;
+    }
+    return legacyShadeVariables.map(variable => variable.id);
+  }, [managedShadeGroup, legacyShadeVariables]);
+
+  const existingGroup = existingShadeIds.length > 0;
+
+  const getLegacyShadesForGroup = useCallback((nextGroupName: string) => {
+    if (!nextGroupName || !selectedCollectionId) return [];
+    const shadePattern = new RegExp(`^${escapeRegExp(nextGroupName)}/\\d+$`);
+    return variables.filter(
+      variable =>
+        variable.collectionId === selectedCollectionId &&
+        variable.resolvedType === 'COLOR' &&
+        shadePattern.test(variable.name)
+    );
+  }, [selectedCollectionId, variables]);
+
+  const applySourceSelection = useCallback((sourceVariable: VariableData | null, forcedGroupName?: string) => {
+    const nextGroupName = sourceVariable?.name || forcedGroupName || '';
+    const nextLegacyShades = getLegacyShadesForGroup(nextGroupName);
+    const nextManagedGroup = sourceVariable
+      ? getShadeGroupBySourceId(sourceVariable.id)
+      : (forcedGroupName ? getShadeGroupByGroupName(forcedGroupName) : null);
+
+    setSourceColorId(sourceVariable?.id || '');
+    setGroupName(nextGroupName);
+    setActiveProperty('lightness');
+
+    if (sourceVariable) {
+      const rgb = parseColorToRgb(sourceVariable.value) || parseColorToRgb(nextManagedGroup?.config.sourceValue || '');
+      setBaseColor(rgb ? rgbObjToHex(rgb) : '#000000');
+    } else if (forcedGroupName) {
+      setBaseColor(getLegacyBaseColor(nextLegacyShades));
+    } else {
+      setBaseColor('#000000');
+    }
+
+    if (nextManagedGroup) {
+      setShadeCount(nextManagedGroup.config.shadeCount);
+      setLightnessCurve(nextManagedGroup.config.lightnessCurve);
+      setSaturationCurve(nextManagedGroup.config.saturationCurve);
+      setHueCurve(nextManagedGroup.config.hueCurve);
+      return;
+    }
+
+    setShadeCount(nextLegacyShades.length || 11);
+    setLightnessCurve(createDefaultCurveHandles());
+    setSaturationCurve(createDefaultCurveHandles());
+    setHueCurve(createDefaultCurveHandles());
+  }, [
+    getShadeGroupByGroupName,
+    getShadeGroupBySourceId,
+    getLegacyShadesForGroup,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (preSelectedGroup) {
+      const sourceVariable = sourceColors.find(variable => variable.name === preSelectedGroup) || null;
+      applySourceSelection(sourceVariable, preSelectedGroup);
+      return;
+    }
+
+    if (selectedSourceVariable) {
+      applySourceSelection(selectedSourceVariable);
+      return;
+    }
+
+    setSourceColorId('');
+    setGroupName('');
+    setBaseColor('#000000');
+    setShadeCount(11);
+    setLightnessCurve(createDefaultCurveHandles());
+    setSaturationCurve(createDefaultCurveHandles());
+    setHueCurve(createDefaultCurveHandles());
+    setActiveProperty('lightness');
+  }, [isOpen, preSelectedGroup, sourceColors, selectedSourceVariable, applySourceSelection]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const name = e.target.value;
-    setSourceColorId(name);
-
-    if (name) {
-      const group = colorGroups.find(g => g.name === name);
-      if (group) {
-        setGroupName(name);
-
-        if (group.firstColor) {
-          const rgb = parseColorToRgb(group.firstColor.value);
-          if (rgb) {
-            const hexColor = rgbObjToHex(rgb);
-            setBaseColor(hexColor);
-            setOriginalBaseColor(hexColor); // Store original for restore
-          }
-        }
-
-        const allColors = variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
-        const shadePattern = new RegExp(`^${name}/\\d+$`);
-        const existingShades = allColors.filter(cv => shadePattern.test(cv.name));
-        setExistingGroup(existingShades.length > 0);
-        if (existingShades.length > 0) {
-          setShadeCount(existingShades.length);
-        }
-      }
-    }
-
-    // Reset curves on source change
-    setLightnessCurve(createDefaultHandles());
-    setSaturationCurve(createDefaultHandles());
-    setHueCurve(createDefaultHandles());
+    const nextSourceId = e.target.value;
+    const sourceVariable = sourceColors.find(variable => variable.id === nextSourceId) || null;
+    applySourceSelection(sourceVariable);
   };
 
-  // Get existing shade variable IDs for the selected group
-  const existingShadeIds = useMemo(() => {
-    if (!groupName) return [];
-    const allColors = variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
-    const shadePattern = new RegExp(`^${groupName}/\\d+$`);
-    return allColors.filter(cv => shadePattern.test(cv.name)).map(cv => cv.id);
-  }, [groupName, variables, selectedCollectionId]);
-
   // Get active curve
-  const getActiveCurve = useCallback((): CurveHandles => {
+  const getActiveCurve = useCallback((): ShadeCurveHandles => {
     switch (activeProperty) {
       case 'saturation': return saturationCurve;
       case 'hue': return hueCurve;
@@ -253,7 +233,7 @@ export function ShadesModal() {
     }
   }, [activeProperty, lightnessCurve, saturationCurve, hueCurve]);
 
-  const setActiveCurve = useCallback((curve: CurveHandles) => {
+  const setActiveCurve = useCallback((curve: ShadeCurveHandles) => {
     switch (activeProperty) {
       case 'saturation': setSaturationCurve(curve); break;
       case 'hue': setHueCurve(curve); break;
@@ -261,64 +241,62 @@ export function ShadesModal() {
     }
   }, [activeProperty]);
 
-  // Generate shade colors using all curves
-  const shadeColors = useMemo(() => {
-    const rgb = hexToRgbObj(baseColor);
-    if (!rgb) return [];
-
-    const lightAdj = evaluateCurveAtNodes(lightnessCurve, shadeCount);
-    const satAdj = evaluateCurveAtNodes(saturationCurve, shadeCount);
-    const hueAdj = evaluateCurveAtNodes(hueCurve, shadeCount);
-
-    return generateShadeColorsWithCurves(
-      DEFAULT_LIGHT_VALUE,
-      DEFAULT_DARK_VALUE,
-      rgb,
+  const generatedShades = useMemo(() => {
+    if (!groupName) return [];
+    return buildShadePayload(
+      baseColor,
+      groupName,
       shadeCount,
-      lightAdj,
-      satAdj,
-      hueAdj
+      lightnessCurve,
+      saturationCurve,
+      hueCurve,
+      DEFAULT_SHADE_LIGHT_VALUE,
+      DEFAULT_SHADE_DARK_VALUE
     );
-  }, [baseColor, shadeCount, lightnessCurve, saturationCurve, hueCurve]);
+  }, [baseColor, groupName, hueCurve, lightnessCurve, saturationCurve, shadeCount]);
+
+  const shadeColors = useMemo(() => {
+    return generatedShades.map(shade => rgbToHex(shade.value));
+  }, [generatedShades]);
 
   // Handle generation
   const handleGenerate = () => {
-    if (!groupName || !baseColor) return;
+    if (!groupName || !baseColor || !selectedCollectionId || generatedShades.length === 0) return;
 
-    const names = getShadeNames(shadeCount);
-    const shades = shadeColors.map((hex, i) => ({
-      name: `${groupName}/${names[i]}`,
-      value: hexToRgb(hex),
-    }));
-
-    // Find the base color ID (the one without shades, e.g. "red" not "red/50")
-    const baseColorVar = variables.find(
-      v => v.collectionId === selectedCollectionId && v.name === groupName && v.resolvedType === 'COLOR'
-    );
-    const baseColorId = baseColorVar?.id;
-
-    // Build list of IDs to delete: existing shades + base color (if exists)
-    const deleteIds = [...existingShadeIds];
-    if (baseColorId && !deleteIds.includes(baseColorId)) {
-      deleteIds.push(baseColorId);
-    }
-
-    // Use update-shades which handles both deleting old variables and creating new ones
-    post({ type: 'update-shades', collectionId: selectedCollectionId, deleteIds, shades });
+    post({
+      type: 'update-shades',
+      collectionId: selectedCollectionId,
+      deleteIds: existingShadeIds,
+      shades: generatedShades,
+      source: {
+        id: selectedSourceVariable?.id,
+        name: groupName,
+        value: hexToRgb(baseColor),
+      },
+      config: {
+        shadeCount,
+        lightValue: DEFAULT_SHADE_LIGHT_VALUE,
+        darkValue: DEFAULT_SHADE_DARK_VALUE,
+        lightnessCurve,
+        saturationCurve,
+        hueCurve,
+      },
+    });
 
     closeShadesModal();
   };
 
   const handleRemove = () => {
-    if (!groupName || existingShadeIds.length === 0) return;
+    if (!groupName || existingShadeIds.length === 0 || !selectedCollectionId) return;
 
     post({
       type: 'remove-shades',
       collectionId: selectedCollectionId,
       deleteIds: existingShadeIds,
-      newColor: {
+      source: {
+        id: selectedSourceVariable?.id,
         name: groupName,
-        value: hexToRgb(originalBaseColor), // Use original color to restore
+        value: hexToRgb(baseColor),
       },
     });
     closeShadesModal();
@@ -441,7 +419,7 @@ export function ShadesModal() {
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
       const x = firstNodeX + rangeX * t;
-      const baseLightness = DEFAULT_LIGHT_VALUE + (DEFAULT_DARK_VALUE - DEFAULT_LIGHT_VALUE) * t;
+      const baseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * t;
       const actualLightness = Math.max(0, Math.min(100, baseLightness + adjustments[i]));
       const y = maxY - (actualLightness / 100) * (maxY - minY);
       nodePositions.push({ x, y, value: actualLightness });
@@ -449,13 +427,13 @@ export function ShadesModal() {
 
     // Handle positions
     const handle1T = clamp(curve.handle1.t, 0, 1);
-    const handle1BaseLightness = DEFAULT_LIGHT_VALUE + (DEFAULT_DARK_VALUE - DEFAULT_LIGHT_VALUE) * handle1T;
+    const handle1BaseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * handle1T;
     const handle1ActualLightness = Math.max(0, Math.min(100, handle1BaseLightness + curve.handle1.value));
     const handle1X = firstNodeX + rangeX * handle1T;
     const handle1Y = clamp(maxY - (handle1ActualLightness / 100) * (maxY - minY), minY, maxY);
 
     const handle2T = clamp(curve.handle2.t, 0, 1);
-    const handle2BaseLightness = DEFAULT_LIGHT_VALUE + (DEFAULT_DARK_VALUE - DEFAULT_LIGHT_VALUE) * handle2T;
+    const handle2BaseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * handle2T;
     const handle2ActualLightness = Math.max(0, Math.min(100, handle2BaseLightness + curve.handle2.value));
     const handle2X = firstNodeX + rangeX * handle2T;
     const handle2Y = clamp(maxY - (handle2ActualLightness / 100) * (maxY - minY), minY, maxY);
@@ -595,14 +573,14 @@ export function ShadesModal() {
                 onChange={handleSourceChange}
               >
                 <option value="">-- Select a group --</option>
-                {colorGroups.map(g => (
-                  <option key={g.name} value={g.name}>{g.name}</option>
+                {sourceColors.map(variable => (
+                  <option key={variable.id} value={variable.id}>{variable.name}</option>
                 ))}
               </select>
             </div>
           )}
 
-          {sourceColorId && (
+          {groupName && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-row">
                 <div className="form-group">
@@ -689,7 +667,7 @@ export function ShadesModal() {
           <button
             className="btn btn-primary"
             onClick={handleGenerate}
-            disabled={!sourceColorId}
+            disabled={!groupName || generatedShades.length === 0}
           >
             Generate
           </button>

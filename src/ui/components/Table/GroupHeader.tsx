@@ -5,8 +5,9 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
+import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
 import { ContrastPicker } from './ContrastPicker';
+import { refreshManagedShadeGroup } from '../../utils/shadeActions';
 
 interface GroupHeaderProps {
   groupName: string;
@@ -15,7 +16,14 @@ interface GroupHeaderProps {
 }
 
 export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderProps) {
-  const { toggleGroup, getGroupContrastColor, setGroupContrastColor, variables: allVariables, selectedCollectionId } = useAppContext();
+  const {
+    toggleGroup,
+    getGroupContrastColor,
+    setGroupContrastColor,
+    variables: allVariables,
+    selectedCollectionId,
+    getShadeGroupByGroupName,
+  } = useAppContext();
   const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
@@ -23,6 +31,10 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   const groupIds = variables.map(v => v.id);
   const groupType = variables[0]?.resolvedType || 'STRING';
   const contrastColor = getGroupContrastColor(groupName);
+  const shadeGroup = groupType === 'COLOR' ? getShadeGroupByGroupName(groupName) : null;
+  const sourceVariable = shadeGroup
+    ? allVariables.find(variable => variable.id === shadeGroup.sourceVariableId) || null
+    : null;
 
   // Get color variables for reference picker
   const colorVariables = React.useMemo(() =>
@@ -41,10 +53,26 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
 
   const handleDeleteGroup = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (shadeGroup && sourceVariable) {
+      if (confirm(`Remove generated shades for ${groupName}?`)) {
+        post({
+          type: 'remove-shades',
+          collectionId: sourceVariable.collectionId,
+          deleteIds: shadeGroup.deleteIds,
+          source: {
+            id: sourceVariable.id,
+            name: sourceVariable.name,
+            value: sourceVariable.value,
+          },
+        });
+      }
+      return;
+    }
+
     if (confirm(`Delete all ${groupIds.length} variables in this group?`)) {
       post({ type: 'delete-group', ids: groupIds });
     }
-  }, [groupIds]);
+  }, [groupIds, groupName, shadeGroup, sourceVariable]);
 
   const handleContrastClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -80,8 +108,16 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
 
   const handleShadesClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (shadeGroup?.status === 'dirty' && sourceVariable) {
+      const refreshed = refreshManagedShadeGroup(shadeGroup, sourceVariable);
+      if (refreshed) {
+        return;
+      }
+    }
+
     openShadesModal({ groupName });
-  }, [openShadesModal, groupName]);
+  }, [groupName, openShadesModal, shadeGroup, sourceVariable]);
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -153,12 +189,14 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       <td className="modifier-cell">
         {groupType === 'COLOR' && (
           <button
-            className="modifier-btn"
+            className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
             onClick={handleShadesClick}
-            title="Generate shades"
+            title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
           >
-            <span className="icon"><ShadesIcon /></span>
-            Shades
+            <span className="icon">
+              {shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
+            </span>
+            {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
           </button>
         )}
         {groupType === 'FLOAT' && (

@@ -50,6 +50,12 @@
       stroke: #1877f2;
       stroke-width: 2;
     }
+
+    &.shader-row .row-hover-bg {
+      fill: rgba(255, 228, 184, 0.28);
+      stroke: #d9a441;
+      stroke-width: 1;
+    }
   }
 
   .connection-point {
@@ -64,6 +70,12 @@
         r: 6;
       }
     }
+
+    &.disabled {
+      &:hover {
+        r: 4;
+      }
+    }
   }
 }
 
@@ -76,6 +88,11 @@
 .connection-group {
   &:hover .connection-line {
     stroke: #e53935;
+    stroke-width: 2.5;
+  }
+
+  &.generated:hover .connection-line {
+    stroke: #b86e00;
     stroke-width: 2.5;
   }
 }

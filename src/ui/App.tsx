@@ -27,7 +27,7 @@ export function App() {
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
       console.log('[UI] data-loaded received:', msg.collections?.length, 'collections,', msg.variables?.length, 'variables');
-      setData(msg.collections || [], msg.variables || []);
+      setData(msg.collections || [], msg.variables || [], msg.shadeGroups || []);
       setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },
     'update-success': () => {

@@ -1,14 +1,16 @@
 // Grouped graph component - SVG-based relationships view
 
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { VariableData } from '../../types';
+import { ShadeGroupData, VariableData } from '../../types';
 import { parseColorToRgb, rgbObjToHex } from '../../utils/color';
 import { post } from '../../hooks/usePluginMessages';
+import { useModalContext } from '../Modals/ModalContext';
 
 interface GroupedGraphProps {
   variables: VariableData[];
   selectedCollectionId: string | null;
   variableType: 'COLOR' | 'FLOAT';
+  shadeGroups: ShadeGroupData[];
 }
 
 interface VariableNode {
@@ -21,20 +23,38 @@ interface VariableNode {
   resolvedValue: string;
   isReference: boolean;
   referenceName: string | null;
+  isVirtual?: boolean;
+  virtualType?: 'shader' | 'palette';
+  connectionsDisabled?: boolean;
 }
 
 interface GroupData {
-  name: string;
+  key: string;
+  title: string;
   variables: VariableNode[];
   x: number;
   y: number;
+  initialX: number;
+  initialY: number;
+  kind: 'standard' | 'source' | 'shader' | 'shades';
+  sourceGroupName?: string;
+  headerFill: string;
 }
 
 interface Connection {
+  id: string;
+  kind: 'reference' | 'generated';
   fromGroup: string;
   fromVar: string;
   toGroup: string;
   toVar: string;
+}
+
+interface ConnectionFlags {
+  hasInput: boolean;
+  hasOutput: boolean;
+  inputKind: 'reference' | 'generated' | null;
+  outputKind: 'reference' | 'generated' | null;
 }
 
 const GROUP_WIDTH = 260;
@@ -43,19 +63,124 @@ const HEADER_HEIGHT = 36;
 const GROUP_PADDING = 8;
 const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
+const GENERATED_CONNECTION_COLOR = '#b86e00';
+const REFERENCE_CONNECTION_COLOR = '#1877f2';
 
-export function GroupedGraph({ variables, selectedCollectionId, variableType }: GroupedGraphProps) {
+function getGroupHeight(group: GroupData): number {
+  return HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
+}
+
+function isShadeVariableName(name: string): boolean {
+  return /^(.+)\/(\d+)$/.test(name);
+}
+
+function extractShadeNumber(name: string): number {
+  const match = name.match(/\/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function formatVariableNode(
+  variable: VariableData,
+  varsByName: Map<string, VariableData>,
+  isColorType: boolean
+): VariableNode {
+  const refPattern = /^\{(.+)\}$/;
+  const refMatch = variable.value.match(refPattern);
+  const isReference = !!refMatch;
+  const referenceName = refMatch ? refMatch[1] : null;
+
+  let resolvedValue = variable.value;
+  if (isReference && referenceName) {
+    const refVar = varsByName.get(referenceName);
+    if (refVar) {
+      const refRefMatch = refVar.value.match(refPattern);
+      if (refRefMatch) {
+        const deepRef = varsByName.get(refRefMatch[1]);
+        if (deepRef) {
+          resolvedValue = deepRef.value;
+        }
+      } else {
+        resolvedValue = refVar.value;
+      }
+    }
+  }
+
+  let displayColor = '#888888';
+  let displayValue = resolvedValue;
+  if (isColorType) {
+    const rgb = parseColorToRgb(resolvedValue);
+    displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
+    displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
+  } else {
+    displayValue = isReference ? `{${referenceName}}` : resolvedValue;
+  }
+
+  const parts = variable.name.split('/');
+  return {
+    id: variable.id,
+    name: variable.name,
+    shortName: parts[parts.length - 1],
+    displayName: displayValue,
+    color: displayColor,
+    value: variable.value,
+    resolvedValue: isColorType ? displayColor : resolvedValue,
+    isReference,
+    referenceName,
+  };
+}
+
+function createShaderNode(shadeGroup: ShadeGroupData, color: string): VariableNode {
+  return {
+    id: `shader:${shadeGroup.sourceVariableId}`,
+    name: `shader:${shadeGroup.sourceVariableId}`,
+    shortName: 'shader',
+    displayName: `${shadeGroup.config.shadeCount} shades`,
+    color,
+    value: '',
+    resolvedValue: '',
+    isReference: false,
+    referenceName: null,
+    isVirtual: true,
+    virtualType: 'shader',
+    connectionsDisabled: true,
+  };
+}
+
+function createPaletteNode(shadeGroup: ShadeGroupData, shadeCount: number, color: string): VariableNode {
+  return {
+    id: `palette:${shadeGroup.sourceVariableId}`,
+    name: `palette:${shadeGroup.sourceVariableId}`,
+    shortName: 'generated',
+    displayName: `${shadeCount} outputs`,
+    color,
+    value: '',
+    resolvedValue: '',
+    isReference: false,
+    referenceName: null,
+    isVirtual: true,
+    virtualType: 'palette',
+    connectionsDisabled: true,
+  };
+}
+
+export function GroupedGraph({
+  variables,
+  selectedCollectionId,
+  variableType,
+  shadeGroups,
+}: GroupedGraphProps) {
+  const { openShadesModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 50, panY: 50 });
   const [isPanning, setIsPanning] = useState(false);
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   const [groupPositions, setGroupPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
-  const [draggingGroup, setDraggingGroup] = useState<{ name: string; offsetX: number; offsetY: number } | null>(null);
+  const [draggingGroup, setDraggingGroup] = useState<{ key: string; offsetX: number; offsetY: number } | null>(null);
   const [dragState, setDragState] = useState<{
     fromGroup: string;
     fromVar: string;
-    fromSide: 'left' | 'right'; // left = input (receives), right = output (sends)
+    fromSide: 'left' | 'right';
     startX: number;
     startY: number;
     currentX: number;
@@ -63,7 +188,6 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
   } | null>(null);
   const [hoveredVar, setHoveredVar] = useState<string | null>(null);
 
-  // Track space key for pan mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !e.repeat) {
@@ -71,11 +195,13 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
         setIsSpaceHeld(true);
       }
     };
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         setIsSpaceHeld(false);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
@@ -84,191 +210,258 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
     };
   }, []);
 
-  // Build groups and connections (without auto-positioning)
-  const { groupsData, connections, variableMap, groupsLookup } = useMemo(() => {
+  const { groupsData, connections, variableMap } = useMemo(() => {
     const filteredVars = variables.filter(
-      v => v.collectionId === selectedCollectionId && v.resolvedType === variableType
+      variable => variable.collectionId === selectedCollectionId && variable.resolvedType === variableType
     );
-
-    // Build name -> variable map for O(1) reference lookups
     const varsByName = new Map<string, VariableData>();
-    filteredVars.forEach(v => varsByName.set(v.name, v));
+    filteredVars.forEach(variable => varsByName.set(variable.name, variable));
 
-    const refPattern = /^\{(.+)\}$/;
-    const groupsMap = new Map<string, VariableNode[]>();
-    const varMap = new Map<string, { group: string; index: number; node: VariableNode }>();
-
-    // Group variables
-    filteredVars.forEach(v => {
-      const parts = v.name.split('/');
-      const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : v.name;
-      const displayName = parts[parts.length - 1];
-
-      const refMatch = v.value.match(refPattern);
-      const isReference = !!refMatch;
-      const referenceName = refMatch ? refMatch[1] : null;
-
-      let resolvedValue = v.value;
-      if (isReference && referenceName) {
-        const refVar = varsByName.get(referenceName);
-        if (refVar) {
-          const refRefMatch = refVar.value.match(refPattern);
-          if (refRefMatch) {
-            const deepRef = varsByName.get(refRefMatch[1]);
-            if (deepRef) resolvedValue = deepRef.value;
-          } else {
-            resolvedValue = refVar.value;
-          }
-        }
-      }
-
-      // For colors, convert to hex; for numbers, use the value directly
-      let displayColor = '#888888';
-      let displayValue = resolvedValue;
-      if (isColorType) {
-        const rgb = parseColorToRgb(resolvedValue);
-        displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
-        displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
-      } else {
-        displayValue = isReference ? `{${referenceName}}` : resolvedValue;
-      }
-
-      const node: VariableNode = {
-        id: v.id,
-        name: v.name,
-        shortName: displayName,
-        displayName: displayValue,
-        color: displayColor,
-        value: v.value,
-        resolvedValue: isColorType ? displayColor : resolvedValue,
-        isReference,
-        referenceName,
-      };
-
-      const group = groupsMap.get(groupName) || [];
-      varMap.set(v.name, { group: groupName, index: group.length, node });
-      group.push(node);
-      groupsMap.set(groupName, group);
-    });
-
-    // Create groups array (positions will be applied separately)
     const groupsArray: GroupData[] = [];
-    groupsMap.forEach((vars, name) => {
-      groupsArray.push({ name, variables: vars, x: 0, y: 0 });
+    const varMap = new Map<string, { group: string; index: number; node: VariableNode }>();
+    const conns: Connection[] = [];
+
+    const managedSourceIds = new Set<string>();
+    const managedShadeIds = new Set<string>();
+    const managedShadeGroups = isColorType
+      ? shadeGroups
+          .filter(group => group.collectionId === selectedCollectionId)
+          .sort((a, b) => a.sourceVariableName.localeCompare(b.sourceVariableName))
+      : [];
+
+    managedShadeGroups.forEach((shadeGroup, index) => {
+      const sourceVariable = filteredVars.find(variable => variable.id === shadeGroup.sourceVariableId);
+      if (!sourceVariable) return;
+
+      managedSourceIds.add(sourceVariable.id);
+      shadeGroup.deleteIds.forEach(id => {
+        if (id !== sourceVariable.id) {
+          managedShadeIds.add(id);
+        }
+      });
+
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, true);
+      const sourceGroupKey = `source:${sourceVariable.id}`;
+      const shaderGroupKey = `shader:${sourceVariable.id}`;
+      const shadesGroupKey = `shades:${sourceVariable.id}`;
+      const sourceColor = sourceNode.color;
+      const managedShades = filteredVars
+        .filter(variable => shadeGroup.deleteIds.includes(variable.id) && variable.id !== sourceVariable.id)
+        .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+      const shadeNodes = managedShades.map(variable => formatVariableNode(variable, varsByName, true));
+      const shaderNode = createShaderNode(shadeGroup, sourceColor);
+      const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
+
+      const baseY = index * (Math.max(
+        HEADER_HEIGHT + ROW_HEIGHT + GROUP_PADDING * 2,
+        HEADER_HEIGHT + (shadeNodes.length + 1) * ROW_HEIGHT + GROUP_PADDING * 2
+      ) + GROUP_GAP_Y);
+
+      const managedGroups: GroupData[] = [
+        {
+          key: sourceGroupKey,
+          title: sourceVariable.name,
+          variables: [sourceNode],
+          x: 0,
+          y: 0,
+          initialX: 0,
+          initialY: baseY,
+          kind: 'source',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#f0f0f0',
+        },
+        {
+          key: shaderGroupKey,
+          title: 'Shader',
+          variables: [shaderNode],
+          x: 0,
+          y: 0,
+          initialX: GROUP_WIDTH + GROUP_GAP_X,
+          initialY: baseY,
+          kind: 'shader',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#fff4df',
+        },
+        {
+          key: shadesGroupKey,
+          title: `${sourceVariable.name} shades`,
+          variables: [paletteNode, ...shadeNodes],
+          x: 0,
+          y: 0,
+          initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2,
+          initialY: baseY,
+          kind: 'shades',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#eef4ff',
+        },
+      ];
+
+      managedGroups.forEach(group => {
+        groupsArray.push(group);
+        group.variables.forEach((node, variableIndex) => {
+          varMap.set(node.name, { group: group.key, index: variableIndex, node });
+        });
+      });
+
+      conns.push({
+        id: `generated:${sourceVariable.id}:source-to-shader`,
+        kind: 'generated',
+        fromGroup: sourceGroupKey,
+        fromVar: sourceNode.name,
+        toGroup: shaderGroupKey,
+        toVar: shaderNode.name,
+      });
+
+      conns.push({
+        id: `generated:${sourceVariable.id}:shader-to-palette`,
+        kind: 'generated',
+        fromGroup: shaderGroupKey,
+        fromVar: shaderNode.name,
+        toGroup: shadesGroupKey,
+        toVar: paletteNode.name,
+      });
     });
 
-    // Build group name -> GroupData map for O(1) lookups during render
-    const groupsLookupMap = new Map<string, GroupData>();
-    groupsArray.forEach(g => groupsLookupMap.set(g.name, g));
+    const unmanagedVars = filteredVars.filter(
+      variable => !managedSourceIds.has(variable.id) && !managedShadeIds.has(variable.id)
+    );
+    const unmanagedGroupsMap = new Map<string, VariableNode[]>();
 
-    // Build connections
-    const conns: Connection[] = [];
-    groupsArray.forEach(g => {
-      g.variables.forEach(v => {
-        if (v.isReference && v.referenceName) {
-          const target = varMap.get(v.referenceName);
-          if (target) {
+    unmanagedVars.forEach(variable => {
+      const parts = variable.name.split('/');
+      const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
+      const group = unmanagedGroupsMap.get(groupName) || [];
+      group.push(formatVariableNode(variable, varsByName, isColorType));
+      unmanagedGroupsMap.set(groupName, group);
+    });
+
+    const unmanagedStartX = managedShadeGroups.length > 0
+      ? (GROUP_WIDTH + GROUP_GAP_X) * 3 + GROUP_GAP_X
+      : 0;
+    let primitiveY = 0;
+    let semanticY = 0;
+
+    Array.from(unmanagedGroupsMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([groupName, groupVariables]) => {
+        const groupKey = `group:${groupName}`;
+        const hasReferences = groupVariables.some(variable => variable.isReference);
+        const initialX = unmanagedStartX + (hasReferences ? GROUP_WIDTH + GROUP_GAP_X : 0);
+        const initialY = hasReferences ? semanticY : primitiveY;
+        const groupData: GroupData = {
+          key: groupKey,
+          title: groupName,
+          variables: groupVariables,
+          x: 0,
+          y: 0,
+          initialX,
+          initialY,
+          kind: 'standard',
+          sourceGroupName: groupName,
+          headerFill: '#f0f0f0',
+        };
+
+        groupsArray.push(groupData);
+        groupVariables.forEach((node, variableIndex) => {
+          varMap.set(node.name, { group: groupKey, index: variableIndex, node });
+        });
+
+        if (hasReferences) {
+          semanticY += getGroupHeight(groupData) + GROUP_GAP_Y;
+        } else {
+          primitiveY += getGroupHeight(groupData) + GROUP_GAP_Y;
+        }
+      });
+
+    groupsArray.forEach(group => {
+      group.variables.forEach(node => {
+        if (node.isReference && node.referenceName) {
+          const provider = varMap.get(node.referenceName);
+          const receiver = varMap.get(node.name);
+          if (provider && receiver) {
             conns.push({
-              fromGroup: g.name,
-              fromVar: v.name,
-              toGroup: target.group,
-              toVar: v.referenceName,
+              id: `reference:${receiver.node.id}->${provider.node.id}`,
+              kind: 'reference',
+              fromGroup: provider.group,
+              fromVar: provider.node.name,
+              toGroup: receiver.group,
+              toVar: receiver.node.name,
             });
           }
         }
       });
     });
 
-    return { groupsData: groupsArray, connections: conns, variableMap: varMap, groupsLookup: groupsLookupMap };
-  }, [variables, selectedCollectionId, variableType, isColorType]);
+    return { groupsData: groupsArray, connections: conns, variableMap: varMap };
+  }, [variables, selectedCollectionId, variableType, shadeGroups, isColorType]);
 
-  // Track which variables have connections (for blue coloring)
   const connectedVars = useMemo(() => {
-    const connected = new Map<string, { hasInput: boolean; hasOutput: boolean }>();
-    connections.forEach(conn => {
-      // fromVar has an input (it references something)
-      const from = connected.get(conn.fromVar) || { hasInput: false, hasOutput: false };
-      from.hasInput = true;
-      connected.set(conn.fromVar, from);
-      // toVar has an output (something references it)
-      const to = connected.get(conn.toVar) || { hasInput: false, hasOutput: false };
-      to.hasOutput = true;
-      connected.set(conn.toVar, to);
+    const connected = new Map<string, ConnectionFlags>();
+
+    const ensureState = (name: string) => {
+      const state = connected.get(name) || {
+        hasInput: false,
+        hasOutput: false,
+        inputKind: null,
+        outputKind: null,
+      };
+      connected.set(name, state);
+      return state;
+    };
+
+    connections.forEach(connection => {
+      const output = ensureState(connection.fromVar);
+      output.hasOutput = true;
+      output.outputKind = output.outputKind || connection.kind;
+
+      const input = ensureState(connection.toVar);
+      input.hasInput = true;
+      input.inputKind = input.inputKind || connection.kind;
     });
+
     return connected;
   }, [connections]);
 
-  // Initialize positions only for new groups
   useEffect(() => {
     setGroupPositions(prev => {
-      const newPositions = new Map(prev);
-      let needsUpdate = false;
+      const next = new Map(prev);
+      let changed = false;
 
-      // Calculate initial layout for groups without positions
-      const primitiveGroups: string[] = [];
-      const semanticGroups: string[] = [];
-
-      groupsData.forEach(g => {
-        if (!newPositions.has(g.name)) {
-          needsUpdate = true;
-          const hasReferences = g.variables.some(v => v.isReference);
-          if (hasReferences) {
-            semanticGroups.push(g.name);
-          } else {
-            primitiveGroups.push(g.name);
-          }
+      groupsData.forEach(group => {
+        if (!next.has(group.key)) {
+          next.set(group.key, { x: group.initialX, y: group.initialY });
+          changed = true;
         }
       });
 
-      if (!needsUpdate) return prev;
-
-      // Layout new primitive groups on the left
-      let y = 0;
-      // Find max y of existing primitives
-      primitiveGroups.forEach(name => {
-        const g = groupsData.find(gd => gd.name === name);
-        if (g) {
-          newPositions.set(name, { x: 0, y });
-          y += HEADER_HEIGHT + g.variables.length * ROW_HEIGHT + GROUP_PADDING * 2 + GROUP_GAP_Y;
-        }
-      });
-
-      // Layout new semantic groups on the right
-      let col = 1;
-      y = 0;
-      semanticGroups.forEach(name => {
-        const g = groupsData.find(gd => gd.name === name);
-        if (g) {
-          const height = HEADER_HEIGHT + g.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
-          newPositions.set(name, { x: col * (GROUP_WIDTH + GROUP_GAP_X), y });
-          y += height + GROUP_GAP_Y;
-        }
-      });
-
-      return newPositions;
+      return changed ? next : prev;
     });
   }, [groupsData]);
 
-  // Apply positions to groups and build lookup map
-  const { groups, groupsMap } = useMemo(() => {
-    const groupsArray = groupsData.map(g => {
-      const pos = groupPositions.get(g.name) || { x: 0, y: 0 };
-      return { ...g, x: pos.x, y: pos.y };
+  const groups = useMemo(() => {
+    return groupsData.map(group => {
+      const position = groupPositions.get(group.key) || { x: group.initialX, y: group.initialY };
+      return {
+        ...group,
+        x: position.x,
+        y: position.y,
+      };
     });
-    const groupsMapWithPos = new Map<string, GroupData>();
-    groupsArray.forEach(g => groupsMapWithPos.set(g.name, g));
-    return { groups: groupsArray, groupsMap: groupsMapWithPos };
-  }, [groupsData, groupPositions]);
+  }, [groupPositions, groupsData]);
 
-  // Pan handling - start panning on background click or when space is held
+  const groupsMap = useMemo(() => {
+    const map = new Map<string, GroupData>();
+    groups.forEach(group => map.set(group.key, group));
+    return map;
+  }, [groups]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Pan if space is held (anywhere) or clicking directly on background
     if (isSpaceHeld) {
       e.preventDefault();
       setIsPanning(true);
       return;
     }
-    // Only pan if clicking directly on the container or SVG background
+
     const tagName = (e.target as Element).tagName.toLowerCase();
     if (e.target === e.currentTarget || tagName === 'svg') {
       setIsPanning(true);
@@ -283,18 +476,20 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
         panY: prev.panY + e.movementY,
       }));
     }
+
     if (draggingGroup) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
         const x = (e.clientX - rect.left - viewState.panX) / viewState.zoom - draggingGroup.offsetX;
         const y = (e.clientY - rect.top - viewState.panY) / viewState.zoom - draggingGroup.offsetY;
         setGroupPositions(prev => {
-          const newPositions = new Map(prev);
-          newPositions.set(draggingGroup.name, { x, y });
-          return newPositions;
+          const next = new Map(prev);
+          next.set(draggingGroup.key, { x, y });
+          return next;
         });
       }
     }
+
     if (dragState) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
@@ -305,7 +500,7 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
         } : null);
       }
     }
-  }, [isPanning, draggingGroup, dragState, viewState]);
+  }, [dragState, draggingGroup, isPanning, viewState]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
@@ -313,23 +508,21 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
     setDragState(null);
   }, []);
 
-  // Group drag start
-  const handleGroupDragStart = useCallback((e: React.MouseEvent, groupName: string, groupX: number, groupY: number) => {
+  const handleGroupDragStart = useCallback((e: React.MouseEvent, groupKey: string, groupX: number, groupY: number) => {
     e.stopPropagation();
     const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) {
-      const mouseX = (e.clientX - rect.left - viewState.panX) / viewState.zoom;
-      const mouseY = (e.clientY - rect.top - viewState.panY) / viewState.zoom;
-      setDraggingGroup({
-        name: groupName,
-        offsetX: mouseX - groupX,
-        offsetY: mouseY - groupY,
-      });
-    }
+    if (!rect) return;
+
+    const mouseX = (e.clientX - rect.left - viewState.panX) / viewState.zoom;
+    const mouseY = (e.clientY - rect.top - viewState.panY) / viewState.zoom;
+    setDraggingGroup({
+      key: groupKey,
+      offsetX: mouseX - groupX,
+      offsetY: mouseY - groupY,
+    });
   }, [viewState]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Zoom with Cmd/Ctrl + scroll
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -337,21 +530,20 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
         ...prev,
         zoom: Math.max(0.2, Math.min(3, prev.zoom * delta)),
       }));
-    } else {
-      // Pan with regular scroll
-      e.preventDefault();
-      setViewState(prev => ({
-        ...prev,
-        panX: prev.panX - e.deltaX,
-        panY: prev.panY - e.deltaY,
-      }));
+      return;
     }
+
+    e.preventDefault();
+    setViewState(prev => ({
+      ...prev,
+      panX: prev.panX - e.deltaX,
+      panY: prev.panY - e.deltaY,
+    }));
   }, []);
 
-  // Connection point drag start
-  const handleDragStart = useCallback((groupName: string, varName: string, side: 'left' | 'right', x: number, y: number) => {
+  const handleDragStart = useCallback((groupKey: string, varName: string, side: 'left' | 'right', x: number, y: number) => {
     setDragState({
-      fromGroup: groupName,
+      fromGroup: groupKey,
       fromVar: varName,
       fromSide: side,
       startX: x,
@@ -361,66 +553,49 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
     });
   }, []);
 
-  // Drop on a variable - handle based on which side the drag started from
-  const handleDrop = useCallback((targetGroup: string, targetVar: string, targetSide: 'left' | 'right') => {
+  const handleDrop = useCallback((targetVar: string, targetSide: 'left' | 'right') => {
     if (!dragState) return;
-    if (dragState.fromVar === targetVar) return; // Can't connect to self
+    if (dragState.fromVar === targetVar) return;
 
     const sourceVarInfo = variableMap.get(dragState.fromVar);
     const targetVarInfo = variableMap.get(targetVar);
     if (!sourceVarInfo || !targetVarInfo) return;
-
-    // Determine which variable becomes the reference based on sides:
-    // - LEFT side = INPUT (this variable receives/references another)
-    // - RIGHT side = OUTPUT (this variable provides its value)
-    //
-    // Valid connections:
-    // - Drag from RIGHT (output) to LEFT (input): target receives source's value
-    // - Drag from LEFT (input) to RIGHT (output): source receives target's value
+    if (sourceVarInfo.node.connectionsDisabled || targetVarInfo.node.connectionsDisabled) return;
 
     if (dragState.fromSide === 'right' && targetSide === 'left') {
-      // Dragged from output to input: target references source
-      const newValue = `{${dragState.fromVar}}`;
+      const newValue = `{${sourceVarInfo.node.name}}`;
       post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue });
     } else if (dragState.fromSide === 'left' && targetSide === 'right') {
-      // Dragged from input to output: source references target
-      const newValue = `{${targetVar}}`;
+      const newValue = `{${targetVarInfo.node.name}}`;
       post({ type: 'update-variable-value', id: sourceVarInfo.node.id, value: newValue });
     }
-    // Other combinations (left-to-left, right-to-right) are invalid - do nothing
 
     setDragState(null);
   }, [dragState, variableMap]);
 
-  // Disconnect a reference
-  const handleDisconnect = useCallback((varName: string, resolvedValue: string) => {
-    const varInfo = variableMap.get(varName);
-    if (varInfo) {
-      post({ type: 'update-variable-value', id: varInfo.node.id, value: resolvedValue });
+  const handleDisconnect = useCallback((receiverVarName: string, resolvedValue: string) => {
+    const receiverInfo = variableMap.get(receiverVarName);
+    if (receiverInfo && !receiverInfo.node.connectionsDisabled) {
+      post({ type: 'update-variable-value', id: receiverInfo.node.id, value: resolvedValue });
     }
   }, [variableMap]);
 
-  // Calculate connection path (circles are at edges: 0 and GROUP_WIDTH)
-  // Connection semantics: fromVar has the reference (input on left), toVar is referenced (output on right)
-  // So connection always goes: toVar's RIGHT (output) -> fromVar's LEFT (input)
-  const getConnectionPath = (fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
-    // fromVar's INPUT is on the LEFT side of fromGroup
-    const inputX = fromGroup.x;
-    const inputY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
+  const handleShaderOpen = useCallback((group: GroupData, node: VariableNode) => {
+    if (group.kind === 'shader' && node.virtualType === 'shader' && group.sourceGroupName) {
+      openShadesModal({ groupName: group.sourceGroupName });
+    }
+  }, [openShadesModal]);
 
-    // toVar's OUTPUT is on the RIGHT side of toGroup
-    const outputX = toGroup.x + GROUP_WIDTH;
-    const outputY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
-
-    // Calculate control points for smooth bezier curve
+  const getConnectionPath = useCallback((fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
+    const outputX = fromGroup.x + GROUP_WIDTH;
+    const outputY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
+    const inputX = toGroup.x;
+    const inputY = toGroup.y + HEADER_HEIGHT + GROUP_PADDING + toVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
     const dx = Math.abs(outputX - inputX);
-    const minOffset = 50;
-    const controlOffset = Math.max(minOffset, dx / 2);
+    const controlOffset = Math.max(50, dx / 2);
 
-    // Curve from output (right) to input (left)
-    // Control points extend horizontally from each endpoint
     return `M ${outputX} ${outputY} C ${outputX + controlOffset} ${outputY}, ${inputX - controlOffset} ${inputY}, ${inputX} ${inputY}`;
-  };
+  }, []);
 
   return (
     <div
@@ -432,49 +607,44 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
-      <svg
-        width="100%"
-        height="100%"
-        style={{ display: 'block', background: 'transparent' }}
-      >
-
+      <svg width="100%" height="100%" style={{ display: 'block', background: 'transparent' }}>
         <g transform={`translate(${viewState.panX}, ${viewState.panY}) scale(${viewState.zoom})`}>
-          {/* Connection lines */}
           <g className="connections-layer">
-            {connections.map((conn, i) => {
-              const fromGroup = groupsMap.get(conn.fromGroup);
-              const toGroup = groupsMap.get(conn.toGroup);
-              if (!fromGroup || !toGroup) return null;
+            {connections.map(connection => {
+              const fromGroup = groupsMap.get(connection.fromGroup);
+              const toGroup = groupsMap.get(connection.toGroup);
+              const fromVarInfo = variableMap.get(connection.fromVar);
+              const toVarInfo = variableMap.get(connection.toVar);
 
-              // Use variableMap for O(1) index lookup
-              const fromVarInfo = variableMap.get(conn.fromVar);
-              const toVarInfo = variableMap.get(conn.toVar);
-              if (!fromVarInfo || !toVarInfo) return null;
-              const fromVarIdx = fromVarInfo.index;
-              const toVarIdx = toVarInfo.index;
+              if (!fromGroup || !toGroup || !fromVarInfo || !toVarInfo) return null;
 
-              const path = getConnectionPath(fromGroup, fromVarIdx, toGroup, toVarIdx);
+              const path = getConnectionPath(fromGroup, fromVarInfo.index, toGroup, toVarInfo.index);
+              const stroke = connection.kind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
+              const strokeDasharray = connection.kind === 'generated' ? '7 5' : undefined;
 
               return (
-                <g key={i} className="connection-group">
+                <g key={connection.id} className={`connection-group ${connection.kind}`}>
+                  {connection.kind === 'reference' && (
+                    <path
+                      d={path}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={12}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        const receiver = toVarInfo.node;
+                        if (confirm(`Disconnect ${receiver.shortName}?`)) {
+                          handleDisconnect(receiver.name, receiver.resolvedValue);
+                        }
+                      }}
+                    />
+                  )}
                   <path
                     d={path}
                     fill="none"
-                    stroke="transparent"
-                    strokeWidth={12}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      const fromVar = fromGroup.variables[fromVarIdx];
-                      if (confirm(`Disconnect ${fromVar.name.split('/').pop()}?`)) {
-                        handleDisconnect(conn.fromVar, fromVar.resolvedValue);
-                      }
-                    }}
-                  />
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke="#1877f2"
-                    strokeWidth={2}
+                    stroke={stroke}
+                    strokeWidth={connection.kind === 'generated' ? 2.5 : 2}
+                    strokeDasharray={strokeDasharray}
                     className="connection-line"
                     style={{ pointerEvents: 'none' }}
                   />
@@ -483,40 +653,36 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
             })}
           </g>
 
-          {/* Drag preview line */}
           {dragState && (
             <path
               d={`M ${dragState.startX} ${dragState.startY} L ${dragState.currentX} ${dragState.currentY}`}
               fill="none"
-              stroke="#1877f2"
+              stroke={REFERENCE_CONNECTION_COLOR}
               strokeWidth={2}
               strokeDasharray="4 2"
               className="drag-preview-line"
             />
           )}
 
-          {/* Groups */}
           {groups.map(group => {
-            const height = HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
+            const height = getGroupHeight(group);
 
             return (
-              <g key={group.name} transform={`translate(${group.x}, ${group.y})`} className="group-box">
-                {/* Background */}
+              <g key={group.key} transform={`translate(${group.x}, ${group.y})`} className={`group-box ${group.kind}`}>
                 <rect
                   width={GROUP_WIDTH}
                   height={height}
                   rx={4}
                   fill="white"
-                  stroke="black"
+                  stroke={group.kind === 'shader' ? GENERATED_CONNECTION_COLOR : 'black'}
                   strokeWidth={1}
                 />
 
-                {/* Header - draggable (inset to not cover border) */}
                 <path
                   d={`M 4 1 L ${GROUP_WIDTH - 4} 1 Q ${GROUP_WIDTH - 1} 1 ${GROUP_WIDTH - 1} 4 L ${GROUP_WIDTH - 1} ${HEADER_HEIGHT} L 1 ${HEADER_HEIGHT} L 1 4 Q 1 1 4 1 Z`}
-                  fill="#f0f0f0"
+                  fill={group.headerFill}
                   style={{ cursor: 'move' }}
-                  onMouseDown={(e) => handleGroupDragStart(e, group.name, group.x, group.y)}
+                  onMouseDown={e => handleGroupDragStart(e, group.key, group.x, group.y)}
                 />
                 <text
                   x={12}
@@ -526,28 +692,30 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
                   fill="#333"
                   style={{ pointerEvents: 'none' }}
                 >
-                  {group.name.split('/').pop()}
+                  {group.title}
                 </text>
 
-                {/* Variables */}
-                {group.variables.map((v, idx) => {
+                {group.variables.map((node, idx) => {
                   const rowY = HEADER_HEIGHT + GROUP_PADDING + idx * ROW_HEIGHT;
-                  const varConnections = connectedVars.get(v.name);
-                  const hasInput = varConnections?.hasInput || false;
-                  const hasOutput = varConnections?.hasOutput || false;
-
-                  const isSource = dragState?.fromVar === v.name;
-                  const isHoveredTarget = dragState && hoveredVar === v.name && !isSource;
+                  const flags = connectedVars.get(node.name);
+                  const hasInput = flags?.hasInput || false;
+                  const hasOutput = flags?.hasOutput || false;
+                  const isSource = dragState?.fromVar === node.name;
+                  const isHoveredTarget = dragState && hoveredVar === node.name && !isSource && !node.connectionsDisabled;
+                  const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
+                  const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
+                  const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
 
                   return (
                     <g
-                      key={v.id}
+                      key={node.id}
                       transform={`translate(0, ${rowY})`}
-                      className={`variable-row ${isSource ? 'drag-source' : ''} ${isHoveredTarget ? 'drop-target' : ''}`}
-                      onMouseEnter={() => setHoveredVar(v.name)}
+                      className={`variable-row ${isSource ? 'drag-source' : ''} ${isHoveredTarget ? 'drop-target' : ''} ${rowInteractive ? 'shader-row' : ''}`}
+                      onMouseEnter={() => setHoveredVar(node.name)}
                       onMouseLeave={() => setHoveredVar(null)}
+                      onClick={() => handleShaderOpen(group, node)}
+                      style={rowInteractive ? { cursor: 'pointer' } : undefined}
                     >
-                      {/* Hover background */}
                       <rect
                         x={1}
                         y={1}
@@ -558,80 +726,104 @@ export function GroupedGraph({ variables, selectedCollectionId, variableType }: 
                         className="row-hover-bg"
                       />
 
-                      {/* Left connection point (INPUT - receives value) */}
                       <circle
                         cx={0}
                         cy={ROW_HEIGHT / 2}
                         r={4}
-                        fill={hasInput ? '#1877f2' : 'white'}
-                        stroke={hasInput ? '#1877f2' : 'black'}
+                        fill={hasInput ? inputColor : 'white'}
+                        stroke={hasInput ? inputColor : 'black'}
                         strokeWidth={1}
-                        className={`connection-point ${hasInput ? 'connected' : ''}`}
-                        style={{ cursor: 'crosshair' }}
-                        onMouseDown={(e) => {
+                        className={`connection-point ${hasInput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
+                        style={{ cursor: node.connectionsDisabled ? 'default' : 'crosshair' }}
+                        onMouseDown={node.connectionsDisabled ? undefined : e => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'left', group.x, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.key, node.name, 'left', group.x, group.y + rowY + ROW_HEIGHT / 2);
                         }}
-                        onMouseUp={(e) => {
+                        onMouseUp={node.connectionsDisabled ? undefined : e => {
                           e.stopPropagation();
-                          if (dragState) handleDrop(group.name, v.name, 'left');
+                          if (dragState) {
+                            handleDrop(node.name, 'left');
+                          }
                         }}
                       />
 
-                      {/* Color swatch (only for colors) */}
-                      {isColorType && (
+                      {isColorType && !node.isVirtual && (
                         <rect
                           x={14}
                           y={(ROW_HEIGHT - 20) / 2}
                           width={20}
                           height={20}
                           rx={2}
-                          fill={v.color}
+                          fill={node.color}
                           stroke="#ccc"
                           strokeWidth={0.5}
                         />
                       )}
 
-                      {/* Short name */}
+                      {node.isVirtual && (
+                        <rect
+                          x={14}
+                          y={6}
+                          width={28}
+                          height={20}
+                          rx={10}
+                          fill={node.virtualType === 'shader' ? '#ffe4b8' : '#dceaff'}
+                        />
+                      )}
+
+                      {node.isVirtual && (
+                        <text
+                          x={28}
+                          y={ROW_HEIGHT / 2 + 4}
+                          fontSize={10}
+                          fontWeight={700}
+                          fill={node.virtualType === 'shader' ? '#8a5a00' : '#2457a5'}
+                          textAnchor="middle"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {node.virtualType === 'shader' ? 'fx' : 'out'}
+                        </text>
+                      )}
+
                       <text
-                        x={isColorType ? 42 : 14}
+                        x={node.isVirtual ? 52 : (isColorType ? 42 : 14)}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
                         fill="#333"
                       >
-                        {v.shortName}
+                        {node.shortName}
                       </text>
 
-                      {/* Hex/reference value on right */}
                       <text
                         x={GROUP_WIDTH - 16}
                         y={ROW_HEIGHT / 2 + 4}
                         fontSize={12}
                         fontFamily="monospace"
-                        fill={v.isReference ? '#666' : '#999'}
+                        fill={node.isReference ? '#666' : '#999'}
                         textAnchor="end"
                       >
-                        {v.displayName}
+                        {node.displayName}
                       </text>
 
-                      {/* Right connection point (OUTPUT - sends value) */}
                       <circle
                         cx={GROUP_WIDTH}
                         cy={ROW_HEIGHT / 2}
                         r={4}
-                        fill={hasOutput ? '#1877f2' : 'white'}
-                        stroke={hasOutput ? '#1877f2' : 'black'}
+                        fill={hasOutput ? outputColor : 'white'}
+                        stroke={hasOutput ? outputColor : 'black'}
                         strokeWidth={1}
-                        className={`connection-point ${hasOutput ? 'connected' : ''}`}
-                        style={{ cursor: 'crosshair' }}
-                        onMouseDown={(e) => {
+                        className={`connection-point ${hasOutput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
+                        style={{ cursor: node.connectionsDisabled ? 'default' : 'crosshair' }}
+                        onMouseDown={node.connectionsDisabled ? undefined : e => {
                           e.stopPropagation();
-                          handleDragStart(group.name, v.name, 'right', group.x + GROUP_WIDTH, group.y + rowY + ROW_HEIGHT / 2);
+                          handleDragStart(group.key, node.name, 'right', group.x + GROUP_WIDTH, group.y + rowY + ROW_HEIGHT / 2);
                         }}
-                        onMouseUp={(e) => {
+                        onMouseUp={node.connectionsDisabled ? undefined : e => {
                           e.stopPropagation();
-                          if (dragState) handleDrop(group.name, v.name, 'right');
+                          if (dragState) {
+                            handleDrop(node.name, 'right');
+                          }
                         }}
                       />
                     </g>

@@ -357,4 +357,16 @@ tr.drag-over-below {
       height: 14px;
     }
   }
+
+  &.dirty {
+    border-color: #d9a441;
+    background: #fff8e6;
+    color: #8a5a00;
+
+    &:hover {
+      border-color: #c18400;
+      background: #fff2cc;
+      color: #8a5a00;
+    }
+  }
 }

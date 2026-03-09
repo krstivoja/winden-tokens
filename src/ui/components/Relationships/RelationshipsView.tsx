@@ -9,7 +9,7 @@ interface RelationshipsViewProps {
 }
 
 export function RelationshipsView({ variableType }: RelationshipsViewProps) {
-  const { variables, selectedCollectionId } = useAppContext();
+  const { variables, selectedCollectionId, shadeGroups } = useAppContext();
 
   // Count stats
   const filteredVars = variables.filter(
@@ -28,6 +28,7 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
         variables={variables}
         selectedCollectionId={selectedCollectionId}
         variableType={variableType}
+        shadeGroups={shadeGroups}
       />
 
       {/* Stats overlay */}

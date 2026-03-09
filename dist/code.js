@@ -3,6 +3,7 @@
 figma.showUI(__html__, { width: 750, height: 500, themeColors: true });
 // Track variable state for change detection
 let lastDataHash = '';
+const SHADE_GENERATOR_CONFIG_KEY = 'shadeGeneratorConfig';
 // Get stored variable order
 function getVariableOrder() {
     const orderJson = figma.root.getPluginData('variableOrder');
@@ -12,18 +13,405 @@ function getVariableOrder() {
 function setVariableOrder(order) {
     figma.root.setPluginData('variableOrder', JSON.stringify(order));
 }
-// Fetch and send all data to UI
-async function fetchData() {
+function isShadeVariableName(name) {
+    return /^(.+)\/(\d+)$/.test(name);
+}
+function getShadeBaseName(name) {
+    const match = name.match(/^(.+)\/(\d+)$/);
+    return match ? match[1] : null;
+}
+function extractShadeNumber(name) {
+    const match = name.match(/\/(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
+}
+function readShadeGeneratorConfig(variable) {
+    const raw = variable.getPluginData(SHADE_GENERATOR_CONFIG_KEY);
+    if (!raw)
+        return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.generatedShades)) {
+            return null;
+        }
+        return {
+            version: typeof parsed.version === 'number' ? parsed.version : 1,
+            sourceVariableId: typeof parsed.sourceVariableId === 'string' ? parsed.sourceVariableId : variable.id,
+            sourceName: typeof parsed.sourceName === 'string' ? parsed.sourceName : variable.name,
+            sourceValue: typeof parsed.sourceValue === 'string' ? parsed.sourceValue : '',
+            shadeCount: typeof parsed.shadeCount === 'number' ? parsed.shadeCount : parsed.generatedShades.length,
+            lightValue: typeof parsed.lightValue === 'number' ? parsed.lightValue : 5,
+            darkValue: typeof parsed.darkValue === 'number' ? parsed.darkValue : 90,
+            lightnessCurve: parsed.lightnessCurve,
+            saturationCurve: parsed.saturationCurve,
+            hueCurve: parsed.hueCurve,
+            generatedShades: parsed.generatedShades,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
+        };
+    }
+    catch (error) {
+        console.warn('[Plugin] Failed to parse shade generator config for', variable.name, error);
+        return null;
+    }
+}
+function clearShadeGeneratorConfig(variable) {
+    variable.setPluginData(SHADE_GENERATOR_CONFIG_KEY, '');
+}
+function sortVariableData(variableData) {
+    const order = getVariableOrder();
+    const sorted = [...variableData];
+    if (order.length > 0) {
+        sorted.sort((a, b) => {
+            const indexA = order.indexOf(a.id);
+            const indexB = order.indexOf(b.id);
+            if (indexA === -1 && indexB === -1)
+                return 0;
+            if (indexA === -1)
+                return 1;
+            if (indexB === -1)
+                return -1;
+            return indexA - indexB;
+        });
+    }
+    const groupMap = new Map();
+    for (const variable of sorted) {
+        const baseName = getShadeBaseName(variable.name);
+        if (!baseName)
+            continue;
+        if (!groupMap.has(baseName)) {
+            groupMap.set(baseName, []);
+        }
+        groupMap.get(baseName).push(variable);
+    }
+    for (const group of groupMap.values()) {
+        group.sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+    }
+    const result = [];
+    const processedGroups = new Set();
+    for (const variable of sorted) {
+        const baseName = getShadeBaseName(variable.name);
+        if (baseName) {
+            if (!processedGroups.has(baseName)) {
+                processedGroups.add(baseName);
+                result.push(...groupMap.get(baseName));
+            }
+        }
+        else {
+            result.push(variable);
+        }
+    }
+    return result;
+}
+function buildShadeGroups(variables, formattedValueMap) {
+    const variableMap = new Map(variables.map(variable => [variable.id, variable]));
+    const shadeGroups = [];
+    for (const variable of variables) {
+        if (variable.resolvedType !== 'COLOR')
+            continue;
+        const config = readShadeGeneratorConfig(variable);
+        if (!config)
+            continue;
+        const trackedShades = config.generatedShades || [];
+        const trackedShadeIds = new Set(trackedShades.map(shade => shade.id));
+        const baseNames = new Set([variable.name, config.sourceName]);
+        for (const shade of trackedShades) {
+            const baseName = getShadeBaseName(shade.name);
+            if (baseName) {
+                baseNames.add(baseName);
+            }
+        }
+        const actualShadeVars = variables.filter(candidate => {
+            if (candidate.id === variable.id)
+                return false;
+            if (candidate.variableCollectionId !== variable.variableCollectionId)
+                return false;
+            if (candidate.resolvedType !== 'COLOR')
+                return false;
+            const baseName = getShadeBaseName(candidate.name);
+            return !!baseName && baseNames.has(baseName);
+        });
+        actualShadeVars.sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+        const deleteIds = Array.from(new Set([
+            ...trackedShades.map(shade => shade.id),
+            ...actualShadeVars.map(shade => shade.id),
+        ].filter(id => !!variableMap.get(id))));
+        const dirtyReasons = new Set();
+        const currentSourceValue = formattedValueMap.get(variable.id) || '';
+        if (currentSourceValue !== config.sourceValue) {
+            dirtyReasons.add('source-value');
+        }
+        if (variable.name !== config.sourceName) {
+            dirtyReasons.add('source-name');
+        }
+        if (trackedShades.length === 0) {
+            dirtyReasons.add('missing-shades');
+        }
+        for (const shade of trackedShades) {
+            const actual = variableMap.get(shade.id);
+            if (!actual) {
+                dirtyReasons.add('missing-shades');
+                continue;
+            }
+            const actualValue = formattedValueMap.get(actual.id) || '';
+            if (actual.name !== shade.name || actualValue !== shade.value) {
+                dirtyReasons.add('modified-shades');
+            }
+        }
+        if (actualShadeVars.length !== trackedShades.length) {
+            dirtyReasons.add('modified-shades');
+        }
+        for (const actual of actualShadeVars) {
+            if (!trackedShadeIds.has(actual.id)) {
+                dirtyReasons.add('modified-shades');
+            }
+        }
+        shadeGroups.push({
+            sourceVariableId: variable.id,
+            sourceVariableName: variable.name,
+            collectionId: variable.variableCollectionId,
+            deleteIds,
+            status: dirtyReasons.size > 0 ? 'dirty' : 'clean',
+            dirtyReasons: Array.from(dirtyReasons),
+            config: {
+                version: config.version,
+                sourceVariableId: variable.id,
+                sourceName: config.sourceName,
+                sourceValue: config.sourceValue,
+                shadeCount: config.shadeCount,
+                lightValue: config.lightValue,
+                darkValue: config.darkValue,
+                lightnessCurve: config.lightnessCurve,
+                saturationCurve: config.saturationCurve,
+                hueCurve: config.hueCurve,
+                generatedShades: config.generatedShades,
+                updatedAt: config.updatedAt,
+            },
+        });
+    }
+    shadeGroups.sort((a, b) => a.sourceVariableName.localeCompare(b.sourceVariableName));
+    return shadeGroups;
+}
+function getManagedShadeVariables(sourceVariable, config, variables) {
+    const baseNames = new Set([sourceVariable.name, config.sourceName]);
+    for (const shade of config.generatedShades || []) {
+        const baseName = getShadeBaseName(shade.name);
+        if (baseName) {
+            baseNames.add(baseName);
+        }
+    }
+    const actualShadeVars = variables.filter(candidate => {
+        if (candidate.id === sourceVariable.id)
+            return false;
+        if (candidate.variableCollectionId !== sourceVariable.variableCollectionId)
+            return false;
+        if (candidate.resolvedType !== 'COLOR')
+            return false;
+        const baseName = getShadeBaseName(candidate.name);
+        return !!baseName && baseNames.has(baseName);
+    });
+    actualShadeVars.sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+    return actualShadeVars;
+}
+function collectManagedShadeDeleteIds(sourceVariable, config, variables) {
+    return Array.from(new Set([
+        ...(config.generatedShades || []).map(shade => shade.id),
+        ...getManagedShadeVariables(sourceVariable, config, variables).map(shade => shade.id),
+    ]));
+}
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+function cubicBezierAt(p0, p1, p2, p3, t) {
+    const mt = 1 - t;
+    return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+}
+function cubicBezierDerivative(p0, p1, p2, p3, t) {
+    const mt = 1 - t;
+    return 3 * mt * mt * (p1 - p0) + 6 * mt * t * (p2 - p1) + 3 * t * t * (p3 - p2);
+}
+function solveBezierTForX(x, x1, x2) {
+    let t = clamp(x, 0, 1);
+    for (let i = 0; i < 5; i++) {
+        const xAt = cubicBezierAt(0, x1, x2, 1, t);
+        const dx = xAt - x;
+        if (Math.abs(dx) < 1e-4)
+            break;
+        const derivative = cubicBezierDerivative(0, x1, x2, 1, t);
+        if (derivative === 0)
+            break;
+        t = clamp(t - dx / derivative, 0, 1);
+    }
+    return t;
+}
+function evaluateShadeCurveAtNodes(handles, count) {
+    const values = [];
+    for (let i = 0; i < count; i++) {
+        const t = count > 1 ? i / (count - 1) : 0;
+        const u = solveBezierTForX(t, clamp(handles.handle1.t, 0, 1), clamp(handles.handle2.t, 0, 1));
+        values.push(cubicBezierAt(handles.startValue, handles.handle1.value, handles.handle2.value, handles.endValue, u));
+    }
+    return values;
+}
+function rgbToHsv(r, g, b) {
+    const nr = r / 255;
+    const ng = g / 255;
+    const nb = b / 255;
+    const max = Math.max(nr, ng, nb);
+    const min = Math.min(nr, ng, nb);
+    const delta = max - min;
+    let h = 0;
+    const s = max === 0 ? 0 : delta / max;
+    const v = max;
+    if (delta !== 0) {
+        switch (max) {
+            case nr:
+                h = ((ng - nb) / delta + (ng < nb ? 6 : 0)) * 60;
+                break;
+            case ng:
+                h = ((nb - nr) / delta + 2) * 60;
+                break;
+            default:
+                h = ((nr - ng) / delta + 4) * 60;
+                break;
+        }
+    }
+    return { h, s: s * 100, v: v * 100 };
+}
+function hsvToRgb(h, s, v) {
+    const normalizedS = s / 100;
+    const normalizedV = v / 100;
+    const i = Math.floor(h / 60) % 6;
+    const f = h / 60 - Math.floor(h / 60);
+    const p = normalizedV * (1 - normalizedS);
+    const q = normalizedV * (1 - f * normalizedS);
+    const t = normalizedV * (1 - (1 - f) * normalizedS);
+    let r = normalizedV;
+    let g = normalizedV;
+    let b = normalizedV;
+    switch (i) {
+        case 0:
+            r = normalizedV;
+            g = t;
+            b = p;
+            break;
+        case 1:
+            r = q;
+            g = normalizedV;
+            b = p;
+            break;
+        case 2:
+            r = p;
+            g = normalizedV;
+            b = t;
+            break;
+        case 3:
+            r = p;
+            g = q;
+            b = normalizedV;
+            break;
+        case 4:
+            r = t;
+            g = p;
+            b = normalizedV;
+            break;
+        default:
+            r = normalizedV;
+            g = p;
+            b = q;
+            break;
+    }
+    return {
+        r: Math.round(r * 255),
+        g: Math.round(g * 255),
+        b: Math.round(b * 255),
+    };
+}
+function lightnessToRgb(baseRgb, lightness) {
+    if (lightness <= 50) {
+        const t = lightness / 50;
+        return {
+            r: Math.round(255 + (baseRgb.r - 255) * t),
+            g: Math.round(255 + (baseRgb.g - 255) * t),
+            b: Math.round(255 + (baseRgb.b - 255) * t),
+        };
+    }
+    const t = (lightness - 50) / 50;
+    return {
+        r: Math.round(baseRgb.r * (1 - t)),
+        g: Math.round(baseRgb.g * (1 - t)),
+        b: Math.round(baseRgb.b * (1 - t)),
+    };
+}
+function rgbToCss(rgb) {
+    return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+}
+function getShadeNames(count) {
+    if (count === 5)
+        return ['100', '300', '500', '700', '900'];
+    if (count === 10)
+        return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+    if (count === 11)
+        return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+    const names = [];
+    for (let i = 0; i < count; i++) {
+        const value = Math.round(50 + (i / (count - 1)) * 900);
+        names.push(String(value));
+    }
+    return names;
+}
+function buildManagedShadePayload(baseRgb, groupName, config) {
+    const lightAdj = evaluateShadeCurveAtNodes(config.lightnessCurve, config.shadeCount);
+    const satAdj = evaluateShadeCurveAtNodes(config.saturationCurve, config.shadeCount);
+    const hueAdj = evaluateShadeCurveAtNodes(config.hueCurve, config.shadeCount);
+    const names = getShadeNames(config.shadeCount);
+    const colors = [];
+    const baseHsv = rgbToHsv(baseRgb.r, baseRgb.g, baseRgb.b);
+    for (let i = 0; i < config.shadeCount; i++) {
+        const t = config.shadeCount > 1 ? i / (config.shadeCount - 1) : 0;
+        const baseLightness = config.lightValue + (config.darkValue - config.lightValue) * t;
+        const lightness = clamp(baseLightness + (lightAdj[i] || 0), 0, 100);
+        const saturation = clamp(baseHsv.s + (satAdj[i] || 0), 0, 100);
+        const hue = (baseHsv.h + (hueAdj[i] || 0) + 360) % 360;
+        const adjustedRgb = hsvToRgb(hue, saturation, baseHsv.v);
+        const shadeRgb = lightnessToRgb(adjustedRgb, lightness);
+        colors.push({
+            name: `${groupName}/${names[i]}`,
+            value: rgbToCss(shadeRgb),
+        });
+    }
+    return colors;
+}
+async function resolveSourceVariableRgb(variable, visited = new Set()) {
+    if (visited.has(variable.id)) {
+        return null;
+    }
+    visited.add(variable.id);
+    const modeId = Object.keys(variable.valuesByMode)[0];
+    const value = variable.valuesByMode[modeId];
+    if (value && typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+        const referencedVariable = await figma.variables.getVariableByIdAsync(value.id);
+        if (!referencedVariable) {
+            return null;
+        }
+        return resolveSourceVariableRgb(referencedVariable, visited);
+    }
+    if (value && typeof value === 'object' && 'r' in value) {
+        return {
+            r: Math.round(value.r * 255),
+            g: Math.round(value.g * 255),
+            b: Math.round(value.b * 255),
+        };
+    }
+    return null;
+}
+async function buildUiState() {
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
     const variables = await figma.variables.getLocalVariablesAsync();
-    // Debug: log what we get from API
     console.log('[Plugin] Collections:', collections.map(c => ({ name: c.name, variableIds: c.variableIds })));
     console.log('[Plugin] Variables from API:', variables.map(v => v.name));
     const collectionData = collections.map(c => ({
         id: c.id,
         name: c.name
     }));
-    // Build variable data using collection's variableIds order (Figma's native order)
     let variableData = [];
     for (const collection of collections) {
         for (const varId of collection.variableIds) {
@@ -41,74 +429,33 @@ async function fetchData() {
             }
         }
     }
+    variableData = sortVariableData(variableData);
     console.log('[Plugin] Variables after collection order:', variableData.map(v => v.name));
-    // Apply custom order if exists
-    const order = getVariableOrder();
-    if (order.length > 0) {
-        variableData.sort((a, b) => {
-            const indexA = order.indexOf(a.id);
-            const indexB = order.indexOf(b.id);
-            // Items not in order go to the end
-            if (indexA === -1 && indexB === -1)
-                return 0;
-            if (indexA === -1)
-                return 1;
-            if (indexB === -1)
-                return -1;
-            return indexA - indexB;
-        });
-    }
-    // Sort shades numerically within each group (e.g., color/50, color/100, color/200)
-    // Group by base name (everything before the last slash)
-    const groupMap = new Map();
-    const nonGrouped = [];
-    for (const variable of variableData) {
-        const match = variable.name.match(/^(.+)\/(\d+)$/);
-        if (match) {
-            const baseName = match[1];
-            if (!groupMap.has(baseName)) {
-                groupMap.set(baseName, []);
-            }
-            groupMap.get(baseName).push(variable);
-        }
-        else {
-            nonGrouped.push(variable);
-        }
-    }
-    // Sort each group numerically
-    const extractNumber = (name) => {
-        const match = name.match(/\/(\d+)$/);
-        return match ? parseInt(match[1], 10) : 0;
+    const formattedValueMap = new Map(variableData.map(variable => [variable.id, variable.value]));
+    const shadeGroups = buildShadeGroups(variables, formattedValueMap);
+    const hash = JSON.stringify({
+        collections: collectionData,
+        variables: variableData,
+        shadeGroups,
+    });
+    return {
+        collectionData,
+        variableData,
+        shadeGroups,
+        hash,
     };
-    for (const group of groupMap.values()) {
-        group.sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
-    }
-    // Rebuild variableData with sorted groups
-    // Maintain the original position of the first item in each group
-    const sortedVariableData = [];
-    const processedGroups = new Set();
-    for (const variable of variableData) {
-        const match = variable.name.match(/^(.+)\/\d+$/);
-        if (match) {
-            const baseName = match[1];
-            if (!processedGroups.has(baseName)) {
-                processedGroups.add(baseName);
-                // Add all variables from this group in sorted order
-                sortedVariableData.push(...groupMap.get(baseName));
-            }
-        }
-        else {
-            sortedVariableData.push(variable);
-        }
-    }
-    variableData = sortedVariableData;
-    // Update hash for change detection
-    lastDataHash = JSON.stringify({ collections: collectionData, variables: variableData });
-    console.log('[Plugin] Sending data-loaded with', collectionData.length, 'collections and', variableData.length, 'variables');
+}
+// Fetch and send all data to UI
+async function fetchData() {
+    await syncManagedShadeSources();
+    const { collectionData, variableData, shadeGroups, hash } = await buildUiState();
+    lastDataHash = hash;
+    console.log('[Plugin] Sending data-loaded with', collectionData.length, 'collections,', variableData.length, 'variables and', shadeGroups.length, 'shade groups');
     figma.ui.postMessage({
         type: 'data-loaded',
         collections: collectionData,
-        variables: variableData
+        variables: variableData,
+        shadeGroups,
     });
 }
 async function formatValue(value, type) {
@@ -292,6 +639,15 @@ async function deleteVariable(id) {
     try {
         const variable = await figma.variables.getVariableByIdAsync(id);
         if (variable) {
+            const shadeConfig = readShadeGeneratorConfig(variable);
+            if (shadeConfig) {
+                for (const shade of shadeConfig.generatedShades) {
+                    const shadeVariable = await figma.variables.getVariableByIdAsync(shade.id);
+                    if (shadeVariable) {
+                        shadeVariable.remove();
+                    }
+                }
+            }
             variable.remove();
             await fetchData();
             figma.ui.postMessage({ type: 'update-success' });
@@ -390,6 +746,141 @@ async function bulkUpdateGroup(collectionId, groupName, updates) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+async function upsertShadeSourceVariable(collection, modeId, source) {
+    let variable = null;
+    if (source.id) {
+        variable = await figma.variables.getVariableByIdAsync(source.id);
+    }
+    if (!variable) {
+        const variables = await figma.variables.getLocalVariablesAsync();
+        variable = variables.find(candidate => candidate.variableCollectionId === collection.id &&
+            candidate.name === source.name &&
+            candidate.resolvedType === 'COLOR') || null;
+    }
+    if (!variable) {
+        variable = figma.variables.createVariable(source.name, collection, 'COLOR');
+    }
+    if (variable.variableCollectionId !== collection.id) {
+        throw new Error('Source color must be in the selected collection');
+    }
+    if (variable.resolvedType !== 'COLOR') {
+        throw new Error('Source variable must be a color');
+    }
+    if (variable.name !== source.name) {
+        variable.name = source.name;
+    }
+    const parsedValue = await parseValue(source.value, 'COLOR');
+    variable.setValueForMode(modeId, parsedValue);
+    return variable;
+}
+async function persistShadeGeneratorConfig(sourceVariable, modeId, config, shadeVariables) {
+    const generatedShades = [];
+    for (const variable of shadeVariables) {
+        generatedShades.push({
+            id: variable.id,
+            name: variable.name,
+            value: await formatValue(variable.valuesByMode[modeId], variable.resolvedType),
+        });
+    }
+    const storedConfig = {
+        version: 1,
+        sourceVariableId: sourceVariable.id,
+        sourceName: sourceVariable.name,
+        sourceValue: await formatValue(sourceVariable.valuesByMode[modeId], sourceVariable.resolvedType),
+        shadeCount: config.shadeCount,
+        lightValue: config.lightValue,
+        darkValue: config.darkValue,
+        lightnessCurve: config.lightnessCurve,
+        saturationCurve: config.saturationCurve,
+        hueCurve: config.hueCurve,
+        generatedShades,
+        updatedAt: new Date().toISOString(),
+    };
+    sourceVariable.setPluginData(SHADE_GENERATOR_CONFIG_KEY, JSON.stringify(storedConfig));
+}
+async function applyShadeUpdate(collection, modeId, deleteIds, shades, sourceVariable, config) {
+    const existingVars = [];
+    for (const id of Array.from(new Set(deleteIds))) {
+        if (sourceVariable && id === sourceVariable.id) {
+            continue;
+        }
+        const variable = await figma.variables.getVariableByIdAsync(id);
+        if (variable) {
+            existingVars.push({ id, variable });
+        }
+    }
+    existingVars.sort((a, b) => extractShadeNumber(a.variable.name) - extractShadeNumber(b.variable.name));
+    const sortedShades = [...shades].sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+    const finalShadeVariables = [];
+    const reusedCount = Math.min(existingVars.length, sortedShades.length);
+    for (let i = 0; i < reusedCount; i++) {
+        const variable = existingVars[i].variable;
+        const shade = sortedShades[i];
+        variable.name = shade.name;
+        const parsedValue = await parseValue(shade.value, 'COLOR');
+        variable.setValueForMode(modeId, parsedValue);
+        finalShadeVariables.push(variable);
+    }
+    for (let i = reusedCount; i < existingVars.length; i++) {
+        existingVars[i].variable.remove();
+    }
+    for (let i = reusedCount; i < sortedShades.length; i++) {
+        const shade = sortedShades[i];
+        const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
+        const parsedValue = await parseValue(shade.value, 'COLOR');
+        variable.setValueForMode(modeId, parsedValue);
+        finalShadeVariables.push(variable);
+    }
+    if (sourceVariable) {
+        if (config) {
+            await persistShadeGeneratorConfig(sourceVariable, modeId, config, finalShadeVariables);
+        }
+        else {
+            clearShadeGeneratorConfig(sourceVariable);
+        }
+    }
+}
+async function syncManagedShadeSources() {
+    const variables = await figma.variables.getLocalVariablesAsync();
+    let syncedAny = false;
+    for (const variable of variables) {
+        if (variable.resolvedType !== 'COLOR')
+            continue;
+        const storedConfig = readShadeGeneratorConfig(variable);
+        if (!storedConfig)
+            continue;
+        const modeId = Object.keys(variable.valuesByMode)[0];
+        const currentSourceValue = await formatValue(variable.valuesByMode[modeId], variable.resolvedType);
+        const sourceChanged = currentSourceValue !== storedConfig.sourceValue ||
+            variable.name !== storedConfig.sourceName;
+        if (!sourceChanged)
+            continue;
+        const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+        if (!collection)
+            continue;
+        const resolvedSourceRgb = await resolveSourceVariableRgb(variable);
+        if (!resolvedSourceRgb)
+            continue;
+        const shades = buildManagedShadePayload(resolvedSourceRgb, variable.name, {
+            shadeCount: storedConfig.shadeCount,
+            lightValue: storedConfig.lightValue,
+            darkValue: storedConfig.darkValue,
+            lightnessCurve: storedConfig.lightnessCurve,
+            saturationCurve: storedConfig.saturationCurve,
+            hueCurve: storedConfig.hueCurve,
+        });
+        await applyShadeUpdate(collection, modeId, collectManagedShadeDeleteIds(variable, storedConfig, variables), shades, variable, {
+            shadeCount: storedConfig.shadeCount,
+            lightValue: storedConfig.lightValue,
+            darkValue: storedConfig.darkValue,
+            lightnessCurve: storedConfig.lightnessCurve,
+            saturationCurve: storedConfig.saturationCurve,
+            hueCurve: storedConfig.hueCurve,
+        });
+        syncedAny = true;
+    }
+    return syncedAny;
+}
 // Create color shades
 async function createShades(collectionId, shades) {
     try {
@@ -410,48 +901,16 @@ async function createShades(collectionId, shades) {
     }
 }
 // Update color shades (update existing, delete extras, create new ones as needed)
-async function updateShades(collectionId, deleteIds, shades) {
+async function updateShades(collectionId, deleteIds, shades, source, config) {
     try {
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
         const modeId = collection.modes[0].modeId;
-        // Get existing variables from the deleteIds list
-        const existingVars = [];
-        for (const id of deleteIds) {
-            const variable = await figma.variables.getVariableByIdAsync(id);
-            if (variable) {
-                existingVars.push({ id, variable });
-            }
-        }
-        // Sort both existing variables and new shades by numeric suffix to match them up
-        const extractNumber = (name) => {
-            const match = name.match(/\/(\d+)$/);
-            return match ? parseInt(match[1], 10) : 0;
-        };
-        existingVars.sort((a, b) => extractNumber(a.variable.name) - extractNumber(b.variable.name));
-        const sortedShades = [...shades].sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
-        // Update existing variables where possible
-        const reusedCount = Math.min(existingVars.length, sortedShades.length);
-        for (let i = 0; i < reusedCount; i++) {
-            const variable = existingVars[i].variable;
-            const shade = sortedShades[i];
-            // Update name and value
-            variable.name = shade.name;
-            const parsedValue = await parseValue(shade.value, 'COLOR');
-            variable.setValueForMode(modeId, parsedValue);
-        }
-        // Delete excess variables if we have more existing than needed
-        for (let i = reusedCount; i < existingVars.length; i++) {
-            existingVars[i].variable.remove();
-        }
-        // Create new variables if we need more than we had
-        for (let i = reusedCount; i < sortedShades.length; i++) {
-            const shade = sortedShades[i];
-            const variable = figma.variables.createVariable(shade.name, collection, 'COLOR');
-            const parsedValue = await parseValue(shade.value, 'COLOR');
-            variable.setValueForMode(modeId, parsedValue);
-        }
+        const sourceVariable = source
+            ? await upsertShadeSourceVariable(collection, modeId, source)
+            : null;
+        await applyShadeUpdate(collection, modeId, deleteIds, shades, sourceVariable, config);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
     }
@@ -459,24 +918,28 @@ async function updateShades(collectionId, deleteIds, shades) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
-// Remove shades and convert back to single color
-async function removeShades(collectionId, deleteIds, newColor) {
+// Remove shades and keep the source color
+async function removeShades(collectionId, deleteIds, source) {
     try {
-        // Delete all shades
-        for (const id of deleteIds) {
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection)
+            throw new Error('Collection not found');
+        const modeId = collection.modes[0].modeId;
+        const sourceVariable = source
+            ? await upsertShadeSourceVariable(collection, modeId, source)
+            : null;
+        for (const id of Array.from(new Set(deleteIds))) {
+            if (sourceVariable && id === sourceVariable.id) {
+                continue;
+            }
             const variable = await figma.variables.getVariableByIdAsync(id);
             if (variable) {
                 variable.remove();
             }
         }
-        // Create single color
-        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-        if (!collection)
-            throw new Error('Collection not found');
-        const modeId = collection.modes[0].modeId;
-        const variable = figma.variables.createVariable(newColor.name, collection, 'COLOR');
-        const parsedValue = await parseValue(newColor.value, 'COLOR');
-        variable.setValueForMode(modeId, parsedValue);
+        if (sourceVariable) {
+            clearShadeGeneratorConfig(sourceVariable);
+        }
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
     }
@@ -643,77 +1106,12 @@ async function updateFromJson(data) {
 }
 // Poll for changes
 async function checkForChanges() {
-    const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    const variables = await figma.variables.getLocalVariablesAsync();
-    const collectionData = collections.map(c => ({ id: c.id, name: c.name }));
-    // Build variable data using same collection order as fetchData
-    let variableData = [];
-    for (const collection of collections) {
-        for (const varId of collection.variableIds) {
-            const variable = variables.find(v => v.id === varId);
-            if (variable) {
-                const modeId = Object.keys(variable.valuesByMode)[0];
-                variableData.push({
-                    id: variable.id,
-                    collectionId: variable.variableCollectionId,
-                    name: variable.name,
-                    resolvedType: variable.resolvedType,
-                    value: await formatValue(variable.valuesByMode[modeId], variable.resolvedType)
-                });
-            }
-        }
+    const syncedManagedShades = await syncManagedShadeSources();
+    if (syncedManagedShades) {
+        await fetchData();
+        return;
     }
-    // Apply custom order if exists (same as fetchData)
-    const order = getVariableOrder();
-    if (order.length > 0) {
-        variableData.sort((a, b) => {
-            const indexA = order.indexOf(a.id);
-            const indexB = order.indexOf(b.id);
-            if (indexA === -1 && indexB === -1)
-                return 0;
-            if (indexA === -1)
-                return 1;
-            if (indexB === -1)
-                return -1;
-            return indexA - indexB;
-        });
-    }
-    // Sort shades numerically within each group (same as fetchData)
-    const groupMap = new Map();
-    const extractNumber = (name) => {
-        const match = name.match(/\/(\d+)$/);
-        return match ? parseInt(match[1], 10) : 0;
-    };
-    for (const variable of variableData) {
-        const match = variable.name.match(/^(.+)\/(\d+)$/);
-        if (match) {
-            const baseName = match[1];
-            if (!groupMap.has(baseName)) {
-                groupMap.set(baseName, []);
-            }
-            groupMap.get(baseName).push(variable);
-        }
-    }
-    for (const group of groupMap.values()) {
-        group.sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
-    }
-    const sortedVariableData = [];
-    const processedGroups = new Set();
-    for (const variable of variableData) {
-        const match = variable.name.match(/^(.+)\/\d+$/);
-        if (match) {
-            const baseName = match[1];
-            if (!processedGroups.has(baseName)) {
-                processedGroups.add(baseName);
-                sortedVariableData.push(...groupMap.get(baseName));
-            }
-        }
-        else {
-            sortedVariableData.push(variable);
-        }
-    }
-    variableData = sortedVariableData;
-    const currentHash = JSON.stringify({ collections: collectionData, variables: variableData });
+    const { hash: currentHash } = await buildUiState();
     if (lastDataHash && currentHash !== lastDataHash) {
         figma.ui.postMessage({ type: 'changes-detected' });
     }
@@ -762,10 +1160,10 @@ figma.ui.onmessage = async (msg) => {
             await createShades(msg.collectionId, msg.shades);
             break;
         case 'update-shades':
-            await updateShades(msg.collectionId, msg.deleteIds, msg.shades);
+            await updateShades(msg.collectionId, msg.deleteIds, msg.shades, msg.source, msg.config);
             break;
         case 'remove-shades':
-            await removeShades(msg.collectionId, msg.deleteIds, msg.newColor);
+            await removeShades(msg.collectionId, msg.deleteIds, msg.source);
             break;
         case 'create-steps':
             await createSteps(msg.collectionId, msg.steps);

@@ -25,3 +25,44 @@ export interface ShadeConfig {
   name: string;
   value: string;
 }
+
+export interface ShadeCurvePoint {
+  t: number;
+  value: number;
+}
+
+export interface ShadeCurveHandles {
+  startValue: number;
+  handle1: ShadeCurvePoint;
+  handle2: ShadeCurvePoint;
+  endValue: number;
+}
+
+export interface ShadeGeneratorConfig {
+  version: number;
+  sourceVariableId: string;
+  sourceName: string;
+  sourceValue: string;
+  shadeCount: number;
+  lightValue: number;
+  darkValue: number;
+  lightnessCurve: ShadeCurveHandles;
+  saturationCurve: ShadeCurveHandles;
+  hueCurve: ShadeCurveHandles;
+  generatedShades: Array<{
+    id: string;
+    name: string;
+    value: string;
+  }>;
+  updatedAt: string;
+}
+
+export interface ShadeGroupData {
+  sourceVariableId: string;
+  sourceVariableName: string;
+  collectionId: string;
+  deleteIds: string[];
+  status: 'clean' | 'dirty';
+  dirtyReasons: string[];
+  config: ShadeGeneratorConfig;
+}

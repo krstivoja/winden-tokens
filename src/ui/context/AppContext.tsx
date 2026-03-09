@@ -1,11 +1,12 @@
 // Global application context
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { CollectionData, VariableData } from '../types';
+import { CollectionData, ShadeGroupData, VariableData } from '../types';
 
 interface AppState {
   collections: CollectionData[];
   variables: VariableData[];
+  shadeGroups: ShadeGroupData[];
   selectedCollectionId: string | null;
   collapsedGroups: Set<string>;
   searchQuery: string;
@@ -14,13 +15,15 @@ interface AppState {
 }
 
 interface AppContextValue extends AppState {
-  setData: (collections: CollectionData[], variables: VariableData[]) => void;
+  setData: (collections: CollectionData[], variables: VariableData[], shadeGroups: ShadeGroupData[]) => void;
   setSelectedCollectionId: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
   toggleGroup: (groupName: string) => void;
   isGroupCollapsed: (groupName: string) => boolean;
   filteredVariables: VariableData[];
   colorVariables: VariableData[];
+  getShadeGroupBySourceId: (variableId: string) => ShadeGroupData | null;
+  getShadeGroupByGroupName: (groupName: string) => ShadeGroupData | null;
   getFilteredCount: () => { shown: number; total: number };
   setGroupContrastColor: (groupName: string, color: string | null) => void;
   getGroupContrastColor: (groupName: string) => string | null;
@@ -33,15 +36,17 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [collections, setCollections] = useState<CollectionData[]>([]);
   const [variables, setVariables] = useState<VariableData[]>([]);
+  const [shadeGroups, setShadeGroups] = useState<ShadeGroupData[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQueryState] = useState('');
   const [groupContrastColors, setGroupContrastColors] = useState<Record<string, string>>({});
   const [singleContrastColors, setSingleContrastColors] = useState<Record<string, string>>({});
 
-  const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[]) => {
+  const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[], newShadeGroups: ShadeGroupData[]) => {
     setCollections(newCollections);
     setVariables(newVariables);
+    setShadeGroups(newShadeGroups);
     setSelectedCollectionId(prev => {
       if (!prev && newCollections.length) {
         return newCollections[0].id;
@@ -82,6 +87,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
   }, [variables, selectedCollectionId]);
 
+  const shadeGroupsBySourceId = useMemo(() => {
+    const map = new Map<string, ShadeGroupData>();
+    for (const group of shadeGroups) {
+      map.set(group.sourceVariableId, group);
+    }
+    return map;
+  }, [shadeGroups]);
+
+  const shadeGroupsByGroupName = useMemo(() => {
+    const map = new Map<string, ShadeGroupData>();
+    for (const group of shadeGroups) {
+      map.set(`${group.collectionId}:${group.sourceVariableName}`, group);
+    }
+    return map;
+  }, [shadeGroups]);
+
+  const getShadeGroupBySourceId = useCallback((variableId: string): ShadeGroupData | null => {
+    return shadeGroupsBySourceId.get(variableId) || null;
+  }, [shadeGroupsBySourceId]);
+
+  const getShadeGroupByGroupName = useCallback((groupName: string): ShadeGroupData | null => {
+    if (!selectedCollectionId) return null;
+    return shadeGroupsByGroupName.get(`${selectedCollectionId}:${groupName}`) || null;
+  }, [shadeGroupsByGroupName, selectedCollectionId]);
+
   const getFilteredCount = useCallback(() => {
     const total = variables.filter(v => v.collectionId === selectedCollectionId).length;
     return { shown: filteredVariables.length, total };
@@ -118,6 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: AppContextValue = {
     collections,
     variables,
+    shadeGroups,
     selectedCollectionId,
     collapsedGroups,
     searchQuery,
@@ -130,6 +161,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isGroupCollapsed,
     filteredVariables,
     colorVariables,
+    getShadeGroupBySourceId,
+    getShadeGroupByGroupName,
     getFilteredCount,
     setGroupContrastColor,
     getGroupContrastColor,
