@@ -145,6 +145,38 @@ export function getShadeNames(count: number): string[] {
   return names;
 }
 
+function getShadeBaseIndex(count: number): number {
+  const names = getShadeNames(count);
+  const explicitBaseIndex = names.indexOf('500');
+  if (explicitBaseIndex >= 0) {
+    return explicitBaseIndex;
+  }
+  return Math.floor((count - 1) / 2);
+}
+
+function getBaseShadeToneAtT(
+  t: number,
+  count: number,
+  lightValue: number,
+  darkValue: number
+): number {
+  if (count <= 1) {
+    return 50;
+  }
+
+  const baseIndex = getShadeBaseIndex(count);
+  const baseT = baseIndex / (count - 1);
+  const clampedT = Math.max(0, Math.min(1, t));
+
+  if (clampedT <= baseT) {
+    const localT = baseT === 0 ? 0 : clampedT / baseT;
+    return lightValue + (50 - lightValue) * localT;
+  }
+
+  const localT = baseT === 1 ? 0 : (clampedT - baseT) / (1 - baseT);
+  return 50 + (darkValue - 50) * localT;
+}
+
 // Parse any color format to RGB object
 export function parseColorToRgb(color: string): RGB | null {
   if (!color) return null;
@@ -292,7 +324,7 @@ export function generateShadeColorsWithCurves(
 
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    const baseLightness = lightValue + (darkValue - lightValue) * t;
+    const baseLightness = getBaseShadeToneAtT(t, count, lightValue, darkValue);
 
     // Apply all adjustments
     const lightness = Math.max(0, Math.min(100, baseLightness + (lightAdj[i] || 0)));

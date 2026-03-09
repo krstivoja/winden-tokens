@@ -19,10 +19,77 @@ import {
   DEFAULT_SHADE_DARK_VALUE,
   DEFAULT_SHADE_LIGHT_VALUE,
   evaluateCurveAtNodes,
+  getBaseShadeToneAtT,
 } from '../../utils/shades';
 
 type CurveProperty = 'lightness' | 'saturation' | 'hue';
 type DragTarget = 'handle1' | 'handle2' | 'startNode' | 'endNode';
+const CURVE_PROPERTIES: CurveProperty[] = ['lightness', 'saturation', 'hue'];
+
+const CURVE_EDITOR_HEIGHT = 200;
+const CURVE_PADDING_Y = 12;
+const CURVE_MIN_HANDLE_GAP = 0.05;
+
+const CURVE_PROPERTY_CONFIG: Record<CurveProperty, { min: number; max: number; unit: string; label: string }> = {
+  lightness: { min: -100, max: 100, unit: '%', label: 'Lightness offset' },
+  saturation: { min: -100, max: 100, unit: '%', label: 'Saturation offset' },
+  hue: { min: -180, max: 180, unit: 'deg', label: 'Hue shift' },
+};
+
+const CURVE_DISPLAY_CONFIG: Record<CurveProperty, { min: number; max: number }> = {
+  lightness: { min: 0, max: 100 },
+  saturation: { min: -100, max: 100 },
+  hue: { min: -180, max: 180 },
+};
+
+function getCurvePropertyValueRange(property: CurveProperty) {
+  return CURVE_PROPERTY_CONFIG[property];
+}
+
+function valueToCurveY(value: number, property: CurveProperty, minY: number, maxY: number): number {
+  const { min, max } = CURVE_DISPLAY_CONFIG[property];
+  const normalized = (clamp(value, min, max) - min) / (max - min);
+  return minY + normalized * (maxY - minY);
+}
+
+function curveYToValue(y: number, property: CurveProperty, minY: number, maxY: number): number {
+  const { min, max } = CURVE_DISPLAY_CONFIG[property];
+  const clampedY = clamp(y, minY, maxY);
+  const normalized = (clampedY - minY) / (maxY - minY);
+  return clamp(min + normalized * (max - min), min, max);
+}
+
+function formatCurveRange(property: CurveProperty): string {
+  if (property === 'lightness') {
+    return '0 = white, 50 = source, 100 = black';
+  }
+
+  const { min, max, unit } = getCurvePropertyValueRange(property);
+  const formatValue = (value: number) => {
+    if (unit === 'deg') {
+      return `${value > 0 ? '+' : ''}${value}${String.fromCharCode(176)}`;
+    }
+    return `${value > 0 ? '+' : ''}${value}${unit}`;
+  };
+
+  return `${formatValue(min)} to ${formatValue(max)}`;
+}
+
+function getCurvePropertyLabel(property: CurveProperty): string {
+  return property.charAt(0).toUpperCase() + property.slice(1);
+}
+
+function isDefaultCurve(curve: ShadeCurveHandles): boolean {
+  const defaults = createDefaultCurveHandles();
+  return (
+    curve.startValue === defaults.startValue &&
+    curve.handle1.t === defaults.handle1.t &&
+    curve.handle1.value === defaults.handle1.value &&
+    curve.handle2.t === defaults.handle2.t &&
+    curve.handle2.value === defaults.handle2.value &&
+    curve.endValue === defaults.endValue
+  );
+}
 
 function isShadeVariableName(name: string): boolean {
   return /^(.+)\/(\d+)$/.test(name);
@@ -66,16 +133,18 @@ export function ShadesModal() {
 
   // Drag state for curve editor
   const [dragState, setDragState] = useState<{
-    startX: number;
-    startY: number;
-    startValue: number;
-    startT: number;
     target: DragTarget;
+    property: CurveProperty;
   } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const curvesRef = useRef<Record<CurveProperty, ShadeCurveHandles>>({
+    lightness: createDefaultCurveHandles(),
+    saturation: createDefaultCurveHandles(),
+    hue: createDefaultCurveHandles(),
+  });
 
   // Track container width for proper curve rendering
   useEffect(() => {
@@ -224,8 +293,7 @@ export function ShadesModal() {
     applySourceSelection(sourceVariable);
   };
 
-  // Get active curve
-  const getActiveCurve = useCallback((): ShadeCurveHandles => {
+  const activeCurve = useMemo((): ShadeCurveHandles => {
     switch (activeProperty) {
       case 'saturation': return saturationCurve;
       case 'hue': return hueCurve;
@@ -233,13 +301,21 @@ export function ShadesModal() {
     }
   }, [activeProperty, lightnessCurve, saturationCurve, hueCurve]);
 
-  const setActiveCurve = useCallback((curve: ShadeCurveHandles) => {
-    switch (activeProperty) {
+  useEffect(() => {
+    curvesRef.current = {
+      lightness: lightnessCurve,
+      saturation: saturationCurve,
+      hue: hueCurve,
+    };
+  }, [lightnessCurve, saturationCurve, hueCurve]);
+
+  const setCurveByProperty = useCallback((property: CurveProperty, curve: ShadeCurveHandles) => {
+    switch (property) {
       case 'saturation': setSaturationCurve(curve); break;
       case 'hue': setHueCurve(curve); break;
       default: setLightnessCurve(curve); break;
     }
-  }, [activeProperty]);
+  }, []);
 
   const generatedShades = useMemo(() => {
     if (!groupName) return [];
@@ -258,6 +334,43 @@ export function ShadesModal() {
   const shadeColors = useMemo(() => {
     return generatedShades.map(shade => rgbToHex(shade.value));
   }, [generatedShades]);
+
+  const curveResetState = useMemo(() => ({
+    lightness: !isDefaultCurve(lightnessCurve),
+    saturation: !isDefaultCurve(saturationCurve),
+    hue: !isDefaultCurve(hueCurve),
+  }), [hueCurve, lightnessCurve, saturationCurve]);
+
+  const getCurveDisplayValue = useCallback((property: CurveProperty, t: number, adjustment: number) => {
+    if (property === 'lightness') {
+      const baseTone = getBaseShadeToneAtT(
+        t,
+        shadeCount,
+        DEFAULT_SHADE_LIGHT_VALUE,
+        DEFAULT_SHADE_DARK_VALUE
+      );
+      return clamp(baseTone + adjustment, 0, 100);
+    }
+
+    const { min, max } = CURVE_DISPLAY_CONFIG[property];
+    return clamp(adjustment, min, max);
+  }, [shadeCount]);
+
+  const getStoredCurveValue = useCallback((property: CurveProperty, t: number, displayValue: number) => {
+    if (property === 'lightness') {
+      const baseTone = getBaseShadeToneAtT(
+        t,
+        shadeCount,
+        DEFAULT_SHADE_LIGHT_VALUE,
+        DEFAULT_SHADE_DARK_VALUE
+      );
+      const { min, max } = getCurvePropertyValueRange(property);
+      return clamp(displayValue - baseTone, min, max);
+    }
+
+    const { min, max } = getCurvePropertyValueRange(property);
+    return clamp(displayValue, min, max);
+  }, [shadeCount]);
 
   // Handle generation
   const handleGenerate = () => {
@@ -302,84 +415,70 @@ export function ShadesModal() {
     closeShadesModal();
   };
 
+  const handleResetCurve = useCallback((property: CurveProperty) => {
+    setCurveByProperty(property, createDefaultCurveHandles());
+    setDragState(current => (current?.property === property ? null : current));
+  }, [setCurveByProperty]);
+
   // Curve editor mouse handlers
   const handleMouseDown = useCallback((e: React.MouseEvent, target: DragTarget) => {
     e.preventDefault();
-    const curve = getActiveCurve();
-
-    let startValue: number;
-    let startT: number;
-
-    if (target === 'handle1') {
-      startValue = curve.handle1.value;
-      startT = curve.handle1.t;
-    } else if (target === 'handle2') {
-      startValue = curve.handle2.value;
-      startT = curve.handle2.t;
-    } else if (target === 'startNode') {
-      startValue = curve.startValue;
-      startT = 0;
-    } else {
-      startValue = curve.endValue;
-      startT = 1;
-    }
-
     setDragState({
-      startX: e.clientX,
-      startY: e.clientY,
-      startValue,
-      startT,
       target,
+      property: activeProperty,
     });
-  }, [getActiveCurve]);
+  }, [activeProperty]);
 
   useEffect(() => {
     if (!dragState || containerWidth === 0) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const curve = getActiveCurve();
+      const curve = curvesRef.current[dragState.property];
       const updatedCurve = { ...curve };
-
-      const curveHeight = 100;
-      const minY = 10;
-      const maxY = curveHeight - 10;
-      const yRange = maxY - minY;
+      const minY = CURVE_PADDING_Y;
+      const maxY = CURVE_EDITOR_HEIGHT - CURVE_PADDING_Y;
 
       const swatchWidth = containerWidth / shadeCount;
       const firstNodeX = swatchWidth / 2;
       const lastNodeX = containerWidth - swatchWidth / 2;
       const rangeX = Math.max(1, lastNodeX - firstNodeX);
+      const svgRect = svgRef.current?.getBoundingClientRect();
+
+      if (!svgRect || svgRect.width === 0 || svgRect.height === 0) return;
+
+      const localX = ((e.clientX - svgRect.left) / svgRect.width) * containerWidth;
+      const localY = ((e.clientY - svgRect.top) / svgRect.height) * CURVE_EDITOR_HEIGHT;
+      const nextDisplayValue = curveYToValue(localY, dragState.property, minY, maxY);
 
       if (dragState.target === 'handle1' || dragState.target === 'handle2') {
-        const deltaX = e.clientX - dragState.startX;
-        const deltaY = dragState.startY - e.clientY;
-        const valueChange = (deltaY / yRange) * 100;
-        const newValue = clamp(dragState.startValue + valueChange, -50, 50);
-        let newT = dragState.startT + deltaX / rangeX;
-        const minGap = 0.05;
+        let newT = clamp((localX - firstNodeX) / rangeX, 0, 1);
 
         if (dragState.target === 'handle1') {
-          const maxT = clamp(curve.handle2.t - minGap, 0, 1 - minGap);
+          const maxT = clamp(curve.handle2.t - CURVE_MIN_HANDLE_GAP, 0, 1 - CURVE_MIN_HANDLE_GAP);
           newT = clamp(newT, 0, maxT);
-          updatedCurve.handle1 = { t: newT, value: newValue };
+          updatedCurve.handle1 = {
+            t: newT,
+            value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
+          };
         } else {
-          const minT = clamp(curve.handle1.t + minGap, minGap, 1);
+          const minT = clamp(curve.handle1.t + CURVE_MIN_HANDLE_GAP, CURVE_MIN_HANDLE_GAP, 1);
           newT = clamp(newT, minT, 1);
-          updatedCurve.handle2 = { t: newT, value: newValue };
+          updatedCurve.handle2 = {
+            t: newT,
+            value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
+          };
         }
       } else {
-        const deltaY = dragState.startY - e.clientY;
-        const valueChange = (deltaY / yRange) * 100;
-        const newValue = clamp(dragState.startValue + valueChange, -50, 50);
-
+        const targetT = dragState.target === 'startNode' ? 0 : 1;
+        const nextStoredValue = getStoredCurveValue(dragState.property, targetT, nextDisplayValue);
         if (dragState.target === 'startNode') {
-          updatedCurve.startValue = newValue;
+          updatedCurve.startValue = nextStoredValue;
         } else {
-          updatedCurve.endValue = newValue;
+          updatedCurve.endValue = nextStoredValue;
         }
       }
 
-      setActiveCurve(updatedCurve);
+      setCurveByProperty(dragState.property, updatedCurve);
     };
 
     const handleMouseUp = () => {
@@ -393,19 +492,20 @@ export function ShadesModal() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, getActiveCurve, setActiveCurve, shadeCount, containerWidth]);
+  }, [dragState, getStoredCurveValue, setCurveByProperty, shadeCount, containerWidth]);
 
   // Render curve SVG
   const renderCurve = () => {
-    const curve = getActiveCurve();
+    const curve = activeCurve;
     const count = shadeCount;
     if (count < 2 || containerWidth === 0) return null;
 
-    const curveHeight = 100;
     const nodeRadius = 8;
-    const handleRadius = 6;
-    const minY = 10;
-    const maxY = curveHeight - 10;
+    const handleRadius = 8;
+    const handleHitRadius = 16; // Larger invisible hit area for easier clicking
+    const minY = CURVE_PADDING_Y;
+    const maxY = CURVE_EDITOR_HEIGHT - CURVE_PADDING_Y;
+    const zeroY = valueToCurveY(0, activeProperty, minY, maxY);
 
     const swatchWidth = containerWidth / count;
     const firstNodeX = swatchWidth / 2;
@@ -415,48 +515,61 @@ export function ShadesModal() {
     // Calculate node positions
     const adjustments = evaluateCurveAtNodes(curve, count);
     const nodePositions: { x: number; y: number; value: number }[] = [];
+    const baseNodePositions: { x: number; y: number }[] = [];
 
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
       const x = firstNodeX + rangeX * t;
-      const baseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * t;
-      const actualLightness = Math.max(0, Math.min(100, baseLightness + adjustments[i]));
-      const y = maxY - (actualLightness / 100) * (maxY - minY);
-      nodePositions.push({ x, y, value: actualLightness });
+      const adjustmentValue = adjustments[i];
+      const displayValue = getCurveDisplayValue(activeProperty, t, adjustmentValue);
+      const y = valueToCurveY(displayValue, activeProperty, minY, maxY);
+      nodePositions.push({ x, y, value: displayValue });
+
+      if (activeProperty === 'lightness') {
+        const baseTone = getBaseShadeToneAtT(
+          t,
+          count,
+          DEFAULT_SHADE_LIGHT_VALUE,
+          DEFAULT_SHADE_DARK_VALUE
+        );
+        baseNodePositions.push({
+          x,
+          y: valueToCurveY(baseTone, activeProperty, minY, maxY),
+        });
+      }
     }
 
     // Handle positions
     const handle1T = clamp(curve.handle1.t, 0, 1);
-    const handle1BaseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * handle1T;
-    const handle1ActualLightness = Math.max(0, Math.min(100, handle1BaseLightness + curve.handle1.value));
     const handle1X = firstNodeX + rangeX * handle1T;
-    const handle1Y = clamp(maxY - (handle1ActualLightness / 100) * (maxY - minY), minY, maxY);
+    const handle1Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, handle1T, curve.handle1.value),
+      activeProperty,
+      minY,
+      maxY
+    );
 
     const handle2T = clamp(curve.handle2.t, 0, 1);
-    const handle2BaseLightness = DEFAULT_SHADE_LIGHT_VALUE + (DEFAULT_SHADE_DARK_VALUE - DEFAULT_SHADE_LIGHT_VALUE) * handle2T;
-    const handle2ActualLightness = Math.max(0, Math.min(100, handle2BaseLightness + curve.handle2.value));
     const handle2X = firstNodeX + rangeX * handle2T;
-    const handle2Y = clamp(maxY - (handle2ActualLightness / 100) * (maxY - minY), minY, maxY);
+    const handle2Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, handle2T, curve.handle2.value),
+      activeProperty,
+      minY,
+      maxY
+    );
 
-    // Build curve path using Catmull-Rom
-    let pathD = `M ${nodePositions[0].x} ${nodePositions[0].y}`;
-    for (let i = 0; i < nodePositions.length - 1; i++) {
-      const p0 = nodePositions[Math.max(0, i - 1)];
-      const p1 = nodePositions[i];
-      const p2 = nodePositions[i + 1];
-      const p3 = nodePositions[Math.min(nodePositions.length - 1, i + 2)];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-      pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-    }
+    // Build smooth curve path using cubic Bezier with actual handle positions
+    // This creates a single smooth curve from first to last node, controlled by the two handles
+    const pathD = `M ${nodePositions[0].x} ${nodePositions[0].y} C ${handle1X} ${handle1Y}, ${handle2X} ${handle2Y}, ${nodePositions[count - 1].x} ${nodePositions[count - 1].y}`;
+    const basePathD = activeProperty === 'lightness' && baseNodePositions.length > 1
+      ? baseNodePositions.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+      : null;
 
     return (
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${containerWidth} ${curveHeight}`}
-        style={{ width: containerWidth, height: curveHeight }}
+        viewBox={`0 0 ${containerWidth} ${CURVE_EDITOR_HEIGHT}`}
+        style={{ width: containerWidth, height: CURVE_EDITOR_HEIGHT }}
         className="curve-svg"
       >
         {/* Grid lines */}
@@ -466,24 +579,34 @@ export function ShadesModal() {
             x1={i * swatchWidth}
             y1={0}
             x2={i * swatchWidth}
-            y2={curveHeight}
+            y2={CURVE_EDITOR_HEIGHT}
             stroke="var(--border)"
             strokeWidth={1}
             opacity={0.35}
           />
         ))}
 
-        {/* Zero baseline */}
-        <line
-          x1={0}
-          y1={curveHeight / 2}
-          x2={containerWidth}
-          y2={curveHeight / 2}
-          stroke="var(--border)"
-          strokeWidth={1}
-          strokeDasharray="4,4"
-          opacity={0.3}
-        />
+        {activeProperty === 'lightness' && basePathD ? (
+          <path
+            d={basePathD}
+            fill="none"
+            stroke="var(--border)"
+            strokeWidth={1.5}
+            strokeDasharray="4,4"
+            opacity={0.8}
+          />
+        ) : (
+          <line
+            x1={0}
+            y1={zeroY}
+            x2={containerWidth}
+            y2={zeroY}
+            stroke="var(--border)"
+            strokeWidth={1}
+            strokeDasharray="4,4"
+            opacity={0.3}
+          />
+        )}
 
         {/* Curve path */}
         <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth={2} />
@@ -508,27 +631,58 @@ export function ShadesModal() {
           opacity={0.6}
         />
 
-        {/* Handles (draggable) */}
-        <circle
-          cx={handle1X}
-          cy={handle1Y}
-          r={handleRadius}
-          fill="var(--bg)"
-          stroke="var(--text)"
-          strokeWidth={2}
-          style={{ cursor: 'move' }}
-          onMouseDown={e => handleMouseDown(e, 'handle1')}
-        />
-        <circle
-          cx={handle2X}
-          cy={handle2Y}
-          r={handleRadius}
-          fill="var(--bg)"
-          stroke="var(--text)"
-          strokeWidth={2}
-          style={{ cursor: 'move' }}
-          onMouseDown={e => handleMouseDown(e, 'handle2')}
-        />
+        {/* Handles (draggable) - use squares for better differentiation from nodes */}
+        {/* Handle 1 */}
+        <g>
+          {/* Larger invisible hit area */}
+          <circle
+            cx={handle1X}
+            cy={handle1Y}
+            r={handleHitRadius}
+            fill="transparent"
+            style={{ cursor: 'move' }}
+            onMouseDown={e => handleMouseDown(e, 'handle1')}
+          />
+          {/* Visible handle */}
+          <rect
+            x={handle1X - handleRadius}
+            y={handle1Y - handleRadius}
+            width={handleRadius * 2}
+            height={handleRadius * 2}
+            fill="var(--accent)"
+            stroke="var(--bg)"
+            strokeWidth={2}
+            rx={2}
+            style={{ cursor: 'move', pointerEvents: 'none' }}
+            className={dragState?.target === 'handle1' ? 'handle-active' : ''}
+          />
+        </g>
+
+        {/* Handle 2 */}
+        <g>
+          {/* Larger invisible hit area */}
+          <circle
+            cx={handle2X}
+            cy={handle2Y}
+            r={handleHitRadius}
+            fill="transparent"
+            style={{ cursor: 'move' }}
+            onMouseDown={e => handleMouseDown(e, 'handle2')}
+          />
+          {/* Visible handle */}
+          <rect
+            x={handle2X - handleRadius}
+            y={handle2Y - handleRadius}
+            width={handleRadius * 2}
+            height={handleRadius * 2}
+            fill="var(--accent)"
+            stroke="var(--bg)"
+            strokeWidth={2}
+            rx={2}
+            style={{ cursor: 'move', pointerEvents: 'none' }}
+            className={dragState?.target === 'handle2' ? 'handle-active' : ''}
+          />
+        </g>
 
         {/* Nodes */}
         {nodePositions.map((np, i) => {
@@ -617,12 +771,8 @@ export function ShadesModal() {
                     style={{ width: 60 }}
                   />
                 </div>
-              </div>
-
-              {/* Curve Editor + Preview Combined */}
-              <div className="form-group">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <label style={{ margin: 0 }}>Preview</label>
+                <div className="form-group">
+                  <label>Curve Property</label>
                   <select
                     className="form-input"
                     value={activeProperty}
@@ -634,9 +784,31 @@ export function ShadesModal() {
                     <option value="hue">Hue</option>
                   </select>
                 </div>
-                <div className="curve-preview-combined">
-                  <div
-                    ref={containerRef}
+              </div>
+
+	              {/* Curve Editor + Preview Combined */}
+	              <div className="form-group">
+	                <div className="curve-toolbar">
+	                  <span className="curve-range-hint">
+	                    {getCurvePropertyLabel(activeProperty)}: {formatCurveRange(activeProperty)}
+	                  </span>
+	                  <div className="curve-reset-group">
+	                    {CURVE_PROPERTIES.map(property => (
+	                      <button
+	                        key={property}
+	                        type="button"
+	                        className="btn curve-reset-btn"
+	                        onClick={() => handleResetCurve(property)}
+	                        disabled={!curveResetState[property]}
+	                      >
+	                        Reset {getCurvePropertyLabel(property)}
+	                      </button>
+	                    ))}
+	                  </div>
+	                </div>
+	                <div className="curve-preview-combined">
+	                  <div
+	                    ref={containerRef}
                     className="curve-editor-container"
                   >
                     {renderCurve()}

@@ -358,6 +358,28 @@ function getShadeNames(count) {
     }
     return names;
 }
+function getShadeBaseIndex(count) {
+    const names = getShadeNames(count);
+    const explicitBaseIndex = names.indexOf('500');
+    if (explicitBaseIndex >= 0) {
+        return explicitBaseIndex;
+    }
+    return Math.floor((count - 1) / 2);
+}
+function getBaseShadeToneAtT(t, count, lightValue, darkValue) {
+    if (count <= 1) {
+        return 50;
+    }
+    const baseIndex = getShadeBaseIndex(count);
+    const baseT = baseIndex / (count - 1);
+    const clampedT = clamp(t, 0, 1);
+    if (clampedT <= baseT) {
+        const localT = baseT === 0 ? 0 : clampedT / baseT;
+        return lightValue + (50 - lightValue) * localT;
+    }
+    const localT = baseT === 1 ? 0 : (clampedT - baseT) / (1 - baseT);
+    return 50 + (darkValue - 50) * localT;
+}
 function buildManagedShadePayload(baseRgb, groupName, config) {
     const lightAdj = evaluateShadeCurveAtNodes(config.lightnessCurve, config.shadeCount);
     const satAdj = evaluateShadeCurveAtNodes(config.saturationCurve, config.shadeCount);
@@ -367,7 +389,7 @@ function buildManagedShadePayload(baseRgb, groupName, config) {
     const baseHsv = rgbToHsv(baseRgb.r, baseRgb.g, baseRgb.b);
     for (let i = 0; i < config.shadeCount; i++) {
         const t = config.shadeCount > 1 ? i / (config.shadeCount - 1) : 0;
-        const baseLightness = config.lightValue + (config.darkValue - config.lightValue) * t;
+        const baseLightness = getBaseShadeToneAtT(t, config.shadeCount, config.lightValue, config.darkValue);
         const lightness = clamp(baseLightness + (lightAdj[i] || 0), 0, 100);
         const saturation = clamp(baseHsv.s + (satAdj[i] || 0), 0, 100);
         const hue = (baseHsv.h + (hueAdj[i] || 0) + 360) % 360;

@@ -68,6 +68,38 @@ export function evaluateCurveAtNodes(handles: ShadeCurveHandles, count: number):
   return values;
 }
 
+export function getShadeBaseIndex(count: number): number {
+  const names = getShadeNames(count);
+  const explicitBaseIndex = names.indexOf('500');
+  if (explicitBaseIndex >= 0) {
+    return explicitBaseIndex;
+  }
+  return Math.floor((count - 1) / 2);
+}
+
+export function getBaseShadeToneAtT(
+  t: number,
+  count: number,
+  lightValue = DEFAULT_SHADE_LIGHT_VALUE,
+  darkValue = DEFAULT_SHADE_DARK_VALUE
+): number {
+  if (count <= 1) {
+    return 50;
+  }
+
+  const baseIndex = getShadeBaseIndex(count);
+  const baseT = baseIndex / (count - 1);
+  const clampedT = clamp(t, 0, 1);
+
+  if (clampedT <= baseT) {
+    const localT = baseT === 0 ? 0 : clampedT / baseT;
+    return lightValue + (50 - lightValue) * localT;
+  }
+
+  const localT = baseT === 1 ? 0 : (clampedT - baseT) / (1 - baseT);
+  return 50 + (darkValue - 50) * localT;
+}
+
 export function buildShadePayload(
   baseColor: string,
   groupName: string,
