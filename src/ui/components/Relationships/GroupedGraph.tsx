@@ -65,6 +65,27 @@ const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
 const GENERATED_CONNECTION_COLOR = '#b86e00';
 const REFERENCE_CONNECTION_COLOR = '#1877f2';
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3;
+const DEFAULT_GROUP_CHILD_NAME = 'base';
+
+function clampZoom(zoom: number): number {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+}
+
+function getDefaultVariableValue(type: 'COLOR' | 'FLOAT'): string {
+  return type === 'COLOR' ? 'rgb(0, 0, 0)' : '0';
+}
+
+function normalizePathSegment(value: string): string {
+  return value.trim().replace(/^\/+|\/+$/g, '');
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
 
 function getGroupHeight(group: GroupData): number {
   return HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
@@ -169,7 +190,7 @@ export function GroupedGraph({
   variableType,
   shadeGroups,
 }: GroupedGraphProps) {
-  const { openShadesModal } = useModalContext();
+  const { openShadesModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 50, panY: 50 });
@@ -188,11 +209,32 @@ export function GroupedGraph({
   } | null>(null);
   const [hoveredVar, setHoveredVar] = useState<string | null>(null);
 
+  const zoomBy = useCallback((factor: number) => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: clampZoom(prev.zoom * factor),
+    }));
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         setIsSpaceHeld(true);
+        return;
+      }
+
+      if (e.key === '+' || e.code === 'NumpadAdd' || (e.key === '=' && e.shiftKey)) {
+        e.preventDefault();
+        zoomBy(1.1);
+        return;
+      }
+
+      if (e.key === '-' || e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        zoomBy(0.9);
       }
     };
 
@@ -208,7 +250,7 @@ export function GroupedGraph({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [zoomBy]);
 
   const { groupsData, connections, variableMap } = useMemo(() => {
     const filteredVars = variables.filter(
@@ -526,10 +568,7 @@ export function GroupedGraph({
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setViewState(prev => ({
-        ...prev,
-        zoom: Math.max(0.2, Math.min(3, prev.zoom * delta)),
-      }));
+      zoomBy(delta);
       return;
     }
 
@@ -539,7 +578,7 @@ export function GroupedGraph({
       panX: prev.panX - e.deltaX,
       panY: prev.panY - e.deltaY,
     }));
-  }, []);
+  }, [zoomBy]);
 
   const handleDragStart = useCallback((groupKey: string, varName: string, side: 'left' | 'right', x: number, y: number) => {
     setDragState({
@@ -586,6 +625,57 @@ export function GroupedGraph({
     }
   }, [openShadesModal]);
 
+  const handleCreateGroup = useCallback(() => {
+    if (!selectedCollectionId) return;
+
+    openInputModal({
+      title: `New ${isColorType ? 'Color' : 'Number'} Group`,
+      label: 'Group name',
+      confirmText: 'Create',
+      onConfirm: value => {
+        const groupName = normalizePathSegment(value);
+        if (!groupName) return;
+
+        post({
+          type: 'create-variable',
+          collectionId: selectedCollectionId,
+          name: `${groupName}/${DEFAULT_GROUP_CHILD_NAME}`,
+          varType: variableType,
+          value: getDefaultVariableValue(variableType),
+        });
+      },
+    });
+  }, [isColorType, openInputModal, selectedCollectionId, variableType]);
+
+  const handleAddVariableToGroup = useCallback((group: GroupData) => {
+    if (!selectedCollectionId || group.kind !== 'standard' || !group.sourceGroupName) return;
+
+    openInputModal({
+      title: `New Variable in ${group.sourceGroupName}`,
+      label: 'Variable name',
+      confirmText: 'Add',
+      onConfirm: value => {
+        const variableName = normalizePathSegment(value);
+        if (!variableName) return;
+
+        post({
+          type: 'create-variable',
+          collectionId: selectedCollectionId,
+          name: `${group.sourceGroupName}/${variableName}`,
+          varType: variableType,
+          value: getDefaultVariableValue(variableType),
+        });
+      },
+    });
+  }, [openInputModal, selectedCollectionId, variableType]);
+
+  const handleDeleteGraphVariable = useCallback((node: VariableNode) => {
+    if (node.isVirtual) return;
+    if (confirm(`Delete ${node.name}?`)) {
+      post({ type: 'delete-variable', id: node.id });
+    }
+  }, []);
+
   const getConnectionPath = useCallback((fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
     const outputX = fromGroup.x + GROUP_WIDTH;
     const outputY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -607,6 +697,21 @@ export function GroupedGraph({
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
+      <div className="graph-top-controls" onMouseDown={e => e.stopPropagation()}>
+        <button
+          type="button"
+          className="graph-action-btn"
+          onClick={handleCreateGroup}
+          disabled={!selectedCollectionId}
+        >
+          New Group
+        </button>
+        <div className="zoom-controls">
+          <button type="button" onClick={() => zoomBy(0.9)} aria-label="Zoom out">-</button>
+          <span>{Math.round(viewState.zoom * 100)}%</span>
+          <button type="button" onClick={() => zoomBy(1.1)} aria-label="Zoom in">+</button>
+        </div>
+      </div>
       <svg width="100%" height="100%" style={{ display: 'block', background: 'transparent' }}>
         <g transform={`translate(${viewState.panX}, ${viewState.panY}) scale(${viewState.zoom})`}>
           <g className="connections-layer">
@@ -664,11 +769,12 @@ export function GroupedGraph({
             />
           )}
 
-          {groups.map(group => {
-            const height = getGroupHeight(group);
+	          {groups.map(group => {
+	            const height = getGroupHeight(group);
+              const canManageGroupVariables = group.kind === 'standard';
 
-            return (
-              <g key={group.key} transform={`translate(${group.x}, ${group.y})`} className={`group-box ${group.kind}`}>
+	            return (
+	              <g key={group.key} transform={`translate(${group.x}, ${group.y})`} className={`group-box ${group.kind}`}>
                 <rect
                   width={GROUP_WIDTH}
                   height={height}
@@ -684,29 +790,46 @@ export function GroupedGraph({
                   style={{ cursor: 'move' }}
                   onMouseDown={e => handleGroupDragStart(e, group.key, group.x, group.y)}
                 />
-                <text
-                  x={12}
+	                <text
+	                  x={12}
                   y={HEADER_HEIGHT / 2 + 5}
                   fontSize={14}
                   fontWeight={600}
                   fill="#333"
                   style={{ pointerEvents: 'none' }}
-                >
-                  {group.title}
-                </text>
+	                >
+	                  {group.title}
+	                </text>
 
-                {group.variables.map((node, idx) => {
-                  const rowY = HEADER_HEIGHT + GROUP_PADDING + idx * ROW_HEIGHT;
+                  {canManageGroupVariables && (
+                    <g
+                      className="group-header-action"
+                      transform={`translate(${GROUP_WIDTH - 30}, 8)`}
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleAddVariableToGroup(group);
+                      }}
+                    >
+                      <rect width={20} height={20} rx={4} className="group-header-action-bg" />
+                      <text x={10} y={14} textAnchor="middle" className="group-header-action-label">+</text>
+                    </g>
+                  )}
+
+	                {group.variables.map((node, idx) => {
+	                  const rowY = HEADER_HEIGHT + GROUP_PADDING + idx * ROW_HEIGHT;
                   const flags = connectedVars.get(node.name);
                   const hasInput = flags?.hasInput || false;
                   const hasOutput = flags?.hasOutput || false;
                   const isSource = dragState?.fromVar === node.name;
                   const isHoveredTarget = dragState && hoveredVar === node.name && !isSource && !node.connectionsDisabled;
-                  const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
-                  const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
-                  const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
+	                  const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
+	                  const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
+	                  const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
+                    const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
+                    const valueLabelX = showDeleteAction ? GROUP_WIDTH - 42 : GROUP_WIDTH - 16;
 
-                  return (
+	                  return (
                     <g
                       key={node.id}
                       transform={`translate(0, ${rowY})`}
@@ -795,18 +918,33 @@ export function GroupedGraph({
                         {node.shortName}
                       </text>
 
-                      <text
-                        x={GROUP_WIDTH - 16}
-                        y={ROW_HEIGHT / 2 + 4}
-                        fontSize={12}
-                        fontFamily="monospace"
+	                      <text
+	                        x={valueLabelX}
+	                        y={ROW_HEIGHT / 2 + 4}
+	                        fontSize={12}
+	                        fontFamily="monospace"
                         fill={node.isReference ? '#666' : '#999'}
                         textAnchor="end"
-                      >
-                        {node.displayName}
-                      </text>
+	                      >
+	                        {node.displayName}
+	                      </text>
 
-                      <circle
+                        {showDeleteAction && (
+                          <g
+                            className="row-action delete-variable"
+                            transform={`translate(${GROUP_WIDTH - 34}, 8)`}
+                            onMouseDown={e => e.stopPropagation()}
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleDeleteGraphVariable(node);
+                            }}
+                          >
+                            <rect width={16} height={16} rx={3} className="row-action-bg" />
+                            <text x={8} y={11} textAnchor="middle" className="row-action-label">×</text>
+                          </g>
+                        )}
+
+	                      <circle
                         cx={GROUP_WIDTH}
                         cy={ROW_HEIGHT / 2}
                         r={4}

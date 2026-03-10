@@ -611,9 +611,17 @@ async function createCollection(name) {
 // Create a new variable
 async function createVariable(collectionId, name, varType, value) {
     try {
-        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-        if (!collection)
-            throw new Error('Collection not found');
+        let collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        // Auto-create default collection if none exists (like Figma does)
+        if (!collection) {
+            const collections = await figma.variables.getLocalVariableCollectionsAsync();
+            if (collections.length === 0) {
+                collection = figma.variables.createVariableCollection('Collection 1');
+            }
+            else {
+                throw new Error('Collection not found');
+            }
+        }
         const resolvedType = varType;
         const variable = figma.variables.createVariable(name, collection, resolvedType);
         const modeId = collection.modes[0].modeId;
