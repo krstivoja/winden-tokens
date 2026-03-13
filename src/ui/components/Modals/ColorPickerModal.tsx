@@ -25,6 +25,7 @@ export function ColorPickerModal() {
   const hueSliderRef = useRef<HTMLDivElement>(null);
   const isDraggingSV = useRef(false);
   const isDraggingHue = useRef(false);
+  const overlayPointerDown = useRef(false);
 
   // Initialize from config
   useEffect(() => {
@@ -129,12 +130,29 @@ export function ColorPickerModal() {
     closeColorPicker();
   };
 
+  const handleOverlayMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    overlayPointerDown.current = e.target === e.currentTarget;
+  };
+
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const shouldClose = overlayPointerDown.current && e.target === e.currentTarget;
+    overlayPointerDown.current = false;
+
+    if (shouldClose) {
+      closeColorPicker();
+    }
+  };
+
   if (!config) return null;
 
   const hueColor = `hsl(${hue}, 100%, 50%)`;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeColorPicker()}>
+    <div
+      className="modal-overlay open"
+      onMouseDown={handleOverlayMouseDown}
+      onClick={handleOverlayClick}
+    >
       <div className="modal" style={{ width: 300 }}>
         <div className="modal-header">
           <h3>Pick Color</h3>
