@@ -180,28 +180,139 @@ function arrangeGroupsByConnectedBlocks(
   let nextBlockY = 0;
 
   blocks.forEach(block => {
+    const blockKeys = new Set(block.map(group => group.key));
     const sortedBlock = block.slice().sort(sortGroupsByPosition);
-    const desiredColumns = new Map<string, number>();
-
-    sortedBlock.forEach(group => {
-      desiredColumns.set(group.key, Math.max(0, Math.round(group.x / columnStep)));
-    });
-
-    const usedColumns = Array.from(new Set(
-      sortedBlock.map(group => desiredColumns.get(group.key) ?? 0)
-    )).sort((a, b) => a - b);
-    const compactedColumns = new Map<number, number>();
-    usedColumns.forEach((column, index) => {
-      compactedColumns.set(column, index);
-    });
-
+    const clusterByGroup = new Map<string, string>();
+    const clusterMembers = new Map<string, GroupData[]>();
+    const standardAdjacency = new Map<string, Set<string>>();
+    const clusterDepth = new Map<string, number>();
+    const clusterIndegree = new Map<string, number>();
+    const clusterOutgoing = new Map<string, Set<string>>();
     const startColumn = 0;
     const blockColumns = new Map<number, GroupData[]>();
 
     sortedBlock.forEach(group => {
-      const desiredColumn = desiredColumns.get(group.key) ?? 0;
-      const compactedColumn = compactedColumns.get(desiredColumn) ?? 0;
-      const targetColumn = startColumn + compactedColumn;
+      standardAdjacency.set(group.key, new Set());
+    });
+
+    connections.forEach(connection => {
+      if (!blockKeys.has(connection.fromGroup) || !blockKeys.has(connection.toGroup)) return;
+      if (connection.fromGroup === connection.toGroup) return;
+
+      const fromGroup = groupMap.get(connection.fromGroup);
+      const toGroup = groupMap.get(connection.toGroup);
+      if (!fromGroup || !toGroup) return;
+
+      if (fromGroup.kind === 'standard' && toGroup.kind === 'standard') {
+        standardAdjacency.get(connection.fromGroup)?.add(connection.toGroup);
+        standardAdjacency.get(connection.toGroup)?.add(connection.fromGroup);
+      }
+    });
+
+    sortedBlock.forEach(group => {
+      if (clusterByGroup.has(group.key)) return;
+
+      const clusterId = `cluster:${group.key}`;
+      const members: GroupData[] = [];
+      const stack = [group.key];
+
+      while (stack.length > 0) {
+        const currentKey = stack.pop();
+        if (!currentKey || clusterByGroup.has(currentKey)) continue;
+
+        const currentGroup = groupMap.get(currentKey);
+        if (!currentGroup) continue;
+
+        clusterByGroup.set(currentKey, clusterId);
+        members.push(currentGroup);
+
+        if (currentGroup.kind !== 'standard') continue;
+
+        standardAdjacency.get(currentKey)?.forEach(nextKey => {
+          const nextGroup = groupMap.get(nextKey);
+          if (!nextGroup || nextGroup.kind !== 'standard' || clusterByGroup.has(nextKey)) return;
+          stack.push(nextKey);
+        });
+      }
+
+      clusterMembers.set(clusterId, members.sort(sortGroupsByPosition));
+      clusterDepth.set(clusterId, 0);
+      clusterIndegree.set(clusterId, 0);
+      clusterOutgoing.set(clusterId, new Set());
+    });
+
+    connections.forEach(connection => {
+      if (!blockKeys.has(connection.fromGroup) || !blockKeys.has(connection.toGroup)) return;
+      if (connection.fromGroup === connection.toGroup) return;
+
+      const fromCluster = clusterByGroup.get(connection.fromGroup);
+      const toCluster = clusterByGroup.get(connection.toGroup);
+      if (!fromCluster || !toCluster || fromCluster === toCluster) return;
+
+      const outgoing = clusterOutgoing.get(fromCluster);
+      if (outgoing?.has(toCluster)) return;
+
+      outgoing?.add(toCluster);
+      clusterIndegree.set(toCluster, (clusterIndegree.get(toCluster) || 0) + 1);
+    });
+
+    const clusterOrder = Array.from(clusterMembers.keys());
+    const queue = clusterOrder.filter(clusterId => (clusterIndegree.get(clusterId) || 0) === 0);
+    const processedClusters = new Set<string>();
+
+    while (queue.length > 0) {
+      queue.sort((a, b) => {
+        const groupA = clusterMembers.get(a)?.[0];
+        const groupB = clusterMembers.get(b)?.[0];
+        if (!groupA || !groupB) return 0;
+        return sortGroupsByPosition(groupA, groupB);
+      });
+
+      const currentCluster = queue.shift();
+      if (!currentCluster) continue;
+      if (processedClusters.has(currentCluster)) continue;
+
+      processedClusters.add(currentCluster);
+      const currentDepth = clusterDepth.get(currentCluster) || 0;
+      const nextClusters = Array.from(clusterOutgoing.get(currentCluster) || []);
+
+      nextClusters.forEach(nextCluster => {
+        clusterDepth.set(nextCluster, Math.max(clusterDepth.get(nextCluster) || 0, currentDepth + 1));
+        clusterIndegree.set(nextCluster, (clusterIndegree.get(nextCluster) || 0) - 1);
+
+        if ((clusterIndegree.get(nextCluster) || 0) === 0) {
+          queue.push(nextCluster);
+        }
+      });
+    }
+
+    if (processedClusters.size !== clusterOrder.length) {
+      const remaining = clusterOrder.filter(clusterId => !processedClusters.has(clusterId));
+      const baseDepth = processedClusters.size > 0
+        ? Math.max(...Array.from(processedClusters).map(clusterId => clusterDepth.get(clusterId) || 0)) + 1
+        : 0;
+      const fallbackColumns = Array.from(new Set(
+        remaining.map(clusterId => {
+          const firstGroup = clusterMembers.get(clusterId)?.[0];
+          return firstGroup ? Math.max(0, Math.round(firstGroup.x / columnStep)) : 0;
+        })
+      )).sort((a, b) => a - b);
+      const fallbackColumnMap = new Map<number, number>();
+
+      fallbackColumns.forEach((column, index) => {
+        fallbackColumnMap.set(column, baseDepth + index);
+      });
+
+      remaining.forEach(clusterId => {
+        const firstGroup = clusterMembers.get(clusterId)?.[0];
+        const fallbackColumn = firstGroup ? Math.max(0, Math.round(firstGroup.x / columnStep)) : 0;
+        clusterDepth.set(clusterId, fallbackColumnMap.get(fallbackColumn) || baseDepth);
+      });
+    }
+
+    sortedBlock.forEach(group => {
+      const clusterId = clusterByGroup.get(group.key);
+      const targetColumn = startColumn + (clusterId ? (clusterDepth.get(clusterId) || 0) : 0);
       const columnGroups = blockColumns.get(targetColumn) || [];
       columnGroups.push(group);
       blockColumns.set(targetColumn, columnGroups);
