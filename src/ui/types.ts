@@ -33,8 +33,10 @@ export interface ShadeCurvePoint {
 
 export interface ShadeCurveHandles {
   startValue: number;
-  handle1: ShadeCurvePoint;
-  handle2: ShadeCurvePoint;
+  leftHandle1: ShadeCurvePoint;
+  leftHandle2: ShadeCurvePoint;
+  rightHandle1: ShadeCurvePoint;
+  rightHandle2: ShadeCurvePoint;
   endValue: number;
 }
 
@@ -44,6 +46,7 @@ export interface ShadeGeneratorConfig {
   sourceName: string;
   sourceValue: string;
   shadeCount: number;
+  baseIndex: number;
   lightValue: number;
   darkValue: number;
   lightnessCurve: ShadeCurveHandles;

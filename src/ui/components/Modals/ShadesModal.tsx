@@ -19,11 +19,24 @@ import {
   DEFAULT_SHADE_DARK_VALUE,
   DEFAULT_SHADE_LIGHT_VALUE,
   evaluateCurveAtNodes,
+  findClosestShadeIndex,
   getBaseShadeToneAtT,
+  getShadeBaseIndex,
+  getShadeBaseIndexForColor,
+  getShadeBaseT,
+  normalizeCurveHandles,
+  normalizeShadeBaseIndex,
+  remapShadeBaseIndex,
 } from '../../utils/shades';
 
 type CurveProperty = 'lightness' | 'saturation' | 'hue';
-type DragTarget = 'handle1' | 'handle2' | 'startNode' | 'endNode';
+type DragTarget =
+  | 'leftHandle1'
+  | 'leftHandle2'
+  | 'rightHandle1'
+  | 'rightHandle2'
+  | 'startNode'
+  | 'endNode';
 const CURVE_PROPERTIES: CurveProperty[] = ['lightness', 'saturation', 'hue'];
 
 const CURVE_EDITOR_HEIGHT = 200;
@@ -63,14 +76,18 @@ function getCurvePropertyLabel(property: CurveProperty): string {
   return property.charAt(0).toUpperCase() + property.slice(1);
 }
 
-function isDefaultCurve(curve: ShadeCurveHandles): boolean {
-  const defaults = createDefaultCurveHandles();
+function isDefaultCurve(curve: ShadeCurveHandles, count: number, baseIndex: number): boolean {
+  const defaults = createDefaultCurveHandles(count, baseIndex);
   return (
     curve.startValue === defaults.startValue &&
-    curve.handle1.t === defaults.handle1.t &&
-    curve.handle1.value === defaults.handle1.value &&
-    curve.handle2.t === defaults.handle2.t &&
-    curve.handle2.value === defaults.handle2.value &&
+    curve.leftHandle1.t === defaults.leftHandle1.t &&
+    curve.leftHandle1.value === defaults.leftHandle1.value &&
+    curve.leftHandle2.t === defaults.leftHandle2.t &&
+    curve.leftHandle2.value === defaults.leftHandle2.value &&
+    curve.rightHandle1.t === defaults.rightHandle1.t &&
+    curve.rightHandle1.value === defaults.rightHandle1.value &&
+    curve.rightHandle2.t === defaults.rightHandle2.t &&
+    curve.rightHandle2.value === defaults.rightHandle2.value &&
     curve.endValue === defaults.endValue
   );
 }
@@ -81,6 +98,11 @@ function isShadeVariableName(name: string): boolean {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractShadeNumber(name: string): number {
+  const match = name.match(/\/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
 }
 
 function getLegacyBaseColor(shades: VariableData[]): string {
@@ -108,11 +130,12 @@ export function ShadesModal() {
   const [groupName, setGroupName] = useState('');
   const [baseColor, setBaseColor] = useState('#000000');
   const [shadeCount, setShadeCount] = useState(11);
+  const [baseIndex, setBaseIndex] = useState(getShadeBaseIndex(11));
 
   // Curve states
-  const [lightnessCurve, setLightnessCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
-  const [saturationCurve, setSaturationCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
-  const [hueCurve, setHueCurve] = useState<ShadeCurveHandles>(createDefaultCurveHandles);
+  const [lightnessCurve, setLightnessCurve] = useState<ShadeCurveHandles>(() => createDefaultCurveHandles(11, getShadeBaseIndex(11)));
+  const [saturationCurve, setSaturationCurve] = useState<ShadeCurveHandles>(() => createDefaultCurveHandles(11, getShadeBaseIndex(11)));
+  const [hueCurve, setHueCurve] = useState<ShadeCurveHandles>(() => createDefaultCurveHandles(11, getShadeBaseIndex(11)));
   const [activeProperty, setActiveProperty] = useState<CurveProperty>('lightness');
 
   // Drag state for curve editor
@@ -125,9 +148,9 @@ export function ShadesModal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const curvesRef = useRef<Record<CurveProperty, ShadeCurveHandles>>({
-    lightness: createDefaultCurveHandles(),
-    saturation: createDefaultCurveHandles(),
-    hue: createDefaultCurveHandles(),
+    lightness: createDefaultCurveHandles(11, getShadeBaseIndex(11)),
+    saturation: createDefaultCurveHandles(11, getShadeBaseIndex(11)),
+    hue: createDefaultCurveHandles(11, getShadeBaseIndex(11)),
   });
 
   // Track container width for proper curve rendering
@@ -171,12 +194,14 @@ export function ShadesModal() {
   const legacyShadeVariables = useMemo(() => {
     if (!groupName || !selectedCollectionId) return [];
     const shadePattern = new RegExp(`^${escapeRegExp(groupName)}/\\d+$`);
-    return variables.filter(
-      variable =>
-        variable.collectionId === selectedCollectionId &&
-        variable.resolvedType === 'COLOR' &&
-        shadePattern.test(variable.name)
-    );
+    return variables
+      .filter(
+        variable =>
+          variable.collectionId === selectedCollectionId &&
+          variable.resolvedType === 'COLOR' &&
+          shadePattern.test(variable.name)
+      )
+      .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
   }, [groupName, selectedCollectionId, variables]);
 
   const managedShadeGroup = useMemo(() => {
@@ -201,12 +226,14 @@ export function ShadesModal() {
   const getLegacyShadesForGroup = useCallback((nextGroupName: string) => {
     if (!nextGroupName || !selectedCollectionId) return [];
     const shadePattern = new RegExp(`^${escapeRegExp(nextGroupName)}/\\d+$`);
-    return variables.filter(
-      variable =>
-        variable.collectionId === selectedCollectionId &&
-        variable.resolvedType === 'COLOR' &&
-        shadePattern.test(variable.name)
-    );
+    return variables
+      .filter(
+        variable =>
+          variable.collectionId === selectedCollectionId &&
+          variable.resolvedType === 'COLOR' &&
+          shadePattern.test(variable.name)
+      )
+      .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
   }, [selectedCollectionId, variables]);
 
   const applySourceSelection = useCallback((sourceVariable: VariableData | null, forcedGroupName?: string) => {
@@ -215,33 +242,41 @@ export function ShadesModal() {
     const nextManagedGroup = sourceVariable
       ? getShadeGroupBySourceId(sourceVariable.id)
       : (forcedGroupName ? getShadeGroupByGroupName(forcedGroupName) : null);
+    const nextShadeCount = nextManagedGroup?.config.shadeCount || nextLegacyShades.length || 11;
+    const nextSourceRgb = sourceVariable
+      ? parseColorToRgb(sourceVariable.value) || parseColorToRgb(nextManagedGroup?.config.sourceValue || '')
+      : (forcedGroupName ? parseColorToRgb(getLegacyBaseColor(nextLegacyShades)) : null);
+    const nextBaseColorHex = nextSourceRgb ? rgbObjToHex(nextSourceRgb) : '#000000';
 
     setSourceColorId(sourceVariable?.id || '');
     setGroupName(nextGroupName);
     setActiveProperty('lightness');
 
-    if (sourceVariable) {
-      const rgb = parseColorToRgb(sourceVariable.value) || parseColorToRgb(nextManagedGroup?.config.sourceValue || '');
-      setBaseColor(rgb ? rgbObjToHex(rgb) : '#000000');
-    } else if (forcedGroupName) {
-      setBaseColor(getLegacyBaseColor(nextLegacyShades));
-    } else {
-      setBaseColor('#000000');
-    }
+    setBaseColor(nextBaseColorHex);
 
     if (nextManagedGroup) {
+      const nextBaseIndex = nextSourceRgb
+        ? getShadeBaseIndexForColor(nextBaseColorHex, nextManagedGroup.config.shadeCount)
+        : normalizeShadeBaseIndex(nextManagedGroup.config.baseIndex, nextManagedGroup.config.shadeCount);
       setShadeCount(nextManagedGroup.config.shadeCount);
-      setLightnessCurve(nextManagedGroup.config.lightnessCurve);
-      setSaturationCurve(nextManagedGroup.config.saturationCurve);
-      setHueCurve(nextManagedGroup.config.hueCurve);
+      setBaseIndex(nextBaseIndex);
+      setLightnessCurve(normalizeCurveHandles(nextManagedGroup.config.lightnessCurve, nextManagedGroup.config.shadeCount, nextBaseIndex));
+      setSaturationCurve(normalizeCurveHandles(nextManagedGroup.config.saturationCurve, nextManagedGroup.config.shadeCount, nextBaseIndex));
+      setHueCurve(normalizeCurveHandles(nextManagedGroup.config.hueCurve, nextManagedGroup.config.shadeCount, nextBaseIndex));
       return;
     }
 
-    setShadeCount(nextLegacyShades.length || 11);
-    setLightnessCurve(createDefaultCurveHandles());
-    setSaturationCurve(createDefaultCurveHandles());
-    setHueCurve(createDefaultCurveHandles());
+    const nextBaseIndex = nextLegacyShades.length > 0
+      ? findClosestShadeIndex(nextBaseColorHex, nextLegacyShades, nextShadeCount)
+      : getShadeBaseIndexForColor(nextBaseColorHex, nextShadeCount);
+
+    setShadeCount(nextShadeCount);
+    setBaseIndex(nextBaseIndex);
+    setLightnessCurve(createDefaultCurveHandles(nextShadeCount, nextBaseIndex));
+    setSaturationCurve(createDefaultCurveHandles(nextShadeCount, nextBaseIndex));
+    setHueCurve(createDefaultCurveHandles(nextShadeCount, nextBaseIndex));
   }, [
+    findClosestShadeIndex,
     getShadeGroupByGroupName,
     getShadeGroupBySourceId,
     getLegacyShadesForGroup,
@@ -265,11 +300,38 @@ export function ShadesModal() {
     setGroupName('');
     setBaseColor('#000000');
     setShadeCount(11);
-    setLightnessCurve(createDefaultCurveHandles());
-    setSaturationCurve(createDefaultCurveHandles());
-    setHueCurve(createDefaultCurveHandles());
+    setBaseIndex(getShadeBaseIndex(11));
+    setLightnessCurve(createDefaultCurveHandles(11, getShadeBaseIndex(11)));
+    setSaturationCurve(createDefaultCurveHandles(11, getShadeBaseIndex(11)));
+    setHueCurve(createDefaultCurveHandles(11, getShadeBaseIndex(11)));
     setActiveProperty('lightness');
   }, [isOpen, preSelectedGroup, sourceColors, selectedSourceVariable, applySourceSelection]);
+
+  useEffect(() => {
+    if (!groupName) return;
+
+    const nextBaseIndex = managedShadeGroup
+      ? getShadeBaseIndexForColor(baseColor, shadeCount)
+      : legacyShadeVariables.length > 0
+      ? findClosestShadeIndex(baseColor, legacyShadeVariables, shadeCount)
+      : getShadeBaseIndexForColor(baseColor, shadeCount);
+
+    if (nextBaseIndex === baseIndex) return;
+
+    setBaseIndex(nextBaseIndex);
+    setLightnessCurve(prev => normalizeCurveHandles(prev, shadeCount, nextBaseIndex));
+    setSaturationCurve(prev => normalizeCurveHandles(prev, shadeCount, nextBaseIndex));
+    setHueCurve(prev => normalizeCurveHandles(prev, shadeCount, nextBaseIndex));
+  }, [
+    baseColor,
+    baseIndex,
+    findClosestShadeIndex,
+    getShadeBaseIndexForColor,
+    groupName,
+    legacyShadeVariables,
+    managedShadeGroup,
+    shadeCount,
+  ]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nextSourceId = e.target.value;
@@ -294,12 +356,13 @@ export function ShadesModal() {
   }, [lightnessCurve, saturationCurve, hueCurve]);
 
   const setCurveByProperty = useCallback((property: CurveProperty, curve: ShadeCurveHandles) => {
+    const normalizedCurve = normalizeCurveHandles(curve, shadeCount, baseIndex);
     switch (property) {
-      case 'saturation': setSaturationCurve(curve); break;
-      case 'hue': setHueCurve(curve); break;
-      default: setLightnessCurve(curve); break;
+      case 'saturation': setSaturationCurve(normalizedCurve); break;
+      case 'hue': setHueCurve(normalizedCurve); break;
+      default: setLightnessCurve(normalizedCurve); break;
     }
-  }, []);
+  }, [baseIndex, shadeCount]);
 
   const generatedShades = useMemo(() => {
     if (!groupName) return [];
@@ -307,29 +370,31 @@ export function ShadesModal() {
       baseColor,
       groupName,
       shadeCount,
+      baseIndex,
       lightnessCurve,
       saturationCurve,
       hueCurve,
       DEFAULT_SHADE_LIGHT_VALUE,
       DEFAULT_SHADE_DARK_VALUE
     );
-  }, [baseColor, groupName, hueCurve, lightnessCurve, saturationCurve, shadeCount]);
+  }, [baseColor, baseIndex, groupName, hueCurve, lightnessCurve, saturationCurve, shadeCount]);
 
   const shadeColors = useMemo(() => {
     return generatedShades.map(shade => rgbToHex(shade.value));
   }, [generatedShades]);
 
   const curveResetState = useMemo(() => ({
-    lightness: !isDefaultCurve(lightnessCurve),
-    saturation: !isDefaultCurve(saturationCurve),
-    hue: !isDefaultCurve(hueCurve),
-  }), [hueCurve, lightnessCurve, saturationCurve]);
+    lightness: !isDefaultCurve(lightnessCurve, shadeCount, baseIndex),
+    saturation: !isDefaultCurve(saturationCurve, shadeCount, baseIndex),
+    hue: !isDefaultCurve(hueCurve, shadeCount, baseIndex),
+  }), [baseIndex, hueCurve, lightnessCurve, saturationCurve, shadeCount]);
 
   const getCurveDisplayValue = useCallback((property: CurveProperty, t: number, adjustment: number) => {
     if (property === 'lightness') {
       const baseTone = getBaseShadeToneAtT(
         t,
         shadeCount,
+        baseIndex,
         DEFAULT_SHADE_LIGHT_VALUE,
         DEFAULT_SHADE_DARK_VALUE
       );
@@ -338,13 +403,14 @@ export function ShadesModal() {
 
     const { min, max } = CURVE_DISPLAY_CONFIG[property];
     return clamp(adjustment, min, max);
-  }, [shadeCount]);
+  }, [baseIndex, shadeCount]);
 
   const getStoredCurveValue = useCallback((property: CurveProperty, t: number, displayValue: number) => {
     if (property === 'lightness') {
       const baseTone = getBaseShadeToneAtT(
         t,
         shadeCount,
+        baseIndex,
         DEFAULT_SHADE_LIGHT_VALUE,
         DEFAULT_SHADE_DARK_VALUE
       );
@@ -354,7 +420,18 @@ export function ShadesModal() {
 
     const { min, max } = getCurvePropertyValueRange(property);
     return clamp(displayValue, min, max);
-  }, [shadeCount]);
+  }, [baseIndex, shadeCount]);
+
+  const handleShadeCountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextShadeCount = clamp(Number(e.target.value) || 0, 2, 20);
+    const nextBaseIndex = remapShadeBaseIndex(baseIndex, shadeCount, nextShadeCount);
+
+    setShadeCount(nextShadeCount);
+    setBaseIndex(nextBaseIndex);
+    setLightnessCurve(prev => normalizeCurveHandles(prev, nextShadeCount, nextBaseIndex));
+    setSaturationCurve(prev => normalizeCurveHandles(prev, nextShadeCount, nextBaseIndex));
+    setHueCurve(prev => normalizeCurveHandles(prev, nextShadeCount, nextBaseIndex));
+  }, [baseIndex, shadeCount]);
 
   // Handle generation
   const handleGenerate = () => {
@@ -372,6 +449,7 @@ export function ShadesModal() {
       },
       config: {
         shadeCount,
+        baseIndex,
         lightValue: DEFAULT_SHADE_LIGHT_VALUE,
         darkValue: DEFAULT_SHADE_DARK_VALUE,
         lightnessCurve,
@@ -400,9 +478,9 @@ export function ShadesModal() {
   };
 
   const handleResetCurve = useCallback((property: CurveProperty) => {
-    setCurveByProperty(property, createDefaultCurveHandles());
+    setCurveByProperty(property, createDefaultCurveHandles(shadeCount, baseIndex));
     setDragState(current => (current?.property === property ? null : current));
-  }, [setCurveByProperty]);
+  }, [baseIndex, setCurveByProperty, shadeCount]);
 
   // Curve editor mouse handlers
   const handleMouseDown = useCallback((e: React.MouseEvent, target: DragTarget) => {
@@ -419,6 +497,8 @@ export function ShadesModal() {
     const handleMouseMove = (e: MouseEvent) => {
       const curve = curvesRef.current[dragState.property];
       const updatedCurve = { ...curve };
+      const normalizedBaseIndex = normalizeShadeBaseIndex(baseIndex, shadeCount);
+      const baseT = getShadeBaseT(shadeCount, normalizedBaseIndex);
       const minY = CURVE_PADDING_Y;
       const maxY = CURVE_EDITOR_HEIGHT - CURVE_PADDING_Y;
 
@@ -434,20 +514,39 @@ export function ShadesModal() {
       const localY = ((e.clientY - svgRect.top) / svgRect.height) * CURVE_EDITOR_HEIGHT;
       const nextDisplayValue = curveYToValue(localY, dragState.property, minY, maxY);
 
-      if (dragState.target === 'handle1' || dragState.target === 'handle2') {
+      if (
+        dragState.target === 'leftHandle1' ||
+        dragState.target === 'leftHandle2' ||
+        dragState.target === 'rightHandle1' ||
+        dragState.target === 'rightHandle2'
+      ) {
         let newT = clamp((localX - firstNodeX) / rangeX, 0, 1);
 
-        if (dragState.target === 'handle1') {
-          const maxT = clamp(curve.handle2.t - CURVE_MIN_HANDLE_GAP, 0, 1 - CURVE_MIN_HANDLE_GAP);
+        if (dragState.target === 'leftHandle1') {
+          const maxT = clamp(curve.leftHandle2.t - CURVE_MIN_HANDLE_GAP, 0, baseT);
           newT = clamp(newT, 0, maxT);
-          updatedCurve.handle1 = {
+          updatedCurve.leftHandle1 = {
+            t: newT,
+            value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
+          };
+        } else if (dragState.target === 'leftHandle2') {
+          const minT = clamp(curve.leftHandle1.t + CURVE_MIN_HANDLE_GAP, 0, baseT);
+          newT = clamp(newT, minT, baseT);
+          updatedCurve.leftHandle2 = {
+            t: newT,
+            value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
+          };
+        } else if (dragState.target === 'rightHandle1') {
+          const maxT = clamp(curve.rightHandle2.t - CURVE_MIN_HANDLE_GAP, baseT, 1);
+          newT = clamp(newT, baseT, maxT);
+          updatedCurve.rightHandle1 = {
             t: newT,
             value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
           };
         } else {
-          const minT = clamp(curve.handle1.t + CURVE_MIN_HANDLE_GAP, CURVE_MIN_HANDLE_GAP, 1);
+          const minT = clamp(curve.rightHandle1.t + CURVE_MIN_HANDLE_GAP, baseT, 1);
           newT = clamp(newT, minT, 1);
-          updatedCurve.handle2 = {
+          updatedCurve.rightHandle2 = {
             t: newT,
             value: getStoredCurveValue(dragState.property, newT, nextDisplayValue),
           };
@@ -476,28 +575,30 @@ export function ShadesModal() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, getStoredCurveValue, setCurveByProperty, shadeCount, containerWidth]);
+  }, [baseIndex, dragState, getStoredCurveValue, setCurveByProperty, shadeCount, containerWidth]);
 
   // Render curve SVG
   const renderCurve = () => {
-    const curve = activeCurve;
+    const curve = normalizeCurveHandles(activeCurve, shadeCount, baseIndex);
     const count = shadeCount;
     if (count < 2 || containerWidth === 0) return null;
 
     const nodeRadius = 8;
+    const baseNodeRadius = 10;
     const handleRadius = 8;
-    const handleHitRadius = 16; // Larger invisible hit area for easier clicking
+    const handleHitRadius = 16;
     const minY = CURVE_PADDING_Y;
     const maxY = CURVE_EDITOR_HEIGHT - CURVE_PADDING_Y;
     const zeroY = valueToCurveY(0, activeProperty, minY, maxY);
+    const normalizedBaseIndex = normalizeShadeBaseIndex(baseIndex, count);
+    const baseT = getShadeBaseT(count, normalizedBaseIndex);
 
     const swatchWidth = containerWidth / count;
     const firstNodeX = swatchWidth / 2;
     const lastNodeX = containerWidth - swatchWidth / 2;
     const rangeX = Math.max(1, lastNodeX - firstNodeX);
 
-    // Calculate node positions
-    const adjustments = evaluateCurveAtNodes(curve, count);
+    const adjustments = evaluateCurveAtNodes(curve, count, normalizedBaseIndex);
     const nodePositions: { x: number; y: number; value: number }[] = [];
     const baseNodePositions: { x: number; y: number }[] = [];
 
@@ -513,6 +614,7 @@ export function ShadesModal() {
         const baseTone = getBaseShadeToneAtT(
           t,
           count,
+          normalizedBaseIndex,
           DEFAULT_SHADE_LIGHT_VALUE,
           DEFAULT_SHADE_DARK_VALUE
         );
@@ -523,31 +625,72 @@ export function ShadesModal() {
       }
     }
 
-    // Handle positions
-    const handle1T = clamp(curve.handle1.t, 0, 1);
-    const handle1X = firstNodeX + rangeX * handle1T;
-    const handle1Y = valueToCurveY(
-      getCurveDisplayValue(activeProperty, handle1T, curve.handle1.value),
+    const startNode = nodePositions[0];
+    const baseNode = nodePositions[normalizedBaseIndex];
+    const endNode = nodePositions[count - 1];
+
+    const leftHandle1X = firstNodeX + rangeX * curve.leftHandle1.t;
+    const leftHandle1Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, curve.leftHandle1.t, curve.leftHandle1.value),
+      activeProperty,
+      minY,
+      maxY
+    );
+    const leftHandle2X = firstNodeX + rangeX * curve.leftHandle2.t;
+    const leftHandle2Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, curve.leftHandle2.t, curve.leftHandle2.value),
+      activeProperty,
+      minY,
+      maxY
+    );
+    const rightHandle1X = firstNodeX + rangeX * curve.rightHandle1.t;
+    const rightHandle1Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, curve.rightHandle1.t, curve.rightHandle1.value),
+      activeProperty,
+      minY,
+      maxY
+    );
+    const rightHandle2X = firstNodeX + rangeX * curve.rightHandle2.t;
+    const rightHandle2Y = valueToCurveY(
+      getCurveDisplayValue(activeProperty, curve.rightHandle2.t, curve.rightHandle2.value),
       activeProperty,
       minY,
       maxY
     );
 
-    const handle2T = clamp(curve.handle2.t, 0, 1);
-    const handle2X = firstNodeX + rangeX * handle2T;
-    const handle2Y = valueToCurveY(
-      getCurveDisplayValue(activeProperty, handle2T, curve.handle2.value),
-      activeProperty,
-      minY,
-      maxY
-    );
-
-    // Build smooth curve path using cubic Bezier with actual handle positions
-    // This creates a single smooth curve from first to last node, controlled by the two handles
-    const pathD = `M ${nodePositions[0].x} ${nodePositions[0].y} C ${handle1X} ${handle1Y}, ${handle2X} ${handle2Y}, ${nodePositions[count - 1].x} ${nodePositions[count - 1].y}`;
+    const pathD = [
+      `M ${startNode.x} ${startNode.y}`,
+      `C ${leftHandle1X} ${leftHandle1Y}, ${leftHandle2X} ${leftHandle2Y}, ${baseNode.x} ${baseNode.y}`,
+      `C ${rightHandle1X} ${rightHandle1Y}, ${rightHandle2X} ${rightHandle2Y}, ${endNode.x} ${endNode.y}`,
+    ].join(' ');
     const basePathD = activeProperty === 'lightness' && baseNodePositions.length > 1
       ? baseNodePositions.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
       : null;
+
+    const renderHandle = (key: DragTarget, x: number, y: number) => (
+      <g key={key}>
+        <circle
+          cx={x}
+          cy={y}
+          r={handleHitRadius}
+          fill="transparent"
+          style={{ cursor: 'move' }}
+          onMouseDown={e => handleMouseDown(e, key)}
+        />
+        <rect
+          x={x - handleRadius}
+          y={y - handleRadius}
+          width={handleRadius * 2}
+          height={handleRadius * 2}
+          fill="var(--accent)"
+          stroke="var(--bg)"
+          strokeWidth={2}
+          rx={2}
+          style={{ cursor: 'move', pointerEvents: 'none' }}
+          className={dragState?.target === key ? 'handle-active' : ''}
+        />
+      </g>
+    );
 
     return (
       <svg
@@ -597,90 +740,62 @@ export function ShadesModal() {
 
         {/* Handle lines */}
         <line
-          x1={nodePositions[0].x}
-          y1={nodePositions[0].y}
-          x2={handle1X}
-          y2={handle1Y}
+          x1={startNode.x}
+          y1={startNode.y}
+          x2={leftHandle1X}
+          y2={leftHandle1Y}
           stroke="var(--text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
         <line
-          x1={nodePositions[count - 1].x}
-          y1={nodePositions[count - 1].y}
-          x2={handle2X}
-          y2={handle2Y}
+          x1={baseNode.x}
+          y1={baseNode.y}
+          x2={leftHandle2X}
+          y2={leftHandle2Y}
+          stroke="var(--text)"
+          strokeWidth={1.5}
+          opacity={0.6}
+        />
+        <line
+          x1={baseNode.x}
+          y1={baseNode.y}
+          x2={rightHandle1X}
+          y2={rightHandle1Y}
+          stroke="var(--text)"
+          strokeWidth={1.5}
+          opacity={0.6}
+        />
+        <line
+          x1={endNode.x}
+          y1={endNode.y}
+          x2={rightHandle2X}
+          y2={rightHandle2Y}
           stroke="var(--text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
 
-        {/* Handles (draggable) - use squares for better differentiation from nodes */}
-        {/* Handle 1 */}
-        <g>
-          {/* Larger invisible hit area */}
-          <circle
-            cx={handle1X}
-            cy={handle1Y}
-            r={handleHitRadius}
-            fill="transparent"
-            style={{ cursor: 'move' }}
-            onMouseDown={e => handleMouseDown(e, 'handle1')}
-          />
-          {/* Visible handle */}
-          <rect
-            x={handle1X - handleRadius}
-            y={handle1Y - handleRadius}
-            width={handleRadius * 2}
-            height={handleRadius * 2}
-            fill="var(--accent)"
-            stroke="var(--bg)"
-            strokeWidth={2}
-            rx={2}
-            style={{ cursor: 'move', pointerEvents: 'none' }}
-            className={dragState?.target === 'handle1' ? 'handle-active' : ''}
-          />
-        </g>
-
-        {/* Handle 2 */}
-        <g>
-          {/* Larger invisible hit area */}
-          <circle
-            cx={handle2X}
-            cy={handle2Y}
-            r={handleHitRadius}
-            fill="transparent"
-            style={{ cursor: 'move' }}
-            onMouseDown={e => handleMouseDown(e, 'handle2')}
-          />
-          {/* Visible handle */}
-          <rect
-            x={handle2X - handleRadius}
-            y={handle2Y - handleRadius}
-            width={handleRadius * 2}
-            height={handleRadius * 2}
-            fill="var(--accent)"
-            stroke="var(--bg)"
-            strokeWidth={2}
-            rx={2}
-            style={{ cursor: 'move', pointerEvents: 'none' }}
-            className={dragState?.target === 'handle2' ? 'handle-active' : ''}
-          />
-        </g>
+        {renderHandle('leftHandle1', leftHandle1X, leftHandle1Y)}
+        {renderHandle('leftHandle2', leftHandle2X, leftHandle2Y)}
+        {renderHandle('rightHandle1', rightHandle1X, rightHandle1Y)}
+        {renderHandle('rightHandle2', rightHandle2X, rightHandle2Y)}
 
         {/* Nodes */}
         {nodePositions.map((np, i) => {
           const isFirstOrLast = i === 0 || i === nodePositions.length - 1;
+          const isBaseNode = i === normalizedBaseIndex;
           const fillColor = shadeColors[i] || 'var(--bg)';
           return (
             <circle
               key={`node-${i}`}
               cx={np.x}
               cy={np.y}
-              r={nodeRadius}
+              r={isBaseNode ? baseNodeRadius : nodeRadius}
               fill={fillColor}
-              stroke="var(--accent)"
-              strokeWidth={2}
+              stroke={isBaseNode ? 'var(--text)' : 'var(--accent)'}
+              strokeWidth={isBaseNode ? 3 : 2}
+              className={isBaseNode ? 'curve-node curve-node-base' : 'curve-node'}
               style={isFirstOrLast ? { cursor: 'ns-resize' } : undefined}
               onMouseDown={isFirstOrLast ? e => handleMouseDown(e, i === 0 ? 'startNode' : 'endNode') : undefined}
             />
@@ -749,7 +864,7 @@ export function ShadesModal() {
                     type="number"
                     className="form-input"
                     value={shadeCount}
-                    onChange={e => setShadeCount(Number(e.target.value))}
+                    onChange={handleShadeCountChange}
                     min={2}
                     max={20}
                     style={{ width: 60 }}
@@ -807,9 +922,9 @@ export function ShadesModal() {
                     {shadeColors.map((color, i) => (
                       <div
                         key={i}
-                        className="shades-preview-item"
+                        className={`shades-preview-item ${i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? 'is-base-shade' : ''}`.trim()}
                         style={{ background: color }}
-                        title={color}
+                        title={i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? `${color} (Base)` : color}
                       />
                     ))}
                   </div>

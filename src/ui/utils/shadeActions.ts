@@ -1,7 +1,7 @@
 import { post } from '../hooks/usePluginMessages';
 import { ShadeGroupData, VariableData } from '../types';
 import { hexToRgb } from './color';
-import { buildShadePayload } from './shades';
+import { buildShadePayload, getShadeBaseIndexForColor } from './shades';
 
 function normalizeColorValue(value: string): string {
   return value.startsWith('#') ? hexToRgb(value) : value;
@@ -11,10 +11,15 @@ export function refreshManagedShadeGroup(
   shadeGroup: ShadeGroupData,
   sourceVariable: VariableData
 ): boolean {
+  const nextBaseIndex = getShadeBaseIndexForColor(
+    sourceVariable.value,
+    shadeGroup.config.shadeCount
+  );
   const shades = buildShadePayload(
     sourceVariable.value,
     sourceVariable.name,
     shadeGroup.config.shadeCount,
+    nextBaseIndex,
     shadeGroup.config.lightnessCurve,
     shadeGroup.config.saturationCurve,
     shadeGroup.config.hueCurve,
@@ -38,6 +43,7 @@ export function refreshManagedShadeGroup(
     },
     config: {
       shadeCount: shadeGroup.config.shadeCount,
+      baseIndex: nextBaseIndex,
       lightValue: shadeGroup.config.lightValue,
       darkValue: shadeGroup.config.darkValue,
       lightnessCurve: shadeGroup.config.lightnessCurve,

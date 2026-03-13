@@ -25,6 +25,15 @@ interface ShadeCurvePoint {
 
 interface ShadeCurveHandles {
   startValue: number;
+  leftHandle1: ShadeCurvePoint;
+  leftHandle2: ShadeCurvePoint;
+  rightHandle1: ShadeCurvePoint;
+  rightHandle2: ShadeCurvePoint;
+  endValue: number;
+}
+
+interface LegacyShadeCurveHandles {
+  startValue: number;
   handle1: ShadeCurvePoint;
   handle2: ShadeCurvePoint;
   endValue: number;
@@ -32,6 +41,7 @@ interface ShadeCurveHandles {
 
 interface ShadeConfigPayload {
   shadeCount: number;
+  baseIndex: number;
   lightValue: number;
   darkValue: number;
   lightnessCurve: ShadeCurveHandles;
@@ -110,6 +120,273 @@ function extractShadeNumber(name: string): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
+function getDefaultShadeBaseIndex(count: number): number {
+  const names = getShadeNames(count);
+  const explicitBaseIndex = names.indexOf('500');
+  if (explicitBaseIndex >= 0) {
+    return explicitBaseIndex;
+  }
+
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  names.forEach((name, index) => {
+    const distance = Math.abs(parseInt(name, 10) - 500);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return closestIndex;
+}
+
+function normalizeShadeBaseIndex(baseIndex: number | undefined, count: number): number {
+  if (count <= 1) return 0;
+  if (typeof baseIndex !== 'number' || Number.isNaN(baseIndex)) {
+    return getDefaultShadeBaseIndex(count);
+  }
+  return clamp(Math.round(baseIndex), 0, count - 1);
+}
+
+function getShadeBaseT(count: number, baseIndex: number): number {
+  if (count <= 1) return 0;
+  return normalizeShadeBaseIndex(baseIndex, count) / (count - 1);
+}
+
+function parseCssColorToRgb(value: string): RGBColor | null {
+  const rgbMatch = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+    };
+  }
+
+  const hexMatch = value.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    if (hex.length === 3) {
+      hex = `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+    }
+
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
+  }
+
+  return null;
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const nr = r / 255;
+  const ng = g / 255;
+  const nb = b / 255;
+  const max = Math.max(nr, ng, nb);
+  const min = Math.min(nr, ng, nb);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+
+  if (max !== min) {
+    const delta = max - min;
+    s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+
+    switch (max) {
+      case nr:
+        h = ((ng - nb) / delta + (ng < nb ? 6 : 0)) / 6;
+        break;
+      case ng:
+        h = ((nb - nr) / delta + 2) / 6;
+        break;
+      default:
+        h = ((nr - ng) / delta + 4) / 6;
+        break;
+    }
+  }
+
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
+}
+
+function getShadeBaseIndexForRgb(rgb: RGBColor, count: number): number {
+  const { l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  const darkness = 1 - clamp(l / 100, 0, 1);
+  return normalizeShadeBaseIndex(Math.round(darkness * (count - 1)), count);
+}
+
+function getShadeBaseIndexForColor(value: string, count: number): number {
+  const rgb = parseCssColorToRgb(value);
+  if (!rgb) {
+    return getDefaultShadeBaseIndex(count);
+  }
+
+  return getShadeBaseIndexForRgb(rgb, count);
+}
+
+function findClosestShadeIndex(baseColor: string, shades: StoredShadeData[], count: number): number {
+  const baseRgb = parseCssColorToRgb(baseColor);
+  if (!baseRgb || shades.length === 0) {
+    return normalizeShadeBaseIndex(undefined, count);
+  }
+
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  shades.forEach((shade, index) => {
+    const shadeRgb = parseCssColorToRgb(shade.value);
+    if (!shadeRgb) return;
+
+    const distance =
+      (baseRgb.r - shadeRgb.r) ** 2 +
+      (baseRgb.g - shadeRgb.g) ** 2 +
+      (baseRgb.b - shadeRgb.b) ** 2;
+
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return normalizeShadeBaseIndex(closestIndex, count);
+}
+
+function isModernCurveHandles(value: unknown): value is ShadeCurveHandles {
+  const candidate = value as Partial<ShadeCurveHandles> | null;
+  return !!candidate &&
+    typeof candidate.startValue === 'number' &&
+    typeof candidate.endValue === 'number' &&
+    !!candidate.leftHandle1 &&
+    !!candidate.leftHandle2 &&
+    !!candidate.rightHandle1 &&
+    !!candidate.rightHandle2;
+}
+
+function isLegacyCurveHandles(value: unknown): value is LegacyShadeCurveHandles {
+  const candidate = value as Partial<LegacyShadeCurveHandles> | null;
+  return !!candidate &&
+    typeof candidate.startValue === 'number' &&
+    typeof candidate.endValue === 'number' &&
+    !!candidate.handle1 &&
+    !!candidate.handle2;
+}
+
+function solveBezierTForRangeX(x: number, x0: number, x1: number, x2: number, x3: number): number {
+  if (Math.abs(x3 - x0) < 1e-6) return 0;
+
+  let t = clamp((x - x0) / (x3 - x0), 0, 1);
+  for (let i = 0; i < 6; i++) {
+    const xAt = cubicBezierAt(x0, x1, x2, x3, t);
+    const dx = xAt - x;
+    if (Math.abs(dx) < 1e-4) break;
+
+    const derivative = cubicBezierDerivative(x0, x1, x2, x3, t);
+    if (Math.abs(derivative) < 1e-6) break;
+    t = clamp(t - dx / derivative, 0, 1);
+  }
+
+  return t;
+}
+
+function splitCubicAt(p0: number, p1: number, p2: number, p3: number, t: number) {
+  const p01 = p0 + (p1 - p0) * t;
+  const p12 = p1 + (p2 - p1) * t;
+  const p23 = p2 + (p3 - p2) * t;
+  const p012 = p01 + (p12 - p01) * t;
+  const p123 = p12 + (p23 - p12) * t;
+  const p0123 = p012 + (p123 - p012) * t;
+
+  return {
+    left: [p0, p01, p012, p0123] as const,
+    right: [p0123, p123, p23, p3] as const,
+  };
+}
+
+function clampOrderedHandles(
+  first: ShadeCurvePoint,
+  second: ShadeCurvePoint,
+  startT: number,
+  endT: number
+): [ShadeCurvePoint, ShadeCurvePoint] {
+  const segmentSize = Math.max(0, endT - startT);
+  if (segmentSize < 1e-6) {
+    return [
+      { t: startT, value: first.value },
+      { t: endT, value: second.value },
+    ];
+  }
+
+  const endpointGap = Math.min(0.02, segmentSize / 4);
+  const minGap = Math.min(0.02, segmentSize / 4);
+  const minFirstT = startT + endpointGap;
+  const maxSecondT = endT - endpointGap;
+  const firstT = clamp(first.t, minFirstT, maxSecondT - minGap);
+  const secondT = clamp(second.t, firstT + minGap, maxSecondT);
+  return [
+    { t: firstT, value: first.value },
+    { t: secondT, value: second.value },
+  ];
+}
+
+function createDefaultCurveHandles(count: number, baseIndex: number): ShadeCurveHandles {
+  const baseT = getShadeBaseT(count, baseIndex);
+  const leftSpan = Math.max(baseT, 0);
+  const rightSpan = Math.max(1 - baseT, 0);
+
+  return {
+    startValue: 0,
+    leftHandle1: { t: baseT - leftSpan * 0.66, value: 0 },
+    leftHandle2: { t: baseT - leftSpan * 0.33, value: 0 },
+    rightHandle1: { t: baseT + rightSpan * 0.33, value: 0 },
+    rightHandle2: { t: baseT + rightSpan * 0.66, value: 0 },
+    endValue: 0,
+  };
+}
+
+function normalizeCurveHandles(value: unknown, count: number, baseIndex: number): ShadeCurveHandles {
+  const normalizedBaseIndex = normalizeShadeBaseIndex(baseIndex, count);
+  const baseT = getShadeBaseT(count, normalizedBaseIndex);
+
+  if (isModernCurveHandles(value)) {
+    const [leftHandle1, leftHandle2] = clampOrderedHandles(value.leftHandle1, value.leftHandle2, 0, baseT);
+    const [rightHandle1, rightHandle2] = clampOrderedHandles(value.rightHandle1, value.rightHandle2, baseT, 1);
+
+    return {
+      startValue: value.startValue,
+      leftHandle1,
+      leftHandle2,
+      rightHandle1,
+      rightHandle2,
+      endValue: value.endValue,
+    };
+  }
+
+  if (isLegacyCurveHandles(value) && baseT > 0 && baseT < 1) {
+    const handle1T = clamp(value.handle1.t, 0, 1);
+    const handle2T = clamp(value.handle2.t, 0, 1);
+    const splitT = solveBezierTForRangeX(baseT, 0, handle1T, handle2T, 1);
+    const splitX = splitCubicAt(0, handle1T, handle2T, 1, splitT);
+    const splitY = splitCubicAt(value.startValue, value.handle1.value, value.handle2.value, value.endValue, splitT);
+
+    return normalizeCurveHandles({
+      startValue: value.startValue,
+      leftHandle1: { t: splitX.left[1], value: splitY.left[1] },
+      leftHandle2: { t: splitX.left[2], value: splitY.left[2] },
+      rightHandle1: { t: splitX.right[1], value: splitY.right[1] },
+      rightHandle2: { t: splitX.right[2], value: splitY.right[2] },
+      endValue: value.endValue,
+    }, count, normalizedBaseIndex);
+  }
+
+  return normalizeCurveHandles(createDefaultCurveHandles(count, normalizedBaseIndex), count, normalizedBaseIndex);
+}
+
 function readShadeGeneratorConfig(variable: Variable): StoredShadeGeneratorConfig | null {
   const raw = variable.getPluginData(SHADE_GENERATOR_CONFIG_KEY);
   if (!raw) return null;
@@ -120,17 +397,43 @@ function readShadeGeneratorConfig(variable: Variable): StoredShadeGeneratorConfi
       return null;
     }
 
+    const shadeCount =
+      typeof parsed.shadeCount === 'number'
+        ? parsed.shadeCount
+        : parsed.generatedShades.length;
+    const sourceValue = typeof parsed.sourceValue === 'string' ? parsed.sourceValue : '';
+    const derivedBaseIndex =
+      typeof parsed.baseIndex === 'number'
+        ? parsed.baseIndex
+        : parsed.generatedShades.length > 0
+          ? findClosestShadeIndex(sourceValue, parsed.generatedShades, shadeCount)
+          : getShadeBaseIndexForColor(sourceValue, shadeCount);
+    const normalizedBaseIndex = normalizeShadeBaseIndex(derivedBaseIndex, shadeCount);
+
     return {
-      version: typeof parsed.version === 'number' ? parsed.version : 1,
+      version: typeof parsed.version === 'number' ? parsed.version : 2,
       sourceVariableId: typeof parsed.sourceVariableId === 'string' ? parsed.sourceVariableId : variable.id,
       sourceName: typeof parsed.sourceName === 'string' ? parsed.sourceName : variable.name,
-      sourceValue: typeof parsed.sourceValue === 'string' ? parsed.sourceValue : '',
-      shadeCount: typeof parsed.shadeCount === 'number' ? parsed.shadeCount : parsed.generatedShades.length,
+      sourceValue,
+      shadeCount,
+      baseIndex: normalizedBaseIndex,
       lightValue: typeof parsed.lightValue === 'number' ? parsed.lightValue : 5,
       darkValue: typeof parsed.darkValue === 'number' ? parsed.darkValue : 90,
-      lightnessCurve: parsed.lightnessCurve,
-      saturationCurve: parsed.saturationCurve,
-      hueCurve: parsed.hueCurve,
+      lightnessCurve: normalizeCurveHandles(
+        parsed.lightnessCurve,
+        shadeCount,
+        normalizedBaseIndex
+      ),
+      saturationCurve: normalizeCurveHandles(
+        parsed.saturationCurve,
+        shadeCount,
+        normalizedBaseIndex
+      ),
+      hueCurve: normalizeCurveHandles(
+        parsed.hueCurve,
+        shadeCount,
+        normalizedBaseIndex
+      ),
       generatedShades: parsed.generatedShades,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
     };
@@ -283,6 +586,7 @@ function buildShadeGroups(
         sourceName: config.sourceName,
         sourceValue: config.sourceValue,
         shadeCount: config.shadeCount,
+        baseIndex: config.baseIndex,
         lightValue: config.lightValue,
         darkValue: config.darkValue,
         lightnessCurve: config.lightnessCurve,
@@ -363,19 +667,55 @@ function solveBezierTForX(x: number, x1: number, x2: number): number {
   return t;
 }
 
-function evaluateShadeCurveAtNodes(handles: ShadeCurveHandles, count: number): number[] {
+function evaluateShadeCurveAtT(handles: ShadeCurveHandles, t: number, count: number, baseIndex: number): number {
+  const baseT = getShadeBaseT(count, baseIndex);
+  const clampedT = clamp(t, 0, 1);
+
+  if (baseT <= 0 || clampedT <= baseT) {
+    const u = solveBezierTForRangeX(
+      clampedT,
+      0,
+      handles.leftHandle1.t,
+      handles.leftHandle2.t,
+      baseT
+    );
+
+    return cubicBezierAt(
+      handles.startValue,
+      handles.leftHandle1.value,
+      handles.leftHandle2.value,
+      0,
+      u
+    );
+  }
+
+  const u = solveBezierTForRangeX(
+    clampedT,
+    baseT,
+    handles.rightHandle1.t,
+    handles.rightHandle2.t,
+    1
+  );
+
+  return cubicBezierAt(
+    0,
+    handles.rightHandle1.value,
+    handles.rightHandle2.value,
+    handles.endValue,
+    u
+  );
+}
+
+function evaluateShadeCurveAtNodes(handles: ShadeCurveHandles, count: number, baseIndex: number): number[] {
+  const normalizedHandles = normalizeCurveHandles(handles, count, baseIndex);
+  const normalizedBaseIndex = normalizeShadeBaseIndex(baseIndex, count);
   const values: number[] = [];
+
   for (let i = 0; i < count; i++) {
     const t = count > 1 ? i / (count - 1) : 0;
-    const u = solveBezierTForX(t, clamp(handles.handle1.t, 0, 1), clamp(handles.handle2.t, 0, 1));
-    values.push(cubicBezierAt(
-      handles.startValue,
-      handles.handle1.value,
-      handles.handle2.value,
-      handles.endValue,
-      u
-    ));
+    values.push(i === normalizedBaseIndex ? 0 : evaluateShadeCurveAtT(normalizedHandles, t, count, normalizedBaseIndex));
   }
+
   return values;
 }
 
@@ -485,17 +825,13 @@ function getShadeNames(count: number): string[] {
 }
 
 function getShadeBaseIndex(count: number): number {
-  const names = getShadeNames(count);
-  const explicitBaseIndex = names.indexOf('500');
-  if (explicitBaseIndex >= 0) {
-    return explicitBaseIndex;
-  }
-  return Math.floor((count - 1) / 2);
+  return getDefaultShadeBaseIndex(count);
 }
 
 function getBaseShadeToneAtT(
   t: number,
   count: number,
+  baseIndex: number,
   lightValue: number,
   darkValue: number
 ): number {
@@ -503,8 +839,7 @@ function getBaseShadeToneAtT(
     return 50;
   }
 
-  const baseIndex = getShadeBaseIndex(count);
-  const baseT = baseIndex / (count - 1);
+  const baseT = getShadeBaseT(count, baseIndex);
   const clampedT = clamp(t, 0, 1);
 
   if (clampedT <= baseT) {
@@ -521,16 +856,17 @@ function buildManagedShadePayload(
   groupName: string,
   config: ShadeConfigPayload
 ): { name: string; value: string }[] {
-  const lightAdj = evaluateShadeCurveAtNodes(config.lightnessCurve, config.shadeCount);
-  const satAdj = evaluateShadeCurveAtNodes(config.saturationCurve, config.shadeCount);
-  const hueAdj = evaluateShadeCurveAtNodes(config.hueCurve, config.shadeCount);
+  const normalizedBaseIndex = normalizeShadeBaseIndex(config.baseIndex, config.shadeCount);
+  const lightAdj = evaluateShadeCurveAtNodes(config.lightnessCurve, config.shadeCount, normalizedBaseIndex);
+  const satAdj = evaluateShadeCurveAtNodes(config.saturationCurve, config.shadeCount, normalizedBaseIndex);
+  const hueAdj = evaluateShadeCurveAtNodes(config.hueCurve, config.shadeCount, normalizedBaseIndex);
   const names = getShadeNames(config.shadeCount);
   const colors: { name: string; value: string }[] = [];
   const baseHsv = rgbToHsv(baseRgb.r, baseRgb.g, baseRgb.b);
 
   for (let i = 0; i < config.shadeCount; i++) {
     const t = config.shadeCount > 1 ? i / (config.shadeCount - 1) : 0;
-    const baseLightness = getBaseShadeToneAtT(t, config.shadeCount, config.lightValue, config.darkValue);
+    const baseLightness = getBaseShadeToneAtT(t, config.shadeCount, normalizedBaseIndex, config.lightValue, config.darkValue);
     const lightness = clamp(baseLightness + (lightAdj[i] || 0), 0, 100);
     const saturation = clamp(baseHsv.s + (satAdj[i] || 0), 0, 100);
     const hue = (baseHsv.h + (hueAdj[i] || 0) + 360) % 360;
@@ -541,6 +877,10 @@ function buildManagedShadePayload(
       name: `${groupName}/${names[i]}`,
       value: rgbToCss(shadeRgb),
     });
+  }
+
+  if (colors[normalizedBaseIndex]) {
+    colors[normalizedBaseIndex].value = rgbToCss(baseRgb);
   }
 
   return colors;
@@ -1028,11 +1368,12 @@ async function persistShadeGeneratorConfig(
   }
 
   const storedConfig: StoredShadeGeneratorConfig = {
-    version: 1,
+    version: 2,
     sourceVariableId: sourceVariable.id,
     sourceName: sourceVariable.name,
     sourceValue: await formatValue(sourceVariable.valuesByMode[modeId], sourceVariable.resolvedType),
     shadeCount: config.shadeCount,
+    baseIndex: normalizeShadeBaseIndex(config.baseIndex, config.shadeCount),
     lightValue: config.lightValue,
     darkValue: config.darkValue,
     lightnessCurve: config.lightnessCurve,
@@ -1124,9 +1465,11 @@ async function syncManagedShadeSources(): Promise<boolean> {
 
     const resolvedSourceRgb = await resolveSourceVariableRgb(variable);
     if (!resolvedSourceRgb) continue;
+    const nextBaseIndex = getShadeBaseIndexForRgb(resolvedSourceRgb, storedConfig.shadeCount);
 
     const shades = buildManagedShadePayload(resolvedSourceRgb, variable.name, {
       shadeCount: storedConfig.shadeCount,
+      baseIndex: nextBaseIndex,
       lightValue: storedConfig.lightValue,
       darkValue: storedConfig.darkValue,
       lightnessCurve: storedConfig.lightnessCurve,
@@ -1142,6 +1485,7 @@ async function syncManagedShadeSources(): Promise<boolean> {
       variable,
       {
         shadeCount: storedConfig.shadeCount,
+        baseIndex: nextBaseIndex,
         lightValue: storedConfig.lightValue,
         darkValue: storedConfig.darkValue,
         lightnessCurve: storedConfig.lightnessCurve,

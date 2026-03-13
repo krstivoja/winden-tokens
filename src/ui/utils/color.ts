@@ -151,12 +151,25 @@ function getShadeBaseIndex(count: number): number {
   if (explicitBaseIndex >= 0) {
     return explicitBaseIndex;
   }
-  return Math.floor((count - 1) / 2);
+
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  names.forEach((name, index) => {
+    const distance = Math.abs(parseInt(name, 10) - 500);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return closestIndex;
 }
 
 function getBaseShadeToneAtT(
   t: number,
   count: number,
+  baseIndex: number,
   lightValue: number,
   darkValue: number
 ): number {
@@ -164,8 +177,8 @@ function getBaseShadeToneAtT(
     return 50;
   }
 
-  const baseIndex = getShadeBaseIndex(count);
-  const baseT = baseIndex / (count - 1);
+  const normalizedBaseIndex = Math.max(0, Math.min(count - 1, Math.round(baseIndex)));
+  const baseT = normalizedBaseIndex / (count - 1);
   const clampedT = Math.max(0, Math.min(1, t));
 
   if (clampedT <= baseT) {
@@ -315,6 +328,7 @@ export function generateShadeColorsWithCurves(
   darkValue: number,
   baseRgb: RGB,
   count: number,
+  baseIndex: number,
   lightAdj: number[],
   satAdj: number[],
   hueAdj: number[]
@@ -324,7 +338,7 @@ export function generateShadeColorsWithCurves(
 
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    const baseLightness = getBaseShadeToneAtT(t, count, lightValue, darkValue);
+    const baseLightness = getBaseShadeToneAtT(t, count, baseIndex, lightValue, darkValue);
 
     // Apply all adjustments
     const lightness = Math.max(0, Math.min(100, baseLightness + (lightAdj[i] || 0)));
