@@ -1211,6 +1211,23 @@ figma.ui.onmessage = async (msg) => {
             setVariableOrder([]);
             await fetchData();
             break;
+        case 'get-client-storage':
+            try {
+                const value = await figma.clientStorage.getAsync(msg.key);
+                figma.ui.postMessage({ type: 'client-storage-data', key: msg.key, value });
+            }
+            catch (error) {
+                console.error('[Plugin] Error getting client storage:', error);
+            }
+            break;
+        case 'set-client-storage':
+            try {
+                await figma.clientStorage.setAsync(msg.key, msg.value);
+            }
+            catch (error) {
+                console.error('[Plugin] Error setting client storage:', error);
+            }
+            break;
         case 'resize':
             figma.ui.resize(msg.width, msg.height);
             break;

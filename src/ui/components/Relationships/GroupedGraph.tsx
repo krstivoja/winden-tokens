@@ -57,6 +57,16 @@ interface ConnectionFlags {
   outputKind: 'reference' | 'generated' | null;
 }
 
+interface GridLayoutSettings {
+  gapX: number;
+  gapY: number;
+}
+
+interface GridLayoutDraft {
+  gapX: string;
+  gapY: string;
+}
+
 const GROUP_WIDTH = 260;
 const ROW_HEIGHT = 32;
 const HEADER_HEIGHT = 36;
@@ -89,6 +99,138 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function getGroupHeight(group: GroupData): number {
   return HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
+}
+
+function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
+  const candidate = (value && typeof value === 'object') ? value as Partial<GridLayoutSettings> : {};
+  const gapX = typeof candidate.gapX === 'number' && candidate.gapX >= 0 ? candidate.gapX : GROUP_GAP_X;
+  const gapY = typeof candidate.gapY === 'number' && candidate.gapY >= 0 ? candidate.gapY : GROUP_GAP_Y;
+
+  return { gapX, gapY };
+}
+
+function sortGroupsByPosition(a: GroupData, b: GroupData): number {
+  if (a.y !== b.y) return a.y - b.y;
+  return a.x - b.x;
+}
+
+function arrangeGroupsByConnectedBlocks(
+  groups: GroupData[],
+  connections: Connection[],
+  gapX: number,
+  gapY: number
+): Map<string, { x: number; y: number }> {
+  const columnStep = GROUP_WIDTH + gapX;
+  const positions = new Map<string, { x: number; y: number }>();
+  const groupMap = new Map(groups.map(group => [group.key, group]));
+  const adjacency = new Map<string, Set<string>>();
+
+  groups.forEach(group => {
+    adjacency.set(group.key, new Set());
+  });
+
+  connections.forEach(connection => {
+    if (!groupMap.has(connection.fromGroup) || !groupMap.has(connection.toGroup)) return;
+    adjacency.get(connection.fromGroup)?.add(connection.toGroup);
+    adjacency.get(connection.toGroup)?.add(connection.fromGroup);
+  });
+
+  const visited = new Set<string>();
+  const blocks: GroupData[][] = [];
+
+  groups
+    .slice()
+    .sort(sortGroupsByPosition)
+    .forEach(group => {
+      if (visited.has(group.key)) return;
+
+      const stack = [group.key];
+      const block: GroupData[] = [];
+      visited.add(group.key);
+
+      while (stack.length > 0) {
+        const currentKey = stack.pop();
+        if (!currentKey) continue;
+
+        const currentGroup = groupMap.get(currentKey);
+        if (currentGroup) {
+          block.push(currentGroup);
+        }
+
+        adjacency.get(currentKey)?.forEach(nextKey => {
+          if (visited.has(nextKey)) return;
+          visited.add(nextKey);
+          stack.push(nextKey);
+        });
+      }
+
+      blocks.push(block);
+    });
+
+  blocks.sort((a, b) => {
+    const topA = Math.min(...a.map(group => group.y));
+    const topB = Math.min(...b.map(group => group.y));
+    if (topA !== topB) return topA - topB;
+
+    const leftA = Math.min(...a.map(group => group.x));
+    const leftB = Math.min(...b.map(group => group.x));
+    return leftA - leftB;
+  });
+
+  let nextBlockY = 0;
+
+  blocks.forEach(block => {
+    const sortedBlock = block.slice().sort(sortGroupsByPosition);
+    const desiredColumns = new Map<string, number>();
+
+    sortedBlock.forEach(group => {
+      desiredColumns.set(group.key, Math.max(0, Math.round(group.x / columnStep)));
+    });
+
+    const usedColumns = Array.from(new Set(
+      sortedBlock.map(group => desiredColumns.get(group.key) ?? 0)
+    )).sort((a, b) => a - b);
+    const compactedColumns = new Map<number, number>();
+    usedColumns.forEach((column, index) => {
+      compactedColumns.set(column, index);
+    });
+
+    const startColumn = 0;
+    const blockColumns = new Map<number, GroupData[]>();
+
+    sortedBlock.forEach(group => {
+      const desiredColumn = desiredColumns.get(group.key) ?? 0;
+      const compactedColumn = compactedColumns.get(desiredColumn) ?? 0;
+      const targetColumn = startColumn + compactedColumn;
+      const columnGroups = blockColumns.get(targetColumn) || [];
+      columnGroups.push(group);
+      blockColumns.set(targetColumn, columnGroups);
+    });
+
+    let blockHeight = 0;
+
+    Array.from(blockColumns.entries())
+      .sort((a, b) => a[0] - b[0])
+      .forEach(([columnIndex, columnGroups]) => {
+        let nextColumnY = nextBlockY;
+
+        columnGroups
+          .sort(sortGroupsByPosition)
+          .forEach(group => {
+            positions.set(group.key, {
+              x: columnIndex * columnStep,
+              y: nextColumnY,
+            });
+            nextColumnY += getGroupHeight(group) + gapY;
+          });
+
+        blockHeight = Math.max(blockHeight, nextColumnY - nextBlockY - gapY);
+      });
+
+    nextBlockY += Math.max(blockHeight, 0) + gapY;
+  });
+
+  return positions;
 }
 
 function isShadeVariableName(name: string): boolean {
@@ -193,10 +335,22 @@ export function GroupedGraph({
   const { openShadesModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
   const containerRef = useRef<HTMLDivElement>(null);
+  const gridSettingsRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 50, panY: 50 });
   const [isPanning, setIsPanning] = useState(false);
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   const [groupPositions, setGroupPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
+    gapX: GROUP_GAP_X,
+    gapY: GROUP_GAP_Y,
+  });
+  const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>({
+    gapX: String(GROUP_GAP_X),
+    gapY: String(GROUP_GAP_Y),
+  });
+  const [isGridSettingsOpen, setIsGridSettingsOpen] = useState(false);
+  const [positionsHydrated, setPositionsHydrated] = useState(false);
   const [draggingGroup, setDraggingGroup] = useState<{ key: string; offsetX: number; offsetY: number } | null>(null);
   const [dragState, setDragState] = useState<{
     fromGroup: string;
@@ -215,6 +369,76 @@ export function GroupedGraph({
       zoom: clampZoom(prev.zoom * factor),
     }));
   }, []);
+
+  // Load saved positions on mount
+  useEffect(() => {
+    const storageKey = `graph-positions-${variableType}`;
+    setSavedPositions({});
+    setGroupPositions(new Map());
+    setPositionsHydrated(false);
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setSavedPositions(msg.value || {});
+        setPositionsHydrated(true);
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, [variableType]);
+
+  useEffect(() => {
+    const storageKey = `graph-layout-settings-${variableType}`;
+    setGridLayoutSettings({
+      gapX: GROUP_GAP_X,
+      gapY: GROUP_GAP_Y,
+    });
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setGridLayoutSettings(normalizeGridLayoutSettings(msg.value));
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, [variableType]);
+
+  useEffect(() => {
+    if (isGridSettingsOpen) return;
+
+    setGridLayoutDraft({
+      gapX: String(gridLayoutSettings.gapX),
+      gapY: String(gridLayoutSettings.gapY),
+    });
+  }, [gridLayoutSettings, isGridSettingsOpen]);
+
+  useEffect(() => {
+    if (!isGridSettingsOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (gridSettingsRef.current?.contains(event.target as Node)) return;
+      setIsGridSettingsOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsGridSettingsOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isGridSettingsOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -465,20 +689,40 @@ export function GroupedGraph({
   }, [connections]);
 
   useEffect(() => {
+    if (!positionsHydrated) return;
+
     setGroupPositions(prev => {
       const next = new Map(prev);
       let changed = false;
 
       groupsData.forEach(group => {
         if (!next.has(group.key)) {
-          next.set(group.key, { x: group.initialX, y: group.initialY });
+          // Use saved position if available, otherwise use initial position
+          const savedPos = savedPositions[group.key];
+          next.set(group.key, savedPos || { x: group.initialX, y: group.initialY });
           changed = true;
         }
       });
 
       return changed ? next : prev;
     });
-  }, [groupsData]);
+  }, [groupsData, positionsHydrated, savedPositions]);
+
+  // Save positions when they change
+  useEffect(() => {
+    if (!positionsHydrated || groupsData.length === 0) return;
+
+    const positionsObj: Record<string, { x: number; y: number }> = {};
+    groupsData.forEach(group => {
+      const position = groupPositions.get(group.key);
+      if (position) {
+        positionsObj[group.key] = position;
+      }
+    });
+
+    const storageKey = `graph-positions-${variableType}`;
+    post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
+  }, [groupPositions, groupsData, positionsHydrated, variableType]);
 
   const groups = useMemo(() => {
     return groupsData.map(group => {
@@ -690,6 +934,33 @@ export function GroupedGraph({
     }
   }, []);
 
+  const handleOpenGridSettings = useCallback(() => {
+    setGridLayoutDraft({
+      gapX: String(gridLayoutSettings.gapX),
+      gapY: String(gridLayoutSettings.gapY),
+    });
+    setIsGridSettingsOpen(true);
+  }, [gridLayoutSettings]);
+
+  const handleApplyGridSettings = useCallback(() => {
+    const settings = normalizeGridLayoutSettings({
+      gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
+      gapY: Number.parseInt(gridLayoutDraft.gapY, 10),
+    });
+
+    setGridLayoutSettings(settings);
+    setGridLayoutDraft({
+      gapX: String(settings.gapX),
+      gapY: String(settings.gapY),
+    });
+    setIsGridSettingsOpen(false);
+    post({
+      type: 'set-client-storage',
+      key: `graph-layout-settings-${variableType}`,
+      value: settings,
+    });
+  }, [gridLayoutDraft, variableType]);
+
   const getConnectionPath = useCallback((fromGroup: GroupData, fromVarIdx: number, toGroup: GroupData, toVarIdx: number) => {
     const outputX = fromGroup.x + GROUP_WIDTH;
     const outputY = fromGroup.y + HEADER_HEIGHT + GROUP_PADDING + fromVarIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -719,6 +990,90 @@ export function GroupedGraph({
         >
           New Group
         </button>
+        <button
+          type="button"
+          className="graph-action-btn"
+          onClick={() => {
+            setGroupPositions(
+              arrangeGroupsByConnectedBlocks(
+                groups,
+                connections,
+                gridLayoutSettings.gapX,
+                gridLayoutSettings.gapY
+              )
+            );
+          }}
+        >
+          Arrange Grid
+        </button>
+        <div
+          ref={gridSettingsRef}
+          className="graph-settings-menu"
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="graph-action-btn"
+            onClick={() => {
+              if (isGridSettingsOpen) {
+                setIsGridSettingsOpen(false);
+                return;
+              }
+              handleOpenGridSettings();
+            }}
+          >
+            Grid Settings
+          </button>
+          {isGridSettingsOpen && (
+            <div className="graph-settings-popover">
+              <div className="graph-settings-title">Grid Layout</div>
+              <div className="form-group">
+                <label htmlFor="grid-gap-x">Horizontal gap</label>
+                <input
+                  id="grid-gap-x"
+                  type="number"
+                  min="0"
+                  className="form-input"
+                  value={gridLayoutDraft.gapX}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="grid-gap-y">Vertical gap</label>
+                <input
+                  id="grid-gap-y"
+                  type="number"
+                  min="0"
+                  className="form-input"
+                  value={gridLayoutDraft.gapY}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
+                />
+              </div>
+              <div className="graph-settings-actions">
+                <button
+                  type="button"
+                  className="graph-action-btn"
+                  onClick={() => {
+                    setGridLayoutDraft({
+                      gapX: String(gridLayoutSettings.gapX),
+                      gapY: String(gridLayoutSettings.gapY),
+                    });
+                    setIsGridSettingsOpen(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="graph-action-btn"
+                  onClick={handleApplyGridSettings}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="zoom-controls">
           <button type="button" onClick={() => zoomBy(0.9)} aria-label="Zoom out">-</button>
           <span>{Math.round(viewState.zoom * 100)}%</span>
