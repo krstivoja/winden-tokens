@@ -8,6 +8,7 @@ interface AppState {
   variables: VariableData[];
   shadeGroups: ShadeGroupData[];
   selectedCollectionId: string | null;
+  selectedCollectionIds: Set<string>;
   collapsedGroups: Set<string>;
   searchQuery: string;
   groupContrastColors: Record<string, string>;
@@ -17,6 +18,8 @@ interface AppState {
 interface AppContextValue extends AppState {
   setData: (collections: CollectionData[], variables: VariableData[], shadeGroups: ShadeGroupData[]) => void;
   setSelectedCollectionId: (id: string | null) => void;
+  toggleCollection: (id: string) => void;
+  toggleAllCollections: () => void;
   setSearchQuery: (query: string) => void;
   toggleGroup: (groupName: string) => void;
   isGroupCollapsed: (groupName: string) => boolean;
@@ -38,6 +41,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [variables, setVariables] = useState<VariableData[]>([]);
   const [shadeGroups, setShadeGroups] = useState<ShadeGroupData[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQueryState] = useState('');
   const [groupContrastColors, setGroupContrastColors] = useState<Record<string, string>>({});
@@ -53,11 +57,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return prev;
     });
+    // Initialize selectedCollectionIds with all collections
+    setSelectedCollectionIds(new Set(newCollections.map(c => c.id)));
   }, []);
 
   const setSearchQuery = useCallback((query: string) => {
     setSearchQueryState(query.toLowerCase().trim());
   }, []);
+
+  const toggleCollection = useCallback((id: string) => {
+    setSelectedCollectionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAllCollections = useCallback(() => {
+    setSelectedCollectionIds(prev => {
+      if (prev.size === collections.length) {
+        return new Set();
+      } else {
+        return new Set(collections.map(c => c.id));
+      }
+    });
+  }, [collections]);
 
   const toggleGroup = useCallback((groupName: string) => {
     setCollapsedGroups(prev => {
@@ -76,12 +104,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [collapsedGroups]);
 
   const filteredVariables = useMemo(() => {
-    let filtered = variables.filter(v => v.collectionId === selectedCollectionId);
+    // Filter by selected collections (multiple)
+    let filtered = variables.filter(v => selectedCollectionIds.has(v.collectionId));
     if (searchQuery) {
       filtered = filtered.filter(v => v.name.toLowerCase().includes(searchQuery));
     }
     return filtered;
-  }, [variables, selectedCollectionId, searchQuery]);
+  }, [variables, selectedCollectionIds, searchQuery]);
 
   const colorVariables = useMemo(() => {
     return variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
@@ -150,12 +179,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     variables,
     shadeGroups,
     selectedCollectionId,
+    selectedCollectionIds,
     collapsedGroups,
     searchQuery,
     groupContrastColors,
     singleContrastColors,
     setData,
     setSelectedCollectionId,
+    toggleCollection,
+    toggleAllCollections,
     setSearchQuery,
     toggleGroup,
     isGroupCollapsed,

@@ -5,6 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { PlusIcon, SearchIcon } from '../Icons';
 import { AddMenu } from './AddMenu';
+import { CollectionFilters } from './CollectionFilters';
 import { useModalContext } from '../Modals/ModalContext';
 
 interface ToolbarProps {
@@ -67,18 +68,7 @@ export function Toolbar({ status }: ToolbarProps) {
   return (
     <div className="toolbar">
       <div className="toolbar-group">
-        <select
-          id="collection-select"
-          className="collection-select"
-          value={selectedCollectionId || ''}
-          onChange={handleCollectionChange}
-        >
-          {collections.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <CollectionFilters />
         <button
           id="add-collection-btn"
           className="btn btn-icon"

@@ -5,6 +5,17 @@
   overflow: hidden;
   position: relative;
   background: url('./assets/dots-bg.svg') repeat;
+  display: flex;
+  flex-direction: column;
+}
+
+.relationships-toolbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 // Grouped graph container

@@ -8,7 +8,7 @@ import { useModalContext } from '../Modals/ModalContext';
 
 interface GroupedGraphProps {
   variables: VariableData[];
-  selectedCollectionId: string | null;
+  selectedCollectionIds: Set<string>;
   variableType: 'COLOR' | 'FLOAT';
   shadeGroups: ShadeGroupData[];
 }
@@ -186,7 +186,7 @@ function createPaletteNode(shadeGroup: ShadeGroupData, shadeCount: number, color
 
 export function GroupedGraph({
   variables,
-  selectedCollectionId,
+  selectedCollectionIds,
   variableType,
   shadeGroups,
 }: GroupedGraphProps) {
@@ -254,7 +254,7 @@ export function GroupedGraph({
 
   const { groupsData, connections, variableMap } = useMemo(() => {
     const filteredVars = variables.filter(
-      variable => variable.collectionId === selectedCollectionId && variable.resolvedType === variableType
+      variable => selectedCollectionIds.has(variable.collectionId) && variable.resolvedType === variableType
     );
     const varsByName = new Map<string, VariableData>();
     filteredVars.forEach(variable => varsByName.set(variable.name, variable));
@@ -267,7 +267,7 @@ export function GroupedGraph({
     const managedShadeIds = new Set<string>();
     const managedShadeGroups = isColorType
       ? shadeGroups
-          .filter(group => group.collectionId === selectedCollectionId)
+          .filter(group => selectedCollectionIds.has(group.collectionId))
           .sort((a, b) => a.sourceVariableName.localeCompare(b.sourceVariableName))
       : [];
 
@@ -435,7 +435,7 @@ export function GroupedGraph({
     });
 
     return { groupsData: groupsArray, connections: conns, variableMap: varMap };
-  }, [variables, selectedCollectionId, variableType, shadeGroups, isColorType]);
+  }, [variables, selectedCollectionIds, variableType, shadeGroups, isColorType]);
 
   const connectedVars = useMemo(() => {
     const connected = new Map<string, ConnectionFlags>();
@@ -564,7 +564,7 @@ export function GroupedGraph({
     });
   }, [viewState]);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -579,6 +579,17 @@ export function GroupedGraph({
       panY: prev.panY - e.deltaY,
     }));
   }, [zoomBy]);
+
+  // Use native wheel event listener with passive: false to allow preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
 
   const handleDragStart = useCallback((groupKey: string, varName: string, side: 'left' | 'right', x: number, y: number) => {
     setDragState({
@@ -626,7 +637,9 @@ export function GroupedGraph({
   }, [openShadesModal]);
 
   const handleCreateGroup = useCallback(() => {
-    if (!selectedCollectionId) return;
+    // Use first selected collection for creating new variables
+    const firstCollectionId = Array.from(selectedCollectionIds)[0];
+    if (!firstCollectionId) return;
 
     openInputModal({
       title: `New ${isColorType ? 'Color' : 'Number'} Group`,
@@ -638,17 +651,18 @@ export function GroupedGraph({
 
         post({
           type: 'create-variable',
-          collectionId: selectedCollectionId,
+          collectionId: firstCollectionId,
           name: `${groupName}/${DEFAULT_GROUP_CHILD_NAME}`,
           varType: variableType,
           value: getDefaultVariableValue(variableType),
         });
       },
     });
-  }, [isColorType, openInputModal, selectedCollectionId, variableType]);
+  }, [isColorType, openInputModal, selectedCollectionIds, variableType]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
-    if (!selectedCollectionId || group.kind !== 'standard' || !group.sourceGroupName) return;
+    const firstCollectionId = Array.from(selectedCollectionIds)[0];
+    if (!firstCollectionId || group.kind !== 'standard' || !group.sourceGroupName) return;
 
     openInputModal({
       title: `New Variable in ${group.sourceGroupName}`,
@@ -660,14 +674,14 @@ export function GroupedGraph({
 
         post({
           type: 'create-variable',
-          collectionId: selectedCollectionId,
+          collectionId: firstCollectionId,
           name: `${group.sourceGroupName}/${variableName}`,
           varType: variableType,
           value: getDefaultVariableValue(variableType),
         });
       },
     });
-  }, [openInputModal, selectedCollectionId, variableType]);
+  }, [openInputModal, selectedCollectionIds, variableType]);
 
   const handleDeleteGraphVariable = useCallback((node: VariableNode) => {
     if (node.isVirtual) return;
@@ -695,14 +709,13 @@ export function GroupedGraph({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
     >
       <div className="graph-top-controls" onMouseDown={e => e.stopPropagation()}>
         <button
           type="button"
           className="graph-action-btn"
           onClick={handleCreateGroup}
-          disabled={!selectedCollectionId}
+          disabled={selectedCollectionIds.size === 0}
         >
           New Group
         </button>
