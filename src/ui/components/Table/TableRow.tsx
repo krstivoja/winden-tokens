@@ -5,7 +5,7 @@ import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
-import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon } from '../Icons';
+import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
@@ -30,7 +30,7 @@ export const TableRow = memo(function TableRow({
   colorVariables,
 }: TableRowProps) {
   const { setSingleContrastColor, getShadeGroupBySourceId } = useAppContext();
-  const { openColorPicker, openColorReference, openShadesModal } = useModalContext();
+  const { openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
   const [showContrastPicker, setShowContrastPicker] = useState(false);
   const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
@@ -110,6 +110,11 @@ export const TableRow = memo(function TableRow({
     e.stopPropagation();
     openShadesModal({ groupName: variable.name });
   }, [openShadesModal, variable.name]);
+
+  const handleStepsClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    openStepsModal({ groupName: variable.name });
+  }, [openStepsModal, variable.name]);
 
   // Close picker when clicking outside
   useEffect(() => {
@@ -215,6 +220,16 @@ export const TableRow = memo(function TableRow({
           >
             <span className="icon"><ShadesIcon /></span>
             Shades
+          </button>
+        )}
+        {!isGrouped && variable.resolvedType === 'FLOAT' && (
+          <button
+            className="modifier-btn"
+            onClick={handleStepsClick}
+            title="Generate number steps"
+          >
+            <span className="icon"><StepsIcon /></span>
+            Steps
           </button>
         )}
       </td>

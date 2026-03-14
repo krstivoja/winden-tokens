@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { CloseIcon } from '../Icons';
+import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
 
 const RATIO_PRESETS = [
   { value: '1.125', label: 'Minor Second (1.125)' },
@@ -40,6 +40,7 @@ export function StepsModal() {
   const [stepsList, setStepsList] = useState('xs, sm, md, lg, xl, 2xl, 3xl');
   const [baseStep, setBaseStep] = useState('md');
   const [existingGroup, setExistingGroup] = useState(false);
+  const [editableSteps, setEditableSteps] = useState<{ name: string; value: number }[]>([]);
 
   const numberVariables = useMemo(() =>
     variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'FLOAT'),
@@ -90,7 +91,8 @@ export function StepsModal() {
 
   const ratio = ratioPreset === 'custom' ? customRatio : parseFloat(ratioPreset);
 
-  const preview = useMemo(() => {
+  // Calculate preview and update editable steps when dependencies change
+  const calculatedPreview = useMemo(() => {
     const baseIndex = stepsArray.indexOf(baseStep);
     if (baseIndex === -1) return [];
 
@@ -100,6 +102,13 @@ export function StepsModal() {
       return { name, value: Math.round(value * 100) / 100 };
     });
   }, [stepsArray, baseStep, baseValue, ratio]);
+
+  // Update editable steps when calculated preview changes
+  React.useEffect(() => {
+    if (calculatedPreview.length > 0) {
+      setEditableSteps(calculatedPreview);
+    }
+  }, [calculatedPreview]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedGroupName = e.target.value;
@@ -134,10 +143,108 @@ export function StepsModal() {
     }
   };
 
-  const handleGenerate = () => {
-    if (!groupName || preview.length === 0) return;
+  const handleStepNameChange = (index: number, newName: string) => {
+    setEditableSteps(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], name: newName };
+      return updated;
+    });
+  };
 
-    const steps = preview.map(p => ({
+  const handleStepValueChange = (index: number, newValue: number) => {
+    setEditableSteps(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], value: newValue };
+      return updated;
+    });
+  };
+
+  const handleResetStepValue = (index: number) => {
+    const calculatedValue = calculatedPreview[index]?.value;
+    if (calculatedValue !== undefined) {
+      setEditableSteps(prev => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], value: calculatedValue };
+        return updated;
+      });
+    }
+  };
+
+  const isValueModified = (index: number): boolean => {
+    const editedValue = editableSteps[index]?.value;
+    const calculatedValue = calculatedPreview[index]?.value;
+    return editedValue !== undefined && calculatedValue !== undefined && editedValue !== calculatedValue;
+  };
+
+  const handleBaseStepChange = (stepName: string) => {
+    setBaseStep(stepName);
+  };
+
+  const handleDeleteStep = (index: number) => {
+    setEditableSteps(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      // If we deleted the base step, set the first step as base
+      const deletedStep = prev[index];
+      if (deletedStep.name === baseStep && updated.length > 0) {
+        setBaseStep(updated[0].name);
+      }
+      return updated;
+    });
+  };
+
+  const handleAddStep = () => {
+    setEditableSteps(prev => {
+      const newStep = { name: `step-${Date.now()}`, value: 0 };
+      return [...prev, newStep];
+    });
+  };
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+
+    if (dragIndex === dropIndex) return;
+
+    setEditableSteps(prev => {
+      const updated = [...prev];
+      const [draggedItem] = updated.splice(dragIndex, 1);
+      updated.splice(dropIndex, 0, draggedItem);
+
+      // Recalculate values based on new positions
+      const baseIndex = updated.findIndex(step => step.name === baseStep);
+      if (baseIndex !== -1) {
+        return updated.map((step, i) => {
+          const offset = i - baseIndex;
+          const value = baseValue * Math.pow(ratio, offset);
+          return { ...step, value: Math.round(value * 100) / 100 };
+        });
+      }
+
+      return updated;
+    });
+  };
+
+  const handleGenerate = () => {
+    if (!groupName || editableSteps.length === 0) return;
+
+    const steps = editableSteps.map(p => ({
       name: `${groupName}/${p.name}`,
       value: String(p.value),
     }));
@@ -165,7 +272,7 @@ export function StepsModal() {
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeStepsModal()}>
-      <div className="modal">
+      <div className="modal modal-steps">
         <div className="modal-header">
           <h3>Generate Number Steps</h3>
           <button className="modal-close" onClick={closeStepsModal}>
@@ -193,30 +300,16 @@ export function StepsModal() {
 
           {sourceNumberId && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Base Value</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={baseValue}
-                    onChange={e => setBaseValue(parseFloat(e.target.value) || 0)}
-                    min={0}
-                    step="any"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Base Step</label>
-                  <select
-                    className="form-input"
-                    value={baseStep}
-                    onChange={e => setBaseStep(e.target.value)}
-                  >
-                    {stepsArray.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Base Value</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={baseValue}
+                  onChange={e => setBaseValue(parseFloat(e.target.value) || 0)}
+                  min={0}
+                  step="any"
+                />
               </div>
 
               <div className="form-group">
@@ -255,25 +348,89 @@ export function StepsModal() {
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </select>
-                <input
-                  type="text"
-                  className="form-input mono"
-                  value={stepsList}
-                  onChange={e => {
-                    setStepsList(e.target.value);
-                    setStepsPreset('custom');
-                  }}
-                  style={{ marginTop: 6 }}
-                />
               </div>
 
               <div className="form-group">
-                <label>Preview</label>
-                <div className="steps-preview">
-                  {preview.map(p => (
-                    <div key={p.name} className={`steps-preview-item ${p.name === baseStep ? 'base' : ''}`}>
-                      <span className="step-name">{p.name}</span>
-                      <span className="step-value">{p.value}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingRight: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '16px 24px 1fr 100px 48px', alignItems: 'center', gap: '8px', flex: 1 }}>
+                    <div />
+                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'center' }}>Base</label>
+                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500 }}>Label</label>
+                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'right' }}>Value</label>
+                    <div />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={handleAddStep}
+                    style={{ marginLeft: 8 }}
+                  >
+                    + Add Step
+                  </button>
+                </div>
+                <div className="steps-editable-table">
+                  {editableSteps.map((step, index) => (
+                    <div
+                      key={index}
+                      className={`steps-editable-row ${step.name === baseStep ? 'base' : ''} ${draggedIndex === index ? 'dragging' : ''}`}
+                      onDragOver={handleDragOver}
+                      onDrop={e => handleDrop(e, index)}
+                    >
+                      <div
+                        className="drag-handle"
+                        title="Drag to reorder"
+                        draggable
+                        onDragStart={e => handleDragStart(e, index)}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                          <circle cx="3" cy="3" r="1.5" />
+                          <circle cx="9" cy="3" r="1.5" />
+                          <circle cx="3" cy="9" r="1.5" />
+                          <circle cx="9" cy="9" r="1.5" />
+                        </svg>
+                      </div>
+                      <input
+                        type="radio"
+                        name="base-step"
+                        checked={step.name === baseStep}
+                        onChange={() => handleBaseStepChange(step.name)}
+                        className="base-radio"
+                      />
+                      <input
+                        type="text"
+                        className="step-label-input"
+                        value={step.name}
+                        onChange={e => handleStepNameChange(index, e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="step-value-input"
+                        value={step.value}
+                        onChange={e => handleStepValueChange(index, parseFloat(e.target.value) || 0)}
+                        step="any"
+                      />
+                      <div className="step-actions">
+                        {isValueModified(index) && (
+                          <button
+                            type="button"
+                            className="step-reset-btn"
+                            onClick={() => handleResetStepValue(index)}
+                            title="Reset to calculated value"
+                          >
+                            <RefreshIcon />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="step-delete-btn"
+                          onClick={() => handleDeleteStep(index)}
+                          title="Delete step"
+                          disabled={editableSteps.length <= 1}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
