@@ -5,6 +5,7 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
+import type { VariableData } from '../../types';
 
 const RATIO_PRESETS = [
   { value: '1.125', label: 'Minor Second (1.125)' },
@@ -19,11 +20,33 @@ const RATIO_PRESETS = [
 ];
 
 const STEPS_PRESETS = [
-  { value: 'tshirt', label: 'T-shirt (xs-3xl)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl' },
-  { value: 'numeric', label: 'Numeric (1-10)', steps: '1, 2, 3, 4, 5, 6, 7, 8, 9, 10' },
-  { value: 'gutenberg', label: 'Gutenberg (xs-ultra)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl, ultra' },
+  { value: 'tshirt', label: 'T-shirt (xs-3xl)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl', baseStep: 'md' },
+  { value: 'numeric', label: 'Numeric (1-10)', steps: '1, 2, 3, 4, 5, 6, 7, 8, 9, 10', baseStep: '5' },
+  { value: 'gutenberg', label: 'Gutenberg (xs-ultra)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl, ultra', baseStep: 'md' },
   { value: 'custom', label: 'Custom...' },
 ];
+
+function resolveNumberValue(variable: VariableData | null, varsByName: Map<string, VariableData>, visited = new Set<string>()): number {
+  if (!variable) return 0;
+
+  const parsed = Number.parseFloat(variable.value);
+  if (!Number.isNaN(parsed)) {
+    return parsed;
+  }
+
+  const refMatch = variable.value.match(/^\{(.+)\}$/);
+  if (!refMatch) {
+    return 0;
+  }
+
+  const referenceName = refMatch[1];
+  if (visited.has(referenceName)) {
+    return 0;
+  }
+
+  visited.add(referenceName);
+  return resolveNumberValue(varsByName.get(referenceName) || null, varsByName, visited);
+}
 
 export function StepsModal() {
   const { modals, closeStepsModal } = useModalContext();
@@ -33,7 +56,6 @@ export function StepsModal() {
 
   const [sourceNumberId, setSourceNumberId] = useState('');
   const [groupName, setGroupName] = useState('');
-  const [baseValue, setBaseValue] = useState(16);
   const [ratioPreset, setRatioPreset] = useState('1.25');
   const [customRatio, setCustomRatio] = useState(1.25);
   const [stepsPreset, setStepsPreset] = useState('tshirt');
@@ -47,42 +69,67 @@ export function StepsModal() {
     [variables, selectedCollectionId]
   );
 
+  const numberVarsByName = useMemo(
+    () => new Map(numberVariables.map(variable => [variable.name, variable])),
+    [numberVariables]
+  );
+
   // Get unique number groups (like ShadesModal)
   const numberGroups = useMemo(() => {
-    const groupMap = new Map<string, { count: number; firstVar: typeof numberVariables[0] | null }>();
+    const groupMap = new Map<string, VariableData[]>();
 
     numberVariables.forEach(v => {
       const parts = v.name.split('/');
       const groupName = parts.length > 1 ? parts[0] : v.name;
-
-      const existing = groupMap.get(groupName);
-      if (existing) {
-        existing.count++;
-      } else {
-        groupMap.set(groupName, { count: 1, firstVar: v });
-      }
+      const group = groupMap.get(groupName) || [];
+      group.push(v);
+      groupMap.set(groupName, group);
     });
 
-    return Array.from(groupMap.entries()).map(([name, data]) => ({
-      name,
-      count: data.count,
-      firstVar: data.firstVar,
-    }));
-  }, [numberVariables]);
+    return Array.from(groupMap.entries()).map(([name, groupVariables]) => {
+      const sourceVar = groupVariables.find(variable => variable.name === name)
+        || groupVariables.find(variable => variable.name.endsWith('/base'))
+        || groupVariables[0]
+        || null;
+
+      return {
+        name,
+        count: groupVariables.length,
+        firstVar: groupVariables[0] || null,
+        sourceVar,
+        resolvedBaseValue: resolveNumberValue(sourceVar, numberVarsByName),
+      };
+    });
+  }, [numberVariables, numberVarsByName]);
+
+  const selectedNumberGroup = useMemo(
+    () => numberGroups.find(group => group.name === sourceNumberId) || null,
+    [numberGroups, sourceNumberId]
+  );
+  const sourceReferenceName = selectedNumberGroup?.sourceVar?.name || '';
+  const baseReferenceAlias = sourceReferenceName ? `{${sourceReferenceName}}` : '';
+  const baseValue = selectedNumberGroup?.resolvedBaseValue ?? 0;
+  const baseReferenceDisplay = sourceReferenceName ? `{${sourceReferenceName}:${baseValue}}` : '';
 
   // Auto-select pre-selected group when modal opens
   React.useEffect(() => {
     if (isOpen && preSelectedGroup) {
       setSourceNumberId(preSelectedGroup);
-      setGroupName(preSelectedGroup);
-
-      const group = numberGroups.find(g => g.name === preSelectedGroup);
-      if (group?.firstVar) {
-        setBaseValue(parseFloat(group.firstVar.value) || 16);
-        setExistingGroup(group.count > 1);
-      }
     }
-  }, [isOpen, preSelectedGroup, numberGroups]);
+  }, [isOpen, preSelectedGroup]);
+
+  React.useEffect(() => {
+    if (!sourceNumberId) {
+      setGroupName('');
+      setExistingGroup(false);
+      return;
+    }
+
+    if (!selectedNumberGroup) return;
+
+    setGroupName(selectedNumberGroup.name);
+    setExistingGroup(selectedNumberGroup.count > 1);
+  }, [selectedNumberGroup, sourceNumberId]);
 
   const stepsArray = useMemo(() =>
     stepsList.split(',').map(s => s.trim()).filter(Boolean),
@@ -111,19 +158,7 @@ export function StepsModal() {
   }, [calculatedPreview]);
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedGroupName = e.target.value;
-    setSourceNumberId(selectedGroupName);
-
-    if (selectedGroupName) {
-      const group = numberGroups.find(g => g.name === selectedGroupName);
-      if (group && group.firstVar) {
-        setGroupName(selectedGroupName);
-        setBaseValue(parseFloat(group.firstVar.value) || 16);
-
-        // Check existing group (has more than 1 variable means steps exist)
-        setExistingGroup(group.count > 1);
-      }
-    }
+    setSourceNumberId(e.target.value);
   };
 
   const handleRatioPresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -140,6 +175,9 @@ export function StepsModal() {
     const preset = STEPS_PRESETS.find(p => p.value === value);
     if (preset && preset.steps) {
       setStepsList(preset.steps);
+      if ('baseStep' in preset && preset.baseStep) {
+        setBaseStep(preset.baseStep);
+      }
     }
   };
 
@@ -160,6 +198,8 @@ export function StepsModal() {
   };
 
   const handleResetStepValue = (index: number) => {
+    if (editableSteps[index]?.name === baseStep) return;
+
     const calculatedValue = calculatedPreview[index]?.value;
     if (calculatedValue !== undefined) {
       setEditableSteps(prev => {
@@ -171,6 +211,8 @@ export function StepsModal() {
   };
 
   const isValueModified = (index: number): boolean => {
+    if (editableSteps[index]?.name === baseStep) return false;
+
     const editedValue = editableSteps[index]?.value;
     const calculatedValue = calculatedPreview[index]?.value;
     return editedValue !== undefined && calculatedValue !== undefined && editedValue !== calculatedValue;
@@ -246,7 +288,7 @@ export function StepsModal() {
 
     const steps = editableSteps.map(p => ({
       name: `${groupName}/${p.name}`,
-      value: String(p.value),
+      value: p.name === baseStep && baseReferenceAlias ? baseReferenceAlias : String(p.value),
     }));
 
     post({
@@ -301,14 +343,12 @@ export function StepsModal() {
           {sourceNumberId && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
-                <label>Base Value</label>
+                <label>Base Reference</label>
                 <input
-                  type="number"
+                  type="text"
                   className="form-input"
-                  value={baseValue}
-                  onChange={e => setBaseValue(parseFloat(e.target.value) || 0)}
-                  min={0}
-                  step="any"
+                  value={baseReferenceDisplay}
+                  readOnly
                 />
               </div>
 
@@ -352,7 +392,7 @@ export function StepsModal() {
 
               <div className="form-group">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingRight: 8 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '16px 24px 1fr 100px 48px', alignItems: 'center', gap: '8px', flex: 1 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '16px 24px minmax(0, 1fr) 180px 48px', alignItems: 'center', gap: '8px', flex: 1 }}>
                     <div />
                     <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'center' }}>Base</label>
                     <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500 }}>Label</label>
@@ -403,13 +443,23 @@ export function StepsModal() {
                         value={step.name}
                         onChange={e => handleStepNameChange(index, e.target.value)}
                       />
-                      <input
-                        type="number"
-                        className="step-value-input"
-                        value={step.value}
-                        onChange={e => handleStepValueChange(index, parseFloat(e.target.value) || 0)}
-                        step="any"
-                      />
+                      {step.name === baseStep ? (
+                        <input
+                          type="text"
+                          className="step-value-input"
+                          value={baseReferenceDisplay}
+                          readOnly
+                          title={`Resolved value: ${baseValue}`}
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          className="step-value-input"
+                          value={step.value}
+                          onChange={e => handleStepValueChange(index, parseFloat(e.target.value) || 0)}
+                          step="any"
+                        />
+                      )}
                       <div className="step-actions">
                         {isValueModified(index) && (
                           <button

@@ -26,7 +26,7 @@
   }
 
   &.modal-steps {
-    width: 460px;
+    width: 560px;
   }
 }
 
@@ -395,7 +395,7 @@ rect.handle-active {
 
 .steps-editable-row {
   display: grid;
-  grid-template-columns: 16px 24px 1fr 100px 48px;
+  grid-template-columns: 16px 24px minmax(0, 1fr) 180px 48px;
   align-items: center;
   gap: 8px;
   padding: 8px;
@@ -496,6 +496,12 @@ rect.handle-active {
 
     &:focus {
       border-color: var(--text-brand);
+    }
+
+    &[readonly] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 

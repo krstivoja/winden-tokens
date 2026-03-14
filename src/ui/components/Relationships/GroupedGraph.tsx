@@ -41,6 +41,11 @@ interface GroupData {
   headerFill: string;
 }
 
+interface ManagedNumberStepGroup {
+  sourceVariable: VariableData;
+  stepVariables: VariableData[];
+}
+
 interface Connection {
   id: string;
   kind: 'reference' | 'generated';
@@ -353,6 +358,37 @@ function extractShadeNumber(name: string): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
+function detectManagedNumberStepGroups(variables: VariableData[]): ManagedNumberStepGroup[] {
+  const groups = variables.map(sourceVariable => ({
+    sourceVariable,
+    stepVariables: [],
+  }));
+  const groupsBySourceId = new Map(groups.map(group => [group.sourceVariable.id, group]));
+  const prefixes = variables.map(variable => ({
+    variable,
+    prefix: `${variable.name}/`,
+  }));
+
+  variables.forEach(variable => {
+    let bestSource: VariableData | null = null;
+
+    prefixes.forEach(candidate => {
+      if (candidate.variable.id === variable.id) return;
+      if (!variable.name.startsWith(candidate.prefix)) return;
+
+      if (!bestSource || candidate.variable.name.length > bestSource.name.length) {
+        bestSource = candidate.variable;
+      }
+    });
+
+    if (bestSource) {
+      groupsBySourceId.get(bestSource.id)?.stepVariables.push(variable);
+    }
+  });
+
+  return groups.filter(group => group.stepVariables.length > 0);
+}
+
 function formatVariableNode(
   variable: VariableData,
   varsByName: Map<string, VariableData>,
@@ -386,7 +422,9 @@ function formatVariableNode(
     displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
     displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
   } else {
-    displayValue = isReference ? `{${referenceName}}` : resolvedValue;
+    displayValue = isReference && referenceName
+      ? `{${referenceName}:${resolvedValue}}`
+      : resolvedValue;
   }
 
   const parts = variable.name.split('/');
@@ -420,6 +458,23 @@ function createShaderNode(shadeGroup: ShadeGroupData, color: string): VariableNo
   };
 }
 
+function createStepsNode(sourceVariableId: string, stepCount: number): VariableNode {
+  return {
+    id: `shader:${sourceVariableId}`,
+    name: `shader:${sourceVariableId}`,
+    shortName: 'steps',
+    displayName: `${stepCount} steps`,
+    color: GENERATED_CONNECTION_COLOR,
+    value: '',
+    resolvedValue: '',
+    isReference: false,
+    referenceName: null,
+    isVirtual: true,
+    virtualType: 'shader',
+    connectionsDisabled: true,
+  };
+}
+
 function createPaletteNode(shadeGroup: ShadeGroupData, shadeCount: number, color: string): VariableNode {
   return {
     id: `palette:${shadeGroup.sourceVariableId}`,
@@ -443,7 +498,7 @@ export function GroupedGraph({
   variableType,
   shadeGroups,
 }: GroupedGraphProps) {
-  const { openShadesModal, openInputModal } = useModalContext();
+  const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
   const containerRef = useRef<HTMLDivElement>(null);
   const gridSettingsRef = useRef<HTMLDivElement>(null);
@@ -599,11 +654,14 @@ export function GroupedGraph({
     const conns: Connection[] = [];
 
     const managedSourceIds = new Set<string>();
-    const managedShadeIds = new Set<string>();
+    const managedGeneratedIds = new Set<string>();
     const managedShadeGroups = isColorType
       ? shadeGroups
           .filter(group => selectedCollectionIds.has(group.collectionId))
           .sort((a, b) => a.sourceVariableName.localeCompare(b.sourceVariableName))
+      : [];
+    const managedStepGroups = !isColorType
+      ? detectManagedNumberStepGroups(filteredVars)
       : [];
 
     managedShadeGroups.forEach((shadeGroup, index) => {
@@ -613,7 +671,7 @@ export function GroupedGraph({
       managedSourceIds.add(sourceVariable.id);
       shadeGroup.deleteIds.forEach(id => {
         if (id !== sourceVariable.id) {
-          managedShadeIds.add(id);
+          managedGeneratedIds.add(id);
         }
       });
 
@@ -699,8 +757,104 @@ export function GroupedGraph({
       });
     });
 
+    managedStepGroups.forEach((stepGroup, index) => {
+      const sourceVariable = stepGroup.sourceVariable;
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, false);
+      const sourceGroupKey = `source:${sourceVariable.id}`;
+      const shaderGroupKey = `shader:${sourceVariable.id}`;
+      const stepsGroupKey = `steps:${sourceVariable.id}`;
+      const stepNodes = stepGroup.stepVariables.map(variable => formatVariableNode(variable, varsByName, false));
+      const stepsNode = createStepsNode(sourceVariable.id, stepNodes.length);
+      const outputNode = {
+        id: `palette:${sourceVariable.id}`,
+        name: `palette:${sourceVariable.id}`,
+        shortName: 'generated',
+        displayName: `${stepNodes.length} outputs`,
+        color: REFERENCE_CONNECTION_COLOR,
+        value: '',
+        resolvedValue: '',
+        isReference: false,
+        referenceName: null,
+        isVirtual: true,
+        virtualType: 'palette' as const,
+        connectionsDisabled: true,
+      };
+
+      managedSourceIds.add(sourceVariable.id);
+      stepGroup.stepVariables.forEach(variable => managedGeneratedIds.add(variable.id));
+
+      const baseY = index * (Math.max(
+        HEADER_HEIGHT + ROW_HEIGHT + GROUP_PADDING * 2,
+        HEADER_HEIGHT + (stepNodes.length + 1) * ROW_HEIGHT + GROUP_PADDING * 2
+      ) + GROUP_GAP_Y);
+
+      const managedGroups: GroupData[] = [
+        {
+          key: sourceGroupKey,
+          title: sourceVariable.name,
+          variables: [sourceNode],
+          x: 0,
+          y: 0,
+          initialX: 0,
+          initialY: baseY,
+          kind: 'source',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#f0f0f0',
+        },
+        {
+          key: shaderGroupKey,
+          title: 'Steps',
+          variables: [stepsNode],
+          x: 0,
+          y: 0,
+          initialX: GROUP_WIDTH + GROUP_GAP_X,
+          initialY: baseY,
+          kind: 'shader',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#fff4df',
+        },
+        {
+          key: stepsGroupKey,
+          title: `${sourceVariable.name} steps`,
+          variables: [outputNode, ...stepNodes],
+          x: 0,
+          y: 0,
+          initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2,
+          initialY: baseY,
+          kind: 'shades',
+          sourceGroupName: sourceVariable.name,
+          headerFill: '#eef4ff',
+        },
+      ];
+
+      managedGroups.forEach(group => {
+        groupsArray.push(group);
+        group.variables.forEach((node, variableIndex) => {
+          varMap.set(node.name, { group: group.key, index: variableIndex, node });
+        });
+      });
+
+      conns.push({
+        id: `generated:${sourceVariable.id}:source-to-steps`,
+        kind: 'generated',
+        fromGroup: sourceGroupKey,
+        fromVar: sourceNode.name,
+        toGroup: shaderGroupKey,
+        toVar: stepsNode.name,
+      });
+
+      conns.push({
+        id: `generated:${sourceVariable.id}:steps-to-output`,
+        kind: 'generated',
+        fromGroup: shaderGroupKey,
+        fromVar: stepsNode.name,
+        toGroup: stepsGroupKey,
+        toVar: outputNode.name,
+      });
+    });
+
     const unmanagedVars = filteredVars.filter(
-      variable => !managedSourceIds.has(variable.id) && !managedShadeIds.has(variable.id)
+      variable => !managedSourceIds.has(variable.id) && !managedGeneratedIds.has(variable.id)
     );
     const unmanagedGroupsMap = new Map<string, VariableNode[]>();
 
@@ -712,7 +866,7 @@ export function GroupedGraph({
       unmanagedGroupsMap.set(groupName, group);
     });
 
-    const unmanagedStartX = managedShadeGroups.length > 0
+    const unmanagedStartX = (managedShadeGroups.length > 0 || managedStepGroups.length > 0)
       ? (GROUP_WIDTH + GROUP_GAP_X) * 3 + GROUP_GAP_X
       : 0;
     let primitiveY = 0;
@@ -985,11 +1139,15 @@ export function GroupedGraph({
     }
   }, [variableMap]);
 
-  const handleShaderOpen = useCallback((group: GroupData, node: VariableNode) => {
+  const handleGeneratorOpen = useCallback((group: GroupData, node: VariableNode) => {
     if (group.kind === 'shader' && node.virtualType === 'shader' && group.sourceGroupName) {
-      openShadesModal({ groupName: group.sourceGroupName });
+      if (isColorType) {
+        openShadesModal({ groupName: group.sourceGroupName });
+      } else {
+        openStepsModal({ groupName: group.sourceGroupName });
+      }
     }
-  }, [openShadesModal]);
+  }, [isColorType, openShadesModal, openStepsModal]);
 
   const handleCreateGroup = useCallback(() => {
     // Use first selected collection for creating new variables
@@ -1315,7 +1473,7 @@ export function GroupedGraph({
                       className={`variable-row ${isSource ? 'drag-source' : ''} ${isHoveredTarget ? 'drop-target' : ''} ${rowInteractive ? 'shader-row' : ''}`}
                       onMouseEnter={() => setHoveredVar(node.name)}
                       onMouseLeave={() => setHoveredVar(null)}
-                      onClick={() => handleShaderOpen(group, node)}
+                      onClick={() => handleGeneratorOpen(group, node)}
                       style={rowInteractive ? { cursor: 'pointer' } : undefined}
                     >
                       <rect

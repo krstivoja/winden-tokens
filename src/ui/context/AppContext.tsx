@@ -13,6 +13,7 @@ interface AppState {
   searchQuery: string;
   groupContrastColors: Record<string, string>;
   singleContrastColors: Record<string, string>;
+  selectedVariableTypes: Set<string>;
 }
 
 interface AppContextValue extends AppState {
@@ -32,6 +33,8 @@ interface AppContextValue extends AppState {
   getGroupContrastColor: (groupName: string) => string | null;
   setSingleContrastColor: (variableId: string, color: string | null) => void;
   getSingleContrastColor: (variableId: string) => string | null;
+  toggleVariableType: (type: string) => void;
+  toggleAllVariableTypes: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -46,6 +49,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQueryState] = useState('');
   const [groupContrastColors, setGroupContrastColors] = useState<Record<string, string>>({});
   const [singleContrastColors, setSingleContrastColors] = useState<Record<string, string>>({});
+  const [selectedVariableTypes, setSelectedVariableTypes] = useState<Set<string>>(
+    new Set(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'])
+  );
 
   const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[], newShadeGroups: ShadeGroupData[]) => {
     setCollections(newCollections);
@@ -87,6 +93,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [collections]);
 
+  const toggleVariableType = useCallback((type: string) => {
+    setSelectedVariableTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAllVariableTypes = useCallback(() => {
+    const allTypes = ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'];
+    setSelectedVariableTypes(prev => {
+      if (prev.size === allTypes.length) {
+        return new Set();
+      } else {
+        return new Set(allTypes);
+      }
+    });
+  }, []);
+
   const toggleGroup = useCallback((groupName: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -106,11 +135,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const filteredVariables = useMemo(() => {
     // Filter by selected collections (multiple)
     let filtered = variables.filter(v => selectedCollectionIds.has(v.collectionId));
+    // Filter by selected variable types
+    filtered = filtered.filter(v => selectedVariableTypes.has(v.resolvedType));
     if (searchQuery) {
       filtered = filtered.filter(v => v.name.toLowerCase().includes(searchQuery));
     }
     return filtered;
-  }, [variables, selectedCollectionIds, searchQuery]);
+  }, [variables, selectedCollectionIds, selectedVariableTypes, searchQuery]);
 
   const colorVariables = useMemo(() => {
     return variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'COLOR');
@@ -184,6 +215,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     searchQuery,
     groupContrastColors,
     singleContrastColors,
+    selectedVariableTypes,
     setData,
     setSelectedCollectionId,
     toggleCollection,
@@ -200,6 +232,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getGroupContrastColor,
     setSingleContrastColor,
     getSingleContrastColor,
+    toggleVariableType,
+    toggleAllVariableTypes,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

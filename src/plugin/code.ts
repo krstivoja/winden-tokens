@@ -1597,10 +1597,27 @@ async function createSteps(
 
     const modeId = collection.modes[0].modeId;
 
+    // Get all existing variables in the collection
+    const allVariables = await figma.variables.getLocalVariablesAsync('FLOAT');
+    const existingVarsMap = new Map<string, Variable>();
+    for (const v of allVariables) {
+      if (v.variableCollectionId === collectionId) {
+        existingVarsMap.set(v.name, v);
+      }
+    }
+
     for (const step of steps) {
-      const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
+      const existing = existingVarsMap.get(step.name);
       const parsedValue = await parseValue(step.value, 'FLOAT');
-      variable.setValueForMode(modeId, parsedValue);
+
+      if (existing) {
+        // Update existing variable
+        existing.setValueForMode(modeId, parsedValue);
+      } else {
+        // Create new variable
+        const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
+        variable.setValueForMode(modeId, parsedValue);
+      }
     }
 
     await fetchData();

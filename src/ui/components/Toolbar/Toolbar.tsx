@@ -6,6 +6,7 @@ import { post } from '../../hooks/usePluginMessages';
 import { PlusIcon, SearchIcon } from '../Icons';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
+import { VariableTypeFilters } from './VariableTypeFilters';
 import { useModalContext } from '../Modals/ModalContext';
 
 interface ToolbarProps {
@@ -82,6 +83,7 @@ export function Toolbar({ status }: ToolbarProps) {
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
+        <VariableTypeFilters />
         <button
           id="add-variable-btn"
           ref={addBtnRef}

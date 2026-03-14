@@ -69,3 +69,20 @@ export interface ShadeGroupData {
   dirtyReasons: string[];
   config: ShadeGeneratorConfig;
 }
+
+export interface StepGroupData {
+  sourceVariableId: string;
+  sourceVariableName: string;
+  collectionId: string;
+  deleteIds: string[];
+  status: 'clean' | 'dirty';
+  dirtyReasons: string[];
+  config: StepGeneratorConfig;
+}
+
+export interface StepGeneratorConfig {
+  baseValue: number;
+  ratio: number;
+  baseStep: string;
+  steps: Array<{ name: string; value: number }>;
+}
