@@ -31,8 +31,11 @@ export function CollectionFilters() {
       <button
         className="collection-filters-btn"
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
       >
-        Collections ({selectedCount}/{totalCount})
+        <span>Collections ({selectedCount}/{totalCount})</span>
+        <span className="dropdown-arrow" aria-hidden="true">▾</span>
       </button>
 
       {isOpen && (

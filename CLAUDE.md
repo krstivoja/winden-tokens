@@ -41,3 +41,7 @@ Key message types: `refresh`, `create-collection`, `create-variable`, `update-va
 Figma supports 4 variable types: `COLOR`, `FLOAT`, `STRING`, `BOOLEAN`
 
 Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as `rgb()/rgba()` strings in the UI.
+
+## UI Conventions
+
+- Any control that opens a dropdown menu should include the same downward triangle indicator (`▾`) used by the contrast controls, so menu-triggering actions are visually consistent.
