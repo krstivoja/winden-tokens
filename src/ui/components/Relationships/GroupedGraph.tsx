@@ -43,6 +43,7 @@ interface GroupedGraphProps {
   selectedCollectionIds: Set<string>;
   variableType: 'COLOR' | 'FLOAT';
   shadeGroups: ShadeGroupData[];
+  selectedModeId: string | null;
 }
 
 interface VariableNode {
@@ -180,23 +181,37 @@ function extractShadeNumber(name: string): number {
 function formatVariableNode(
   variable: VariableData,
   varsByName: Map<string, VariableData>,
-  isColorType: boolean
+  isColorType: boolean,
+  selectedModeId: string | null
 ): VariableNode {
   const refPattern = /^\{(.+)\}$/;
-  const refMatch = variable.value.match(refPattern);
+
+  // Get value for the selected mode, fall back to default value
+  const modeValue = selectedModeId && variable.valuesByMode?.[selectedModeId]
+    ? variable.valuesByMode[selectedModeId]
+    : variable.value;
+
+  const refMatch = modeValue.match(refPattern);
   const isReference = !!refMatch;
   const referenceName = refMatch ? refMatch[1] : null;
 
-  let resolvedValue = variable.value;
+  let resolvedValue = modeValue;
   if (isReference && referenceName) {
     const refVar = varsByName.get(referenceName);
     if (refVar) {
-      const refRefMatch = refVar.value.match(refPattern);
+      const refVarModeValue = selectedModeId && refVar.valuesByMode?.[selectedModeId]
+        ? refVar.valuesByMode[selectedModeId]
+        : refVar.value;
+      const refRefMatch = refVarModeValue.match(refPattern);
       if (refRefMatch) {
         const deepRef = varsByName.get(refRefMatch[1]);
-        if (deepRef) resolvedValue = deepRef.value;
+        if (deepRef) {
+          resolvedValue = selectedModeId && deepRef.valuesByMode?.[selectedModeId]
+            ? deepRef.valuesByMode[selectedModeId]
+            : deepRef.value;
+        }
       } else {
-        resolvedValue = refVar.value;
+        resolvedValue = refVarModeValue;
       }
     }
   }
@@ -220,7 +235,7 @@ function formatVariableNode(
     shortName: parts[parts.length - 1],
     displayName: displayValue,
     color: displayColor,
-    value: variable.value,
+    value: modeValue,
     resolvedValue: isColorType ? displayColor : resolvedValue,
     isReference,
     referenceName,
@@ -692,6 +707,7 @@ function GroupedGraphInner({
   selectedCollectionIds,
   variableType,
   shadeGroups,
+  selectedModeId,
 }: GroupedGraphProps) {
   const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
@@ -867,7 +883,7 @@ function GroupedGraphInner({
         if (id !== sourceVariable.id) managedGeneratedIds.add(id);
       });
 
-      const sourceNode = formatVariableNode(sourceVariable, varsByName, true);
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, true, selectedModeId);
       const sourceGroupKey = `source:${sourceVariable.id}`;
       const shaderGroupKey = `shader:${sourceVariable.id}`;
       const shadesGroupKey = `shades:${sourceVariable.id}`;
@@ -875,7 +891,7 @@ function GroupedGraphInner({
       const managedShades = typeVars
         .filter(v => shadeGroup.deleteIds.includes(v.id) && v.id !== sourceVariable.id)
         .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
-      const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true));
+      const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true, selectedModeId));
       const shaderNode = createShaderNode(shadeGroup, sourceColor);
       const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
 
@@ -926,11 +942,11 @@ function GroupedGraphInner({
 
     managedStepGroups.forEach((stepGroup, index) => {
       const sourceVariable = stepGroup.sourceVariable;
-      const sourceNode = formatVariableNode(sourceVariable, varsByName, false);
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, false, selectedModeId);
       const sourceGroupKey = `source:${sourceVariable.id}`;
       const shaderGroupKey = `shader:${sourceVariable.id}`;
       const stepsGroupKey = `steps:${sourceVariable.id}`;
-      const stepNodes = stepGroup.stepVariables.map(v => formatVariableNode(v, varsByName, false));
+      const stepNodes = stepGroup.stepVariables.map(v => formatVariableNode(v, varsByName, false, selectedModeId));
       const stepsNode = createStepsNode(sourceVariable.id, stepNodes.length);
       const outputNode: VariableNode = {
         id: `palette:${sourceVariable.id}`,
@@ -1001,7 +1017,7 @@ function GroupedGraphInner({
       const parts = variable.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
       const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType));
+      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType, selectedModeId));
       unmanagedGroupsMap.set(groupName, existing);
     });
 
@@ -1117,7 +1133,7 @@ function GroupedGraphInner({
     }
 
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
-  }, [variables, variableType, shadeGroups, isColorType]);
+  }, [variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
   // Compute connected vars flags
   const connectedVars = useMemo(() => {

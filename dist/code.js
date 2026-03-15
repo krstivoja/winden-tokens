@@ -1487,12 +1487,14 @@ async function removeShades(collectionId, deleteIds, source) {
     }
 }
 // Create number steps
-async function createSteps(collectionId, steps) {
+async function createSteps(collectionId, steps, modeId) {
     try {
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
-        const modeId = collection.modes[0].modeId;
+        const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
+        if (!targetModeId)
+            throw new Error('No mode found for collection');
         // Get all existing variables in the collection
         const allVariables = await figma.variables.getLocalVariablesAsync('FLOAT');
         const existingVarsMap = new Map();
@@ -1501,18 +1503,78 @@ async function createSteps(collectionId, steps) {
                 existingVarsMap.set(v.name, v);
             }
         }
-        for (const step of steps) {
+        // Find the base variable reference and calculate ratio for each step
+        let baseVariableRef = null;
+        let baseStepIndex = -1;
+        const stepRatios = [];
+        const stepIsReference = [];
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const refMatch = step.value.match(/^\{(.+)\}$/);
+            stepIsReference.push(!!refMatch);
+            if (refMatch) {
+                baseVariableRef = refMatch[1];
+                baseStepIndex = i;
+            }
+        }
+        // If we found a base reference, calculate ratios for other steps
+        // We need to get a base value from the current mode to calculate ratios
+        if (baseVariableRef && baseStepIndex !== -1) {
+            const baseVar = allVariables.find(v => v.name === baseVariableRef);
+            if (baseVar) {
+                const baseValue = baseVar.valuesByMode[targetModeId];
+                if (typeof baseValue === 'number' && baseValue !== 0) {
+                    for (let i = 0; i < steps.length; i++) {
+                        if (i === baseStepIndex) {
+                            stepRatios.push(1); // Base step has ratio of 1
+                        }
+                        else if (!stepIsReference[i]) {
+                            const stepValue = parseFloat(steps[i].value);
+                            if (!isNaN(stepValue)) {
+                                stepRatios.push(stepValue / baseValue);
+                            }
+                            else {
+                                stepRatios.push(1);
+                            }
+                        }
+                        else {
+                            stepRatios.push(1);
+                        }
+                    }
+                }
+            }
+        }
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
             const existing = existingVarsMap.get(step.name);
-            const parsedValue = await parseValue(step.value, 'FLOAT');
-            if (existing) {
-                // Update existing variable
-                existing.setValueForMode(modeId, parsedValue);
+            const variable = existing || figma.variables.createVariable(step.name, collection, 'FLOAT');
+            let valueToSet;
+            // If this is the base step with a variable reference, use the alias
+            if (i === baseStepIndex && baseVariableRef) {
+                valueToSet = await parseValue(step.value, 'FLOAT');
             }
+            // If we have ratios calculated, recalculate for the selected mode only
+            else if (baseVariableRef && stepRatios.length > 0) {
+                const baseVar = allVariables.find(v => v.name === baseVariableRef);
+                if (baseVar) {
+                    const baseValueForMode = baseVar.valuesByMode[targetModeId];
+                    if (typeof baseValueForMode === 'number') {
+                        const calculatedValue = baseValueForMode * stepRatios[i];
+                        valueToSet = Math.round(calculatedValue * 100) / 100;
+                    }
+                    else {
+                        valueToSet = await parseValue(step.value, 'FLOAT');
+                    }
+                }
+                else {
+                    valueToSet = await parseValue(step.value, 'FLOAT');
+                }
+            }
+            // Otherwise just use the provided value
             else {
-                // Create new variable
-                const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-                variable.setValueForMode(modeId, parsedValue);
+                valueToSet = await parseValue(step.value, 'FLOAT');
             }
+            variable.setValueForMode(targetModeId, valueToSet);
         }
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
@@ -1522,12 +1584,55 @@ async function createSteps(collectionId, steps) {
     }
 }
 // Update number steps (update existing, delete extras, create new ones as needed)
-async function updateSteps(collectionId, deleteIds, steps) {
+async function updateSteps(collectionId, deleteIds, steps, modeId) {
     try {
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
-        const modeId = collection.modes[0].modeId;
+        const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
+        if (!targetModeId)
+            throw new Error('No mode found for collection');
+        // Get all variables to find base reference
+        const allVariables = await figma.variables.getLocalVariablesAsync('FLOAT');
+        // Find the base variable reference and calculate ratios
+        let baseVariableRef = null;
+        let baseStepIndex = -1;
+        const stepRatios = [];
+        const stepIsReference = [];
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const refMatch = step.value.match(/^\{(.+)\}$/);
+            stepIsReference.push(!!refMatch);
+            if (refMatch) {
+                baseVariableRef = refMatch[1];
+                baseStepIndex = i;
+            }
+        }
+        if (baseVariableRef && baseStepIndex !== -1) {
+            const baseVar = allVariables.find(v => v.name === baseVariableRef);
+            if (baseVar) {
+                const baseValue = baseVar.valuesByMode[targetModeId];
+                if (typeof baseValue === 'number' && baseValue !== 0) {
+                    for (let i = 0; i < steps.length; i++) {
+                        if (i === baseStepIndex) {
+                            stepRatios.push(1);
+                        }
+                        else if (!stepIsReference[i]) {
+                            const stepValue = parseFloat(steps[i].value);
+                            if (!isNaN(stepValue)) {
+                                stepRatios.push(stepValue / baseValue);
+                            }
+                            else {
+                                stepRatios.push(1);
+                            }
+                        }
+                        else {
+                            stepRatios.push(1);
+                        }
+                    }
+                }
+            }
+        }
         // Get existing variables from the deleteIds list
         const existingVars = [];
         for (const id of deleteIds) {
@@ -1542,10 +1647,32 @@ async function updateSteps(collectionId, deleteIds, steps) {
         for (let i = 0; i < reusedCount; i++) {
             const variable = existingVars[i].variable;
             const step = steps[i];
-            // Update name and value
+            // Update name
             variable.name = step.name;
-            const parsedValue = await parseValue(step.value, 'FLOAT');
-            variable.setValueForMode(modeId, parsedValue);
+            let valueToSet;
+            if (i === baseStepIndex && baseVariableRef) {
+                valueToSet = await parseValue(step.value, 'FLOAT');
+            }
+            else if (baseVariableRef && stepRatios.length > 0 && !stepIsReference[i]) {
+                const baseVar = allVariables.find(v => v.name === baseVariableRef);
+                if (baseVar) {
+                    const baseValueForMode = baseVar.valuesByMode[targetModeId];
+                    if (typeof baseValueForMode === 'number') {
+                        const calculatedValue = baseValueForMode * stepRatios[i];
+                        valueToSet = Math.round(calculatedValue * 100) / 100;
+                    }
+                    else {
+                        valueToSet = await parseValue(step.value, 'FLOAT');
+                    }
+                }
+                else {
+                    valueToSet = await parseValue(step.value, 'FLOAT');
+                }
+            }
+            else {
+                valueToSet = await parseValue(step.value, 'FLOAT');
+            }
+            variable.setValueForMode(targetModeId, valueToSet);
         }
         // Delete excess variables if we have more existing than needed
         for (let i = reusedCount; i < existingVars.length; i++) {
@@ -1555,8 +1682,30 @@ async function updateSteps(collectionId, deleteIds, steps) {
         for (let i = reusedCount; i < steps.length; i++) {
             const step = steps[i];
             const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-            const parsedValue = await parseValue(step.value, 'FLOAT');
-            variable.setValueForMode(modeId, parsedValue);
+            let valueToSet;
+            if (i === baseStepIndex && baseVariableRef) {
+                valueToSet = await parseValue(step.value, 'FLOAT');
+            }
+            else if (baseVariableRef && stepRatios.length > 0 && !stepIsReference[i]) {
+                const baseVar = allVariables.find(v => v.name === baseVariableRef);
+                if (baseVar) {
+                    const baseValueForMode = baseVar.valuesByMode[targetModeId];
+                    if (typeof baseValueForMode === 'number') {
+                        const calculatedValue = baseValueForMode * stepRatios[i];
+                        valueToSet = Math.round(calculatedValue * 100) / 100;
+                    }
+                    else {
+                        valueToSet = await parseValue(step.value, 'FLOAT');
+                    }
+                }
+                else {
+                    valueToSet = await parseValue(step.value, 'FLOAT');
+                }
+            }
+            else {
+                valueToSet = await parseValue(step.value, 'FLOAT');
+            }
+            variable.setValueForMode(targetModeId, valueToSet);
         }
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
@@ -1566,7 +1715,7 @@ async function updateSteps(collectionId, deleteIds, steps) {
     }
 }
 // Remove steps and convert back to single number
-async function removeSteps(collectionId, deleteIds, newNumber) {
+async function removeSteps(collectionId, deleteIds, newNumber, modeId) {
     try {
         // Delete all steps
         for (const id of deleteIds) {
@@ -1579,10 +1728,12 @@ async function removeSteps(collectionId, deleteIds, newNumber) {
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         if (!collection)
             throw new Error('Collection not found');
-        const modeId = collection.modes[0].modeId;
+        const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
+        if (!targetModeId)
+            throw new Error('No mode found for collection');
         const variable = figma.variables.createVariable(newNumber.name, collection, 'FLOAT');
         const parsedValue = await parseValue(newNumber.value, 'FLOAT');
-        variable.setValueForMode(modeId, parsedValue);
+        variable.setValueForMode(targetModeId, parsedValue);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
     }
@@ -1727,13 +1878,13 @@ figma.ui.onmessage = async (msg) => {
             await removeShades(msg.collectionId, msg.deleteIds, msg.source);
             break;
         case 'create-steps':
-            await createSteps(msg.collectionId, msg.steps);
+            await createSteps(msg.collectionId, msg.steps, msg.modeId);
             break;
         case 'update-steps':
-            await updateSteps(msg.collectionId, msg.deleteIds, msg.steps);
+            await updateSteps(msg.collectionId, msg.deleteIds, msg.steps, msg.modeId);
             break;
         case 'remove-steps':
-            await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber);
+            await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber, msg.modeId);
             break;
         case 'reorder-variable':
             await reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore);

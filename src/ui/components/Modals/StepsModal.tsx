@@ -20,21 +20,31 @@ const RATIO_PRESETS = [
 ];
 
 const STEPS_PRESETS = [
-  { value: 'tshirt', label: 'T-shirt (xs-3xl)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl', baseStep: 'md' },
+  { value: 'tshirt', label: 'T-shirt (xs-4xl)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl, 4xl', baseStep: 'md' },
   { value: 'numeric', label: 'Numeric (1-10)', steps: '1, 2, 3, 4, 5, 6, 7, 8, 9, 10', baseStep: '5' },
   { value: 'gutenberg', label: 'Gutenberg (xs-ultra)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl, ultra', baseStep: 'md' },
   { value: 'custom', label: 'Custom...' },
 ];
 
-function resolveNumberValue(variable: VariableData | null, varsByName: Map<string, VariableData>, visited = new Set<string>()): number {
+function resolveNumberValue(
+  variable: VariableData | null,
+  varsByName: Map<string, VariableData>,
+  selectedModeId: string | null,
+  visited = new Set<string>()
+): number {
   if (!variable) return 0;
 
-  const parsed = Number.parseFloat(variable.value);
+  // Get value for the selected mode, fall back to default value
+  const modeValue = selectedModeId && variable.valuesByMode?.[selectedModeId]
+    ? variable.valuesByMode[selectedModeId]
+    : variable.value;
+
+  const parsed = Number.parseFloat(modeValue);
   if (!Number.isNaN(parsed)) {
     return parsed;
   }
 
-  const refMatch = variable.value.match(/^\{(.+)\}$/);
+  const refMatch = modeValue.match(/^\{(.+)\}$/);
   if (!refMatch) {
     return 0;
   }
@@ -45,12 +55,12 @@ function resolveNumberValue(variable: VariableData | null, varsByName: Map<strin
   }
 
   visited.add(referenceName);
-  return resolveNumberValue(varsByName.get(referenceName) || null, varsByName, visited);
+  return resolveNumberValue(varsByName.get(referenceName) || null, varsByName, selectedModeId, visited);
 }
 
 export function StepsModal() {
   const { modals, closeStepsModal } = useModalContext();
-  const { variables, selectedCollectionId } = useAppContext();
+  const { variables, selectedCollectionId, selectedModeId } = useAppContext();
   const isOpen = !!modals.stepsModal;
   const preSelectedGroup = modals.stepsModal?.groupName || '';
 
@@ -59,7 +69,7 @@ export function StepsModal() {
   const [ratioPreset, setRatioPreset] = useState('1.25');
   const [customRatio, setCustomRatio] = useState(1.25);
   const [stepsPreset, setStepsPreset] = useState('tshirt');
-  const [stepsList, setStepsList] = useState('xs, sm, md, lg, xl, 2xl, 3xl');
+  const [stepsList, setStepsList] = useState('xs, sm, md, lg, xl, 2xl, 3xl, 4xl');
   const [baseStep, setBaseStep] = useState('md');
   const [existingGroup, setExistingGroup] = useState(false);
   const [editableSteps, setEditableSteps] = useState<{ name: string; value: number }[]>([]);
@@ -97,10 +107,10 @@ export function StepsModal() {
         count: groupVariables.length,
         firstVar: groupVariables[0] || null,
         sourceVar,
-        resolvedBaseValue: resolveNumberValue(sourceVar, numberVarsByName),
+        resolvedBaseValue: resolveNumberValue(sourceVar, numberVarsByName, selectedModeId),
       };
     });
-  }, [numberVariables, numberVarsByName]);
+  }, [numberVariables, numberVarsByName, selectedModeId]);
 
   const selectedNumberGroup = useMemo(
     () => numberGroups.find(group => group.name === sourceNumberId) || null,
@@ -295,6 +305,7 @@ export function StepsModal() {
       type: 'create-steps',
       collectionId: selectedCollectionId,
       steps,
+      modeId: selectedModeId,
     });
 
     closeStepsModal();
@@ -306,6 +317,7 @@ export function StepsModal() {
       type: 'remove-steps',
       collectionId: selectedCollectionId,
       groupName,
+      modeId: selectedModeId,
     });
     closeStepsModal();
   };
