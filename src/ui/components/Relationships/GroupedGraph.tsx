@@ -434,7 +434,7 @@ function arrangeGroupsByConnectedBlocks(
     nextBlockY += rowHeight + gapY;
   });
 
-  // Layout standalone groups by depth columns
+  // Layout standalone groups by depth columns, compressed to consecutive indices
   if (standaloneGroups.length > 0) {
     const standaloneColumns = new Map<number, GroupData[]>();
     standaloneGroups.forEach(group => {
@@ -444,17 +444,19 @@ function arrangeGroupsByConnectedBlocks(
       standaloneColumns.set(depth, col);
     });
 
+    // Compress depth values to consecutive columns (e.g. {0,1,3} → {0,1,2})
+    const sortedDepths = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
+
     let standaloneHeight = 0;
-    Array.from(standaloneColumns.entries())
-      .sort((a, b) => a[0] - b[0])
-      .forEach(([columnIndex, columnGroups]) => {
-        let nextColumnY = nextBlockY;
-        columnGroups.sort(sortGroupsByPosition).forEach(group => {
-          positions.set(group.key, { x: columnIndex * columnStep, y: nextColumnY });
-          nextColumnY += getGroupHeight(group) + gapY;
-        });
-        standaloneHeight = Math.max(standaloneHeight, nextColumnY - nextBlockY - gapY);
+    sortedDepths.forEach((depth, compressedCol) => {
+      const columnGroups = standaloneColumns.get(depth) || [];
+      let nextColumnY = nextBlockY;
+      columnGroups.sort(sortGroupsByPosition).forEach(group => {
+        positions.set(group.key, { x: compressedCol * columnStep, y: nextColumnY });
+        nextColumnY += getGroupHeight(group) + gapY;
       });
+      standaloneHeight = Math.max(standaloneHeight, nextColumnY - nextBlockY - gapY);
+    });
   }
 
   return positions;
