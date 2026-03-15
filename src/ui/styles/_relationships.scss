@@ -1,4 +1,4 @@
-// Relationships graph styles - Grouped view
+// Relationships graph styles - React Flow based view
 
 .relationships-view {
   flex: 1;
@@ -24,22 +24,17 @@
   height: 100%;
   position: relative;
   overflow: hidden;
-  cursor: default;
 
-  &.space-pan {
-    cursor: grab;
+  .react-flow {
+    width: 100%;
+    height: 100%;
+    background: transparent;
   }
 
-  &.panning {
-    cursor: grabbing;
-  }
-
-  &.dragging-group {
-    cursor: move;
-  }
-
-  &.dragging {
-    cursor: crosshair;
+  // Hide React Flow default controls and minimap
+  .react-flow__controls,
+  .react-flow__minimap {
+    display: none;
   }
 }
 
@@ -50,7 +45,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  z-index: 2;
+  z-index: 5;
 }
 
 .graph-settings-menu {
@@ -70,7 +65,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 3;
+  z-index: 6;
 }
 
 .graph-settings-title {
@@ -106,96 +101,203 @@
   }
 }
 
-// Group box styles
-.group-box {
-  .group-title {
-    font-family: var(--font-family);
+// ── React Flow custom node styles ──────────────────────────────────
+
+.rf-group-box {
+  background: white;
+  border: 1px solid black;
+  border-radius: 4px;
+  overflow: hidden;
+  font-family: var(--font-family);
+
+  &.shader {
+    border-color: #b86e00;
+  }
+}
+
+.rf-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: move;
+  user-select: none;
+}
+
+.rf-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-group-add-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+}
+
+.rf-group-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.rf-variable-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: default;
+  border-radius: 2px;
+  margin: 0 1px;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.03);
   }
 
-  .variable-row {
-    cursor: default;
-
-    .row-hover-bg {
-      transition: stroke 0.15s ease, stroke-width 0.15s ease;
-      stroke: transparent;
-      stroke-width: 0;
-    }
-
-    &.drag-source .row-hover-bg,
-    &.drop-target .row-hover-bg {
-      stroke: #1877f2;
-      stroke-width: 2;
-    }
-
-    &.shader-row .row-hover-bg {
-      fill: rgba(255, 228, 184, 0.28);
-      stroke: #d9a441;
-      stroke-width: 1;
-    }
-  }
-
-  .connection-point {
-    transition: r 0.15s ease, fill 0.15s ease;
-
-    &:hover {
-      r: 6;
-    }
-
-    &.connected {
-      &:hover {
-        r: 6;
-      }
-    }
-
-    &.disabled {
-      &:hover {
-        r: 4;
-      }
-    }
-  }
-
-  .group-header-action,
-  .row-action {
+  &.shader-row {
     cursor: pointer;
-
-    .group-header-action-bg,
-    .row-action-bg {
-      fill: #fff;
-      stroke: var(--border);
-      stroke-width: 1;
-      transition: fill 0.15s ease, stroke 0.15s ease;
-    }
-
-    .group-header-action-label,
-    .row-action-label {
-      fill: var(--text-dim);
-      font-size: 13px;
-      font-weight: 600;
-      pointer-events: none;
-      user-select: none;
-    }
+    background: rgba(255, 228, 184, 0.28);
 
     &:hover {
-      .group-header-action-bg,
-      .row-action-bg {
-        fill: var(--bg-hover);
-        stroke: var(--text-dim);
-      }
-
-      .group-header-action-label,
-      .row-action-label {
-        fill: var(--text);
-      }
+      background: rgba(255, 228, 184, 0.5);
     }
   }
 }
 
-// Drag preview line
-.drag-preview-line {
-  pointer-events: none;
+// React Flow handles
+.rf-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  transition: transform 0.15s ease;
+
+  &:hover {
+    transform: scale(1.5);
+  }
+
+  &.disabled {
+    cursor: default !important;
+
+    &:hover {
+      transform: none;
+    }
+  }
 }
 
-// Connection line styles
+.rf-color-swatch {
+  position: absolute;
+  left: 14px;
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+  border: 0.5px solid #ccc;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.rf-virtual-badge {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 20px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+
+  &.shader {
+    background: #ffe4b8;
+    color: #8a5a00;
+  }
+
+  &.palette {
+    background: #dceaff;
+    color: #2457a5;
+  }
+}
+
+.rf-var-name {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-family: monospace;
+  color: #333;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.rf-var-value {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-family: monospace;
+  text-align: right;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.rf-delete-btn {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  .rf-variable-row:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+}
+
+// Connection line styles (used in custom edge)
 .connection-group {
   &:hover .connection-line {
     stroke: #e53935;
@@ -225,6 +327,7 @@
   padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
+  z-index: 5;
 }
 
 // Instructions
@@ -240,6 +343,7 @@
   border-radius: 4px;
   border: 1px solid var(--border);
   white-space: nowrap;
+  z-index: 5;
 }
 
 // Empty state
@@ -250,47 +354,10 @@
   transform: translate(-50%, -50%);
   text-align: center;
   color: var(--text-dim);
+  z-index: 5;
 
   p {
     margin: 0;
     font-size: 13px;
-  }
-}
-
-// Zoom controls
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg);
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-dim);
-
-  button {
-    width: 24px;
-    height: 24px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    font-size: 14px;
-    font-weight: 500;
-
-    &:hover {
-      background: var(--bg-hover);
-      color: var(--text);
-    }
-  }
-
-  span {
-    min-width: 40px;
-    text-align: center;
   }
 }
