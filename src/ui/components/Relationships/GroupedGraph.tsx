@@ -1041,10 +1041,27 @@ function GroupedGraphInner({
     // Now compute depth-based initialX for semantic groups
     // Build a quick group→maxSourceDepth map from connections
     if (semanticGroups.length > 0) {
+      // Find the max column used by managed chain groups so standalone groups don't overlap
+      let maxManagedCol = 0;
+      groupsArray.forEach(group => {
+        if (group.kind !== 'standard') {
+          const col = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
+          maxManagedCol = Math.max(maxManagedCol, col);
+        }
+      });
+      // Standalone groups start after all managed columns
+      const standaloneBaseCol = maxManagedCol > 0 ? maxManagedCol + 1 : 0;
+
       const groupInitialCol = new Map<string, number>();
       groupsArray.forEach(group => {
-        // Managed groups already have correct initialX columns
-        groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
+        if (group.kind !== 'standard') {
+          // Managed groups keep their actual column
+          groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
+        } else {
+          // Standalone groups: offset so they start past managed chains
+          const rawCol = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
+          groupInitialCol.set(group.key, rawCol + standaloneBaseCol);
+        }
       });
 
       // Iteratively propagate: each group's column = max(source columns) + 1
