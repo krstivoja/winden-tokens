@@ -434,8 +434,18 @@ function arrangeGroupsByConnectedBlocks(
     nextBlockY += rowHeight + gapY;
   });
 
-  // Layout standalone groups by depth columns
+  // Layout standalone groups by depth columns, offset past managed chain columns
   if (standaloneGroups.length > 0) {
+    // Find max column used by managed chains so standalone groups don't overlap
+    let maxManagedCol = 0;
+    sortedChains.forEach(([, chainGroups]) => {
+      chainGroups.forEach(group => {
+        const depth = groupDepth.get(group.key) || 0;
+        maxManagedCol = Math.max(maxManagedCol, depth);
+      });
+    });
+    const standaloneBaseCol = maxManagedCol > 0 ? maxManagedCol + 1 : 0;
+
     const standaloneColumns = new Map<number, GroupData[]>();
     standaloneGroups.forEach(group => {
       const depth = groupDepth.get(group.key) || 0;
@@ -448,9 +458,10 @@ function arrangeGroupsByConnectedBlocks(
     Array.from(standaloneColumns.entries())
       .sort((a, b) => a[0] - b[0])
       .forEach(([columnIndex, columnGroups]) => {
+        const offsetCol = columnIndex + standaloneBaseCol;
         let nextColumnY = nextBlockY;
         columnGroups.sort(sortGroupsByPosition).forEach(group => {
-          positions.set(group.key, { x: columnIndex * columnStep, y: nextColumnY });
+          positions.set(group.key, { x: offsetCol * columnStep, y: nextColumnY });
           nextColumnY += getGroupHeight(group) + gapY;
         });
         standaloneHeight = Math.max(standaloneHeight, nextColumnY - nextBlockY - gapY);
