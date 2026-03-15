@@ -4,3 +4,4 @@ dist/
 *.zip
 code.js
 ui.html
+.claude/
