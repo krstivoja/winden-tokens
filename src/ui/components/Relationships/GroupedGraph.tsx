@@ -1245,6 +1245,7 @@ function GroupedGraphInner({
 
     const positionsObj: Record<string, { x: number; y: number }> = {};
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
+    setSavedPositions(positionsObj);
     post({ type: 'set-client-storage', key: `graph-positions-${variableType}`, value: positionsObj });
   }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, setNodes, variableType]);
 
