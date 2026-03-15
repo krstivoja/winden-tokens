@@ -1100,22 +1100,27 @@ function GroupedGraphInner({
     return connected;
   }, [connectionData]);
 
-  // Build React Flow nodes/edges when data changes, filtering by selected collections
+  // Build React Flow nodes/edges when data changes, hiding by selected collections
   useEffect(() => {
     if (!positionsHydrated) return;
 
     // Determine which groups are visible based on collection filter
     const visibleGroupKeys = new Set<string>();
-    const visibleGroups = groupsData.filter(group => selectedCollectionIds.has(group.collectionId));
-    visibleGroups.forEach(group => visibleGroupKeys.add(group.key));
+    groupsData.forEach(group => {
+      if (selectedCollectionIds.has(group.collectionId)) {
+        visibleGroupKeys.add(group.key);
+      }
+    });
 
-    const newNodes: Node<GroupNodeData>[] = visibleGroups.map(group => {
+    const newNodes: Node<GroupNodeData>[] = groupsData.map(group => {
       const savedPos = savedPositions[group.key];
       const position = savedPos || { x: group.initialX, y: group.initialY };
+      const isHidden = !visibleGroupKeys.has(group.key);
       return {
         id: group.key,
         type: 'groupNode',
         position,
+        hidden: isHidden,
         data: {
           group,
           isColorType,
@@ -1130,11 +1135,11 @@ function GroupedGraphInner({
       };
     });
 
-    // Only show edges where both source and target groups are visible
+    // Hide edges where either source or target group is hidden
     const newEdges: Edge<CustomEdgeData>[] = connectionData
-      .filter(conn => visibleGroupKeys.has(conn.fromGroup) && visibleGroupKeys.has(conn.toGroup))
       .map(conn => {
         const toVarInfo = variableMap.get(conn.toVar);
+        const isHidden = !visibleGroupKeys.has(conn.fromGroup) || !visibleGroupKeys.has(conn.toGroup);
         return {
           id: conn.id,
           source: conn.fromGroup,
@@ -1142,6 +1147,7 @@ function GroupedGraphInner({
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
           type: 'custom',
+          hidden: isHidden,
           data: {
             kind: conn.kind,
             receiverName: toVarInfo?.node.id || '',
