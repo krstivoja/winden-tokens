@@ -434,8 +434,18 @@ function arrangeGroupsByConnectedBlocks(
     nextBlockY += rowHeight + gapY;
   });
 
-  // Layout standalone groups by depth columns
+  // Layout standalone groups by depth columns, offset past managed chain columns
   if (standaloneGroups.length > 0) {
+    // Find max column used by managed chains so standalone groups don't overlap
+    let maxManagedCol = 0;
+    sortedChains.forEach(([, chainGroups]) => {
+      chainGroups.forEach(group => {
+        const depth = groupDepth.get(group.key) || 0;
+        maxManagedCol = Math.max(maxManagedCol, depth);
+      });
+    });
+    const standaloneBaseCol = maxManagedCol > 0 ? maxManagedCol + 1 : 0;
+
     const standaloneColumns = new Map<number, GroupData[]>();
     standaloneGroups.forEach(group => {
       const depth = groupDepth.get(group.key) || 0;
@@ -448,9 +458,10 @@ function arrangeGroupsByConnectedBlocks(
     Array.from(standaloneColumns.entries())
       .sort((a, b) => a[0] - b[0])
       .forEach(([columnIndex, columnGroups]) => {
+        const offsetCol = columnIndex + standaloneBaseCol;
         let nextColumnY = nextBlockY;
         columnGroups.sort(sortGroupsByPosition).forEach(group => {
-          positions.set(group.key, { x: columnIndex * columnStep, y: nextColumnY });
+          positions.set(group.key, { x: offsetCol * columnStep, y: nextColumnY });
           nextColumnY += getGroupHeight(group) + gapY;
         });
         standaloneHeight = Math.max(standaloneHeight, nextColumnY - nextBlockY - gapY);
@@ -1041,10 +1052,27 @@ function GroupedGraphInner({
     // Now compute depth-based initialX for semantic groups
     // Build a quick group→maxSourceDepth map from connections
     if (semanticGroups.length > 0) {
+      // Find the max column used by managed chain groups so standalone groups don't overlap
+      let maxManagedCol = 0;
+      groupsArray.forEach(group => {
+        if (group.kind !== 'standard') {
+          const col = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
+          maxManagedCol = Math.max(maxManagedCol, col);
+        }
+      });
+      // Standalone groups start after all managed columns
+      const standaloneBaseCol = maxManagedCol > 0 ? maxManagedCol + 1 : 0;
+
       const groupInitialCol = new Map<string, number>();
       groupsArray.forEach(group => {
-        // Managed groups already have correct initialX columns
-        groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
+        if (group.kind !== 'standard') {
+          // Managed groups keep their actual column
+          groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
+        } else {
+          // Standalone groups: offset so they start past managed chains
+          const rawCol = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
+          groupInitialCol.set(group.key, rawCol + standaloneBaseCol);
+        }
       });
 
       // Iteratively propagate: each group's column = max(source columns) + 1
