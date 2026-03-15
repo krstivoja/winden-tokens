@@ -152,6 +152,26 @@ function sortGroupsByPosition(a: GroupData, b: GroupData): number {
   return a.x - b.x;
 }
 
+function getManagedLane(group: GroupData): number | null {
+  if (!group.sourceGroupName) return null;
+
+  switch (group.kind) {
+    case 'source':
+      return 0;
+    case 'shader':
+      return 1;
+    case 'shades':
+      return 2;
+    default:
+      return null;
+  }
+}
+
+function getStandaloneLane(depth: number, reserveGeneratorLane: boolean): number {
+  if (!reserveGeneratorLane) return depth;
+  return depth === 0 ? 0 : Math.max(depth, 2);
+}
+
 function extractShadeNumber(name: string): number {
   const match = name.match(/\/(\d+)$/);
   return match ? parseInt(match[1], 10) : 0;
@@ -389,7 +409,7 @@ function arrangeGroupsByConnectedBlocks(
   const chainSourceNames = new Set<string>();
   const groupToChain = new Map<string, string>(); // group.key → sourceGroupName
   groups.forEach(group => {
-    if (group.sourceGroupName && (group.kind === 'source' || group.kind === 'shader' || group.kind === 'shades')) {
+    if (getManagedLane(group) !== null && group.sourceGroupName) {
       chainSourceNames.add(group.sourceGroupName);
       groupToChain.set(group.key, group.sourceGroupName);
     }
@@ -412,50 +432,65 @@ function arrangeGroupsByConnectedBlocks(
 
   // Sort chains by their source group position
   const sortedChains = Array.from(chains.entries()).sort((a, b) => {
-    const aSource = a[1].find(g => g.kind === 'source');
-    const bSource = b[1].find(g => g.kind === 'source');
+    const aSource = a[1].find(g => getManagedLane(g) === 0) || a[1][0];
+    const bSource = b[1].find(g => getManagedLane(g) === 0) || b[1][0];
     if (!aSource || !bSource) return 0;
     return sortGroupsByPosition(aSource, bSource);
   });
 
   // Layout: managed chains first as horizontal rows, then standalone groups by depth
   let nextBlockY = 0;
+  const reserveGeneratorLane = sortedChains.length > 0;
+  const laneBottoms = new Map<number, number>();
 
   // Layout managed chains - each chain on its own row
   sortedChains.forEach(([, chainGroups]) => {
-    // Sort chain groups by depth (source=0, shader=1, shades=2)
-    chainGroups.sort((a, b) => (groupDepth.get(a.key) || 0) - (groupDepth.get(b.key) || 0));
+    // Managed chains always occupy fixed lanes regardless of extra references.
+    chainGroups.sort((a, b) => {
+      const laneA = getManagedLane(a) ?? Number.MAX_SAFE_INTEGER;
+      const laneB = getManagedLane(b) ?? Number.MAX_SAFE_INTEGER;
+      if (laneA !== laneB) return laneA - laneB;
+      return sortGroupsByPosition(a, b);
+    });
     let rowHeight = 0;
+    const rowLanes = new Set<number>();
     chainGroups.forEach(group => {
-      const depth = groupDepth.get(group.key) || 0;
-      positions.set(group.key, { x: depth * columnStep, y: nextBlockY });
+      const lane = getManagedLane(group) ?? 0;
+      positions.set(group.key, { x: lane * columnStep, y: nextBlockY });
+      rowLanes.add(lane);
       rowHeight = Math.max(rowHeight, getGroupHeight(group));
     });
     nextBlockY += rowHeight + gapY;
+    rowLanes.forEach(lane => {
+      laneBottoms.set(lane, nextBlockY);
+    });
   });
 
-  // Layout standalone groups by depth columns, compressed to consecutive indices
+  // Layout standalone groups by depth columns.
+  // When shaders/steps are present, reserve column 1 for them and place
+  // other dependent groups starting at column 2. Each column stacks
+  // beneath items already occupying that same lane, not beneath the full graph.
   if (standaloneGroups.length > 0) {
     const standaloneColumns = new Map<number, GroupData[]>();
     standaloneGroups.forEach(group => {
       const depth = groupDepth.get(group.key) || 0;
-      const col = standaloneColumns.get(depth) || [];
+      const lane = getStandaloneLane(depth, reserveGeneratorLane);
+      const col = standaloneColumns.get(lane) || [];
       col.push(group);
-      standaloneColumns.set(depth, col);
+      standaloneColumns.set(lane, col);
     });
 
-    // Compress depth values to consecutive columns (e.g. {0,1,3} → {0,1,2})
-    const sortedDepths = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
+    const sortedLanes = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
 
-    let standaloneHeight = 0;
-    sortedDepths.forEach((depth, compressedCol) => {
-      const columnGroups = standaloneColumns.get(depth) || [];
-      let nextColumnY = nextBlockY;
+    sortedLanes.forEach((lane, compressedCol) => {
+      const columnGroups = standaloneColumns.get(lane) || [];
+      let nextColumnY = laneBottoms.get(lane) ?? 0;
       columnGroups.sort(sortGroupsByPosition).forEach(group => {
-        positions.set(group.key, { x: compressedCol * columnStep, y: nextColumnY });
+        const xLane = reserveGeneratorLane ? lane : compressedCol;
+        positions.set(group.key, { x: xLane * columnStep, y: nextColumnY });
         nextColumnY += getGroupHeight(group) + gapY;
       });
-      standaloneHeight = Math.max(standaloneHeight, nextColumnY - nextBlockY - gapY);
+      laneBottoms.set(lane, nextColumnY);
     });
   }
 
@@ -970,10 +1005,13 @@ function GroupedGraphInner({
       unmanagedGroupsMap.set(groupName, existing);
     });
 
-    // Calculate the max Y used by managed groups so unmanaged ones start below
-    let managedMaxY = 0;
+    const columnStep = GROUP_WIDTH + GROUP_GAP_X;
+    const managedLaneBottoms = new Map<number, number>();
     groupsArray.forEach(group => {
-      managedMaxY = Math.max(managedMaxY, group.initialY + getGroupHeight(group) + GROUP_GAP_Y);
+      if (group.kind === 'standard') return;
+      const lane = Math.round(group.initialX / columnStep);
+      const bottom = group.initialY + getGroupHeight(group) + GROUP_GAP_Y;
+      managedLaneBottoms.set(lane, Math.max(managedLaneBottoms.get(lane) || 0, bottom));
     });
 
     // Place unmanaged groups: primitives at column 0, semantic groups further right
@@ -987,7 +1025,7 @@ function GroupedGraphInner({
       });
 
     // Primitives (no references) go at column 0, stacked below managed source groups
-    let primitiveY = managedMaxY;
+    let primitiveY = managedLaneBottoms.get(0) || 0;
     unmanagedEntries.filter(e => !e.hasReferences).forEach(entry => {
       const groupKey = `group:${entry.groupName}`;
       const groupData: GroupData = {
@@ -1006,7 +1044,7 @@ function GroupedGraphInner({
     // Semantic groups (with references) - we'll set initialX after building connections
     // so we can compute depth. For now, place them temporarily.
     const semanticGroups: GroupData[] = [];
-    let semanticY = managedMaxY;
+    let semanticY = 0;
     unmanagedEntries.filter(e => e.hasReferences).forEach(entry => {
       const groupKey = `group:${entry.groupName}`;
       const groupData: GroupData = {
@@ -1040,30 +1078,14 @@ function GroupedGraphInner({
       });
     });
 
-    // Now compute depth-based initialX for semantic groups
-    // Build a quick group→maxSourceDepth map from connections
+    // Now compute depth-based initialX for semantic groups.
+    // When shaders/steps exist, keep them in a dedicated column and place
+    // other dependencies starting at the column after that.
     if (semanticGroups.length > 0) {
-      // Find the max column used by managed chain groups so standalone groups don't overlap
-      let maxManagedCol = 0;
-      groupsArray.forEach(group => {
-        if (group.kind !== 'standard') {
-          const col = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
-          maxManagedCol = Math.max(maxManagedCol, col);
-        }
-      });
-      // Standalone groups start after all managed columns
-      const standaloneBaseCol = maxManagedCol > 0 ? maxManagedCol + 1 : 0;
-
+      const reserveGeneratorLane = groupsArray.some(group => group.kind === 'shader');
       const groupInitialCol = new Map<string, number>();
       groupsArray.forEach(group => {
-        if (group.kind !== 'standard') {
-          // Managed groups keep their actual column
-          groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
-        } else {
-          // Standalone groups: offset so they start past managed chains
-          const rawCol = Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X));
-          groupInitialCol.set(group.key, rawCol + standaloneBaseCol);
-        }
+        groupInitialCol.set(group.key, Math.round(group.initialX / (GROUP_WIDTH + GROUP_GAP_X)));
       });
 
       // Iteratively propagate: each group's column = max(source columns) + 1
@@ -1075,7 +1097,7 @@ function GroupedGraphInner({
         conns.forEach(conn => {
           const fromCol = groupInitialCol.get(conn.fromGroup) ?? 0;
           const toCol = groupInitialCol.get(conn.toGroup) ?? 0;
-          const needed = fromCol + 1;
+          const needed = reserveGeneratorLane && fromCol < 2 ? 2 : fromCol + 1;
           if (needed > toCol) {
             groupInitialCol.set(conn.toGroup, needed);
             changed = true;
@@ -1084,12 +1106,11 @@ function GroupedGraphInner({
       }
 
       // Apply computed columns to semantic groups
-      const colStep = GROUP_WIDTH + GROUP_GAP_X;
       const colYTracker = new Map<number, number>();
       semanticGroups.forEach(group => {
         const col = groupInitialCol.get(group.key) ?? 0;
-        const currentY = colYTracker.get(col) ?? managedMaxY;
-        group.initialX = col * colStep;
+        const currentY = colYTracker.get(col) ?? managedLaneBottoms.get(col) ?? 0;
+        group.initialX = col * columnStep;
         group.initialY = currentY;
         colYTracker.set(col, currentY + getGroupHeight(group) + GROUP_GAP_Y);
       });
