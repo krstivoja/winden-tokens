@@ -3,6 +3,7 @@
 export interface CollectionData {
   id: string;
   name: string;
+  modes: Array<{ modeId: string; name: string }>;
 }
 
 export interface VariableData {
@@ -10,7 +11,8 @@ export interface VariableData {
   collectionId: string;
   name: string;
   resolvedType: VariableType;
-  value: string;
+  value: string; // First mode value (for backward compatibility)
+  valuesByMode: Record<string, string>; // All mode values
   displayName?: string;
 }
 

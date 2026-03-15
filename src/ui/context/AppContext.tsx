@@ -14,6 +14,7 @@ interface AppState {
   groupContrastColors: Record<string, string>;
   singleContrastColors: Record<string, string>;
   selectedVariableTypes: Set<string>;
+  selectedModeId: string | null;
 }
 
 interface AppContextValue extends AppState {
@@ -35,6 +36,7 @@ interface AppContextValue extends AppState {
   getSingleContrastColor: (variableId: string) => string | null;
   toggleVariableType: (type: string) => void;
   toggleAllVariableTypes: () => void;
+  setSelectedModeId: (modeId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -52,6 +54,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedVariableTypes, setSelectedVariableTypes] = useState<Set<string>>(
     new Set(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'])
   );
+  const [selectedModeId, setSelectedModeIdState] = useState<string | null>(null);
 
   const setData = useCallback((newCollections: CollectionData[], newVariables: VariableData[], newShadeGroups: ShadeGroupData[]) => {
     setCollections(newCollections);
@@ -65,6 +68,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     // Initialize selectedCollectionIds with all collections
     setSelectedCollectionIds(new Set(newCollections.map(c => c.id)));
+    // Initialize selectedModeId with first mode of first collection
+    setSelectedModeIdState(prev => {
+      if (!prev && newCollections.length > 0 && newCollections[0].modes.length > 0) {
+        return newCollections[0].modes[0].modeId;
+      }
+      return prev;
+    });
   }, []);
 
   const setSearchQuery = useCallback((query: string) => {
@@ -205,6 +215,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return singleContrastColors[variableId] || null;
   }, [singleContrastColors]);
 
+  const setSelectedModeId = useCallback((modeId: string) => {
+    setSelectedModeIdState(modeId);
+  }, []);
+
   const value: AppContextValue = {
     collections,
     variables,
@@ -216,6 +230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     groupContrastColors,
     singleContrastColors,
     selectedVariableTypes,
+    selectedModeId,
     setData,
     setSelectedCollectionId,
     toggleCollection,
@@ -234,6 +249,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getSingleContrastColor,
     toggleVariableType,
     toggleAllVariableTypes,
+    setSelectedModeId,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
