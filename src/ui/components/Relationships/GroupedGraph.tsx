@@ -829,8 +829,8 @@ function GroupedGraphInner({
   }, []);
 
   const handleDisconnect = useCallback((receiverVarId: string, resolvedValue: string) => {
-    post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue });
-  }, []);
+    post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId: selectedModeId });
+  }, [selectedModeId]);
 
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(selectedCollectionIds)[0];
@@ -1254,8 +1254,8 @@ function GroupedGraphInner({
     if (sourceVarInfo.node.connectionsDisabled || targetVarInfo.node.connectionsDisabled) return;
 
     const newValue = `{${sourceVarInfo.node.name}}`;
-    post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue });
-  }, [variableMap]);
+    post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId: selectedModeId });
+  }, [variableMap, selectedModeId]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;

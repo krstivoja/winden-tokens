@@ -1,6 +1,6 @@
 // Steps modal component
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
@@ -25,6 +25,50 @@ const STEPS_PRESETS = [
   { value: 'gutenberg', label: 'Gutenberg (xs-ultra)', steps: 'xs, sm, md, lg, xl, 2xl, 3xl, ultra', baseStep: 'md' },
   { value: 'custom', label: 'Custom...' },
 ];
+
+const DEFAULT_RATIO_PRESET = '1.25';
+const DEFAULT_CUSTOM_RATIO = 1.25;
+const DEFAULT_STEPS_PRESET = 'tshirt';
+const DEFAULT_STEPS_LIST = 'xs, sm, md, lg, xl, 2xl, 3xl, 4xl';
+const DEFAULT_BASE_STEP = 'md';
+
+interface RestoredStepsModalState {
+  ratioPreset: string;
+  customRatio: number;
+  stepsPreset: string;
+  stepsList: string;
+  baseStep: string;
+  editableSteps: Array<{ name: string; value: number }>;
+}
+
+function normalizeRestoredStepsModalState(value: unknown): RestoredStepsModalState | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Partial<RestoredStepsModalState>;
+  if (
+    typeof candidate.ratioPreset !== 'string' ||
+    typeof candidate.customRatio !== 'number' ||
+    typeof candidate.stepsPreset !== 'string' ||
+    typeof candidate.stepsList !== 'string' ||
+    typeof candidate.baseStep !== 'string' ||
+    !Array.isArray(candidate.editableSteps)
+  ) {
+    return null;
+  }
+
+  const editableSteps = candidate.editableSteps
+    .filter(step => step && typeof step.name === 'string' && typeof step.value === 'number')
+    .map(step => ({ name: step.name, value: step.value }));
+
+  return {
+    ratioPreset: candidate.ratioPreset,
+    customRatio: candidate.customRatio,
+    stepsPreset: candidate.stepsPreset,
+    stepsList: candidate.stepsList,
+    baseStep: candidate.baseStep,
+    editableSteps,
+  };
+}
 
 function resolveNumberValue(
   variable: VariableData | null,
@@ -66,13 +110,15 @@ export function StepsModal() {
 
   const [sourceNumberId, setSourceNumberId] = useState('');
   const [groupName, setGroupName] = useState('');
-  const [ratioPreset, setRatioPreset] = useState('1.25');
-  const [customRatio, setCustomRatio] = useState(1.25);
-  const [stepsPreset, setStepsPreset] = useState('tshirt');
-  const [stepsList, setStepsList] = useState('xs, sm, md, lg, xl, 2xl, 3xl, 4xl');
-  const [baseStep, setBaseStep] = useState('md');
+  const [ratioPreset, setRatioPreset] = useState(DEFAULT_RATIO_PRESET);
+  const [customRatio, setCustomRatio] = useState(DEFAULT_CUSTOM_RATIO);
+  const [stepsPreset, setStepsPreset] = useState(DEFAULT_STEPS_PRESET);
+  const [stepsList, setStepsList] = useState(DEFAULT_STEPS_LIST);
+  const [baseStep, setBaseStep] = useState(DEFAULT_BASE_STEP);
   const [existingGroup, setExistingGroup] = useState(false);
   const [editableSteps, setEditableSteps] = useState<{ name: string; value: number }[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const skipNextPreviewSyncRef = useRef(false);
 
   const numberVariables = useMemo(() =>
     variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'FLOAT'),
@@ -106,6 +152,7 @@ export function StepsModal() {
         name,
         count: groupVariables.length,
         firstVar: groupVariables[0] || null,
+        variables: groupVariables,
         sourceVar,
         resolvedBaseValue: resolveNumberValue(sourceVar, numberVarsByName, selectedModeId),
       };
@@ -120,26 +167,78 @@ export function StepsModal() {
   const baseReferenceAlias = sourceReferenceName ? `{${sourceReferenceName}}` : '';
   const baseValue = selectedNumberGroup?.resolvedBaseValue ?? 0;
   const baseReferenceDisplay = sourceReferenceName ? `{${sourceReferenceName}:${baseValue}}` : '';
-
-  // Auto-select pre-selected group when modal opens
-  React.useEffect(() => {
-    if (isOpen && preSelectedGroup) {
-      setSourceNumberId(preSelectedGroup);
-    }
-  }, [isOpen, preSelectedGroup]);
+  const selectedSourceVariableId = selectedNumberGroup?.sourceVar?.id || null;
 
   React.useEffect(() => {
-    if (!sourceNumberId) {
-      setGroupName('');
-      setExistingGroup(false);
+    if (!isOpen) {
+      setSourceNumberId('');
       return;
     }
 
-    if (!selectedNumberGroup) return;
+    setSourceNumberId(currentSourceNumberId => preSelectedGroup || currentSourceNumberId);
+    setDraggedIndex(null);
+  }, [isOpen, preSelectedGroup, selectedModeId]);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    if (!selectedNumberGroup) {
+      skipNextPreviewSyncRef.current = false;
+      setGroupName('');
+      setExistingGroup(false);
+      setRatioPreset(DEFAULT_RATIO_PRESET);
+      setCustomRatio(DEFAULT_CUSTOM_RATIO);
+      setStepsPreset(DEFAULT_STEPS_PRESET);
+      setStepsList(DEFAULT_STEPS_LIST);
+      setBaseStep(DEFAULT_BASE_STEP);
+      setEditableSteps([]);
+      return;
+    }
+
+    skipNextPreviewSyncRef.current = false;
     setGroupName(selectedNumberGroup.name);
     setExistingGroup(selectedNumberGroup.count > 1);
-  }, [selectedNumberGroup, sourceNumberId]);
+    setRatioPreset(DEFAULT_RATIO_PRESET);
+    setCustomRatio(DEFAULT_CUSTOM_RATIO);
+    setStepsPreset(DEFAULT_STEPS_PRESET);
+    setStepsList(DEFAULT_STEPS_LIST);
+    setBaseStep(DEFAULT_BASE_STEP);
+    setEditableSteps([]);
+  }, [isOpen, selectedNumberGroup, selectedModeId]);
+
+  React.useEffect(() => {
+    if (!isOpen || !selectedSourceVariableId) return;
+
+    const handleStoredState = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (
+        msg?.type !== 'step-modal-state' ||
+        msg.sourceVariableId !== selectedSourceVariableId ||
+        msg.modeId !== (selectedModeId || null)
+      ) {
+        return;
+      }
+
+      const restoredState = normalizeRestoredStepsModalState(msg.state);
+      if (restoredState) {
+        skipNextPreviewSyncRef.current = true;
+        setRatioPreset(restoredState.ratioPreset);
+        setCustomRatio(restoredState.customRatio);
+        setStepsPreset(restoredState.stepsPreset);
+        setStepsList(restoredState.stepsList);
+        setBaseStep(restoredState.baseStep);
+        setEditableSteps(restoredState.editableSteps);
+      }
+    };
+
+    window.addEventListener('message', handleStoredState);
+    post({
+      type: 'get-step-modal-state',
+      sourceVariableId: selectedSourceVariableId,
+      modeId: selectedModeId,
+    });
+    return () => window.removeEventListener('message', handleStoredState);
+  }, [isOpen, selectedSourceVariableId, selectedModeId]);
 
   const stepsArray = useMemo(() =>
     stepsList.split(',').map(s => s.trim()).filter(Boolean),
@@ -162,6 +261,11 @@ export function StepsModal() {
 
   // Update editable steps when calculated preview changes
   React.useEffect(() => {
+    if (skipNextPreviewSyncRef.current) {
+      skipNextPreviewSyncRef.current = false;
+      return;
+    }
+
     if (calculatedPreview.length > 0) {
       setEditableSteps(calculatedPreview);
     }
@@ -251,8 +355,6 @@ export function StepsModal() {
     });
   };
 
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
@@ -294,30 +396,40 @@ export function StepsModal() {
   };
 
   const handleGenerate = () => {
-    if (!groupName || editableSteps.length === 0) return;
+    if (!groupName || editableSteps.length === 0 || !selectedNumberGroup) return;
 
     const steps = editableSteps.map(p => ({
       name: `${groupName}/${p.name}`,
       value: p.name === baseStep && baseReferenceAlias ? baseReferenceAlias : String(p.value),
     }));
+    const modalState = {
+      ratioPreset,
+      customRatio,
+      stepsPreset,
+      stepsList: editableSteps.map(step => step.name).join(', '),
+      baseStep,
+    };
+    const deleteIds = selectedNumberGroup.variables
+      .filter(variable => variable.id !== selectedNumberGroup.sourceVar?.id)
+      .map(variable => variable.id);
 
     post({
-      type: 'create-steps',
+      type: existingGroup ? 'update-steps' : 'create-steps',
       collectionId: selectedCollectionId,
+      deleteIds,
       steps,
       modeId: selectedModeId,
+      modalState,
     });
 
     closeStepsModal();
   };
 
   const handleRemove = () => {
-    if (!groupName) return;
+    if (!selectedSourceVariableId) return;
     post({
       type: 'remove-steps',
-      collectionId: selectedCollectionId,
-      groupName,
-      modeId: selectedModeId,
+      sourceVariableId: selectedSourceVariableId,
     });
     closeStepsModal();
   };
@@ -513,7 +625,7 @@ export function StepsModal() {
             onClick={handleGenerate}
             disabled={!sourceNumberId || !groupName}
           >
-            Generate
+            {existingGroup ? 'Update' : 'Generate'}
           </button>
         </div>
       </div>

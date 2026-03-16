@@ -66,6 +66,62 @@ interface StoredShadeGeneratorConfig extends ShadeConfigPayload {
   updatedAt: string;
 }
 
+interface StoredStepData {
+  id: string;
+  name: string;
+  ratio: number; // Ratio relative to base value
+}
+
+interface StoredStepEntry {
+  id: string | null;
+  name: string;
+  ratio: number;
+  isBase: boolean;
+}
+
+interface StoredStepModalState {
+  ratioPreset: string;
+  customRatio: number;
+  stepsPreset: string;
+  stepsList: string;
+  baseStep: string;
+}
+
+interface StoredStepModeConfig {
+  steps: StoredStepEntry[];
+  generatedSteps: StoredStepData[];
+  modalState: StoredStepModalState;
+}
+
+interface StoredStepGeneratorConfig {
+  version: number;
+  sourceVariableId: string;
+  sourceName: string;
+  baseStepName: string; // Which step references the source (e.g., 'md')
+  generatedSteps: StoredStepData[];
+  steps?: StoredStepEntry[];
+  modalState?: StoredStepModalState;
+  modes?: Record<string, StoredStepModeConfig>;
+  updatedAt: string;
+}
+
+const STEP_RATIO_PRESET_VALUES = [
+  { value: '1.125', ratio: 1.125 },
+  { value: '1.2', ratio: 1.2 },
+  { value: '1.25', ratio: 1.25 },
+  { value: '1.333', ratio: 1.333 },
+  { value: '1.414', ratio: 1.414 },
+  { value: '1.5', ratio: 1.5 },
+  { value: '1.618', ratio: 1.618 },
+  { value: '2', ratio: 2 },
+];
+
+const STEP_NAME_PRESETS = [
+  { value: 'tshirt', steps: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'], baseStep: 'md' },
+  { value: 'numeric', steps: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], baseStep: '5' },
+  { value: 'gutenberg', steps: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', 'ultra'], baseStep: 'md' },
+];
+
 interface UIShadeGroupData {
   sourceVariableId: string;
   sourceVariableName: string;
@@ -96,6 +152,7 @@ interface RGBColor {
 }
 
 const SHADE_GENERATOR_CONFIG_KEY = 'shadeGeneratorConfig';
+const STEP_GENERATOR_CONFIG_KEY = 'stepGeneratorConfig';
 const DEFAULT_SHADE_LIGHT_VALUE = 5;
 const DEFAULT_SHADE_DARK_VALUE = 90;
 
@@ -449,6 +506,478 @@ function readShadeGeneratorConfig(variable: Variable): StoredShadeGeneratorConfi
 
 function clearShadeGeneratorConfig(variable: Variable): void {
   variable.setPluginData(SHADE_GENERATOR_CONFIG_KEY, '');
+}
+
+function getStepShortName(name: string): string {
+  const parts = name.split('/');
+  return parts[parts.length - 1];
+}
+
+function reorderLegacyStoredSteps(
+  baseStepName: string,
+  steps: StoredStepEntry[]
+): StoredStepEntry[] {
+  if (steps.length <= 1) {
+    return steps;
+  }
+
+  const baseShortName = getStepShortName(baseStepName);
+  const stepsByShortName = new Map<string, StoredStepEntry>();
+  for (const step of steps) {
+    stepsByShortName.set(getStepShortName(step.name), step);
+  }
+
+  for (const preset of STEP_NAME_PRESETS) {
+    const matchesPreset =
+      preset.baseStep === baseShortName &&
+      preset.steps.length === steps.length &&
+      preset.steps.every(stepName => stepsByShortName.has(stepName));
+
+    if (matchesPreset) {
+      return preset.steps
+        .map(stepName => stepsByShortName.get(stepName) || null)
+        .filter((step): step is StoredStepEntry => step !== null)
+        .map(step => ({
+          id: step.id,
+          name: step.name,
+          ratio: step.ratio,
+          isBase: getStepShortName(step.name) === baseShortName,
+        }));
+    }
+  }
+
+  const allNumeric = Array.from(stepsByShortName.keys()).every(stepName => /^-?\d+(\.\d+)?$/.test(stepName));
+  if (allNumeric) {
+    return [...steps].sort((a, b) => Number.parseFloat(getStepShortName(a.name)) - Number.parseFloat(getStepShortName(b.name))).map(step => ({
+      id: step.id,
+      name: step.name,
+      ratio: step.ratio,
+      isBase: getStepShortName(step.name) === baseShortName,
+    }));
+  }
+
+  return steps;
+}
+
+function normalizeStoredStepEntries(
+  baseStepName: string,
+  generatedSteps: StoredStepData[],
+  rawSteps: unknown
+): StoredStepEntry[] {
+  if (Array.isArray(rawSteps)) {
+    const normalizedSteps = rawSteps
+      .filter(step =>
+        step &&
+        typeof step === 'object' &&
+        typeof (step as StoredStepEntry).name === 'string' &&
+        typeof (step as StoredStepEntry).ratio === 'number' &&
+        typeof (step as StoredStepEntry).isBase === 'boolean'
+      )
+      .map(step => {
+        const candidate = step as StoredStepEntry;
+        return {
+          id: typeof candidate.id === 'string' ? candidate.id : null,
+          name: candidate.name,
+          ratio: candidate.ratio,
+          isBase: candidate.isBase,
+        };
+      });
+
+    if (normalizedSteps.length > 0) {
+      return normalizedSteps;
+    }
+  }
+
+  return reorderLegacyStoredSteps(baseStepName, [
+    { id: null, name: baseStepName, ratio: 1, isBase: true },
+    ...generatedSteps.map(step => ({
+      id: step.id,
+      name: step.name,
+      ratio: step.ratio,
+      isBase: false,
+    })),
+  ]);
+}
+
+function normalizeStoredStepModalState(
+  value: unknown,
+  baseStepName: string,
+  steps: StoredStepEntry[]
+): StoredStepModalState {
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as StoredStepModalState).ratioPreset === 'string' &&
+    typeof (value as StoredStepModalState).customRatio === 'number' &&
+    typeof (value as StoredStepModalState).stepsPreset === 'string' &&
+    typeof (value as StoredStepModalState).stepsList === 'string' &&
+    typeof (value as StoredStepModalState).baseStep === 'string'
+  ) {
+    const candidate = value as StoredStepModalState;
+    return {
+      ratioPreset: candidate.ratioPreset,
+      customRatio: candidate.customRatio,
+      stepsPreset: candidate.stepsPreset,
+      stepsList: candidate.stepsList,
+      baseStep: candidate.baseStep,
+    };
+  }
+
+  return {
+    ratioPreset: 'custom',
+    customRatio: 1.25,
+    stepsPreset: 'custom',
+    stepsList: steps.map(step => getStepShortName(step.name)).join(', '),
+    baseStep: getStepShortName(baseStepName),
+  };
+}
+
+function buildGeneratedStepsFromEntries(steps: StoredStepEntry[]): StoredStepData[] {
+  return steps
+    .filter(step => !step.isBase && typeof step.id === 'string')
+    .map(step => ({
+      id: step.id as string,
+      name: step.name,
+      ratio: step.ratio,
+    }));
+}
+
+function roundStepRatio(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function inferCustomRatioFromSteps(steps: StoredStepEntry[]): number {
+  const baseIndex = steps.findIndex(step => step.isBase);
+  if (baseIndex === -1) {
+    return 1.25;
+  }
+
+  const inferredRatios = steps
+    .map((step, index) => {
+      const offset = index - baseIndex;
+      if (offset === 0 || step.ratio <= 0) {
+        return null;
+      }
+
+      const normalizedRatio =
+        offset > 0
+          ? Math.pow(step.ratio, 1 / offset)
+          : Math.pow(1 / step.ratio, 1 / Math.abs(offset));
+
+      return Number.isFinite(normalizedRatio) && normalizedRatio > 0 ? normalizedRatio : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (inferredRatios.length === 0) {
+    return 1.25;
+  }
+
+  const total = inferredRatios.reduce((sum, value) => sum + value, 0);
+  return roundStepRatio(total / inferredRatios.length);
+}
+
+function inferStepsPresetFromEntries(
+  steps: StoredStepEntry[],
+  baseStepName: string
+): string {
+  const shortNames = steps.map(step => getStepShortName(step.name));
+  const baseStep = getStepShortName(baseStepName);
+
+  for (const preset of STEP_NAME_PRESETS) {
+    if (
+      preset.baseStep === baseStep &&
+      preset.steps.length === shortNames.length &&
+      preset.steps.every((name, index) => shortNames[index] === name)
+    ) {
+      return preset.value;
+    }
+  }
+
+  return 'custom';
+}
+
+function inferStoredStepModalState(
+  baseStepName: string,
+  steps: StoredStepEntry[]
+): StoredStepModalState {
+  const customRatio = inferCustomRatioFromSteps(steps);
+  const matchingPreset = STEP_RATIO_PRESET_VALUES.find(preset => Math.abs(preset.ratio - customRatio) < 0.002);
+
+  return {
+    ratioPreset: matchingPreset ? matchingPreset.value : 'custom',
+    customRatio,
+    stepsPreset: inferStepsPresetFromEntries(steps, baseStepName),
+    stepsList: steps.map(step => getStepShortName(step.name)).join(', '),
+    baseStep: getStepShortName(baseStepName),
+  };
+}
+
+function buildStoredStepModalState(
+  value: unknown,
+  baseStepName: string,
+  steps: StoredStepEntry[]
+): StoredStepModalState {
+  const inferredState = inferStoredStepModalState(baseStepName, steps);
+  const normalized = normalizeStoredStepModalState(value, baseStepName, steps);
+
+  if (
+    normalized.ratioPreset === 'custom' &&
+    normalized.stepsPreset === 'custom' &&
+    (
+      inferredState.ratioPreset !== 'custom' ||
+      inferredState.stepsPreset !== 'custom' ||
+      Math.abs(inferredState.customRatio - normalized.customRatio) > 0.0001
+    )
+  ) {
+    return inferredState;
+  }
+
+  return {
+    ratioPreset: normalized.ratioPreset,
+    customRatio: normalized.customRatio,
+    stepsPreset: normalized.stepsPreset,
+    stepsList: steps.map(step => getStepShortName(step.name)).join(', '),
+    baseStep: getStepShortName(baseStepName),
+  };
+}
+
+function alignStoredStepsWithTemplate(
+  templateSteps: StoredStepEntry[],
+  existingSteps: StoredStepEntry[]
+): StoredStepEntry[] {
+  const existingById = new Map<string, StoredStepEntry>();
+  const existingByName = new Map<string, StoredStepEntry>();
+
+  for (const step of existingSteps) {
+    if (typeof step.id === 'string') {
+      existingById.set(step.id, step);
+    }
+    existingByName.set(step.name, step);
+  }
+
+  const alignedSteps = templateSteps.map(step => {
+    const matchedStep =
+      (typeof step.id === 'string' ? existingById.get(step.id) : null) ||
+      existingByName.get(step.name) ||
+      null;
+
+    if (!matchedStep) {
+      return {
+        id: step.id,
+        name: step.name,
+        ratio: step.ratio,
+        isBase: step.isBase,
+      };
+    }
+
+    return {
+      id: step.id,
+      name: step.name,
+      ratio: matchedStep.ratio,
+      isBase: matchedStep.isBase,
+    };
+  });
+
+  if (!alignedSteps.some(step => step.isBase)) {
+    const templateBaseStep = templateSteps.find(templateStep => templateStep.isBase) || null;
+    return alignedSteps.map(step => ({
+      id: step.id,
+      name: step.name,
+      ratio: step.ratio,
+      isBase: !!templateBaseStep && step.name === templateBaseStep.name,
+    }));
+  }
+
+  return alignedSteps;
+}
+
+function normalizeStoredStepModeConfig(
+  value: unknown,
+  baseStepName: string,
+  fallbackSteps: StoredStepEntry[],
+  fallbackGeneratedSteps: StoredStepData[],
+  fallbackModalState: StoredStepModalState
+): StoredStepModeConfig | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Partial<StoredStepModeConfig>;
+  const steps = normalizeStoredStepEntries(baseStepName, fallbackGeneratedSteps, candidate.steps);
+  const generatedSteps = Array.isArray(candidate.generatedSteps)
+    ? candidate.generatedSteps
+        .filter(step =>
+          step &&
+          typeof step === 'object' &&
+          typeof (step as StoredStepData).id === 'string' &&
+          typeof (step as StoredStepData).name === 'string' &&
+          typeof (step as StoredStepData).ratio === 'number'
+        )
+        .map(step => ({
+          id: (step as StoredStepData).id,
+          name: (step as StoredStepData).name,
+          ratio: (step as StoredStepData).ratio,
+        }))
+    : buildGeneratedStepsFromEntries(steps);
+  const modalState = buildStoredStepModalState(
+    candidate.modalState || fallbackModalState,
+    (steps.find(step => step.isBase) || { name: baseStepName }).name,
+    steps
+  );
+
+  return {
+    steps,
+    generatedSteps: generatedSteps.length > 0 ? generatedSteps : buildGeneratedStepsFromEntries(steps),
+    modalState,
+  };
+}
+
+function normalizeStoredStepModes(
+  value: unknown,
+  baseStepName: string,
+  fallbackSteps: StoredStepEntry[],
+  fallbackGeneratedSteps: StoredStepData[],
+  fallbackModalState: StoredStepModalState
+): Record<string, StoredStepModeConfig> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const modes: Record<string, StoredStepModeConfig> = {};
+  for (const [modeId, modeConfig] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedModeConfig = normalizeStoredStepModeConfig(
+      modeConfig,
+      baseStepName,
+      fallbackSteps,
+      fallbackGeneratedSteps,
+      fallbackModalState
+    );
+    if (normalizedModeConfig) {
+      modes[modeId] = normalizedModeConfig;
+    }
+  }
+
+  return modes;
+}
+
+function getStoredStepModeConfig(
+  config: StoredStepGeneratorConfig,
+  modeId?: string | null
+): StoredStepModeConfig | null {
+  if (modeId && config.modes) {
+    if (config.modes[modeId]) {
+      return config.modes[modeId];
+    }
+    if (Object.keys(config.modes).length > 0) {
+      return null;
+    }
+  }
+
+  const steps = config.steps || normalizeStoredStepEntries(config.baseStepName, config.generatedSteps, []);
+  return {
+    steps,
+    generatedSteps:
+      config.generatedSteps.length > 0
+        ? config.generatedSteps
+        : buildGeneratedStepsFromEntries(steps),
+    modalState: buildStoredStepModalState(config.modalState, config.baseStepName, steps),
+  };
+}
+
+function persistStoredStepModeConfig(
+  sourceVariable: Variable,
+  previousConfig: StoredStepGeneratorConfig | null,
+  modeId: string,
+  steps: StoredStepEntry[],
+  modalState: StoredStepModalState
+): void {
+  const baseStep = steps.find(step => step.isBase) || steps[0] || null;
+  const baseStepName = baseStep ? baseStep.name : sourceVariable.name;
+  const normalizedModalState = buildStoredStepModalState(modalState, baseStepName, steps);
+  const currentModeConfig: StoredStepModeConfig = {
+    steps,
+    generatedSteps: buildGeneratedStepsFromEntries(steps),
+    modalState: normalizedModalState,
+  };
+
+  const nextModes: Record<string, StoredStepModeConfig> = {};
+  const previousModes = previousConfig && previousConfig.modes ? previousConfig.modes : {};
+
+  for (const [storedModeId, storedModeConfig] of Object.entries(previousModes)) {
+    if (storedModeId === modeId) continue;
+
+    const alignedSteps = alignStoredStepsWithTemplate(steps, storedModeConfig.steps);
+    const alignedBaseStep = alignedSteps.find(step => step.isBase) || alignedSteps[0] || null;
+    nextModes[storedModeId] = {
+      steps: alignedSteps,
+      generatedSteps: buildGeneratedStepsFromEntries(alignedSteps),
+      modalState: buildStoredStepModalState(
+        storedModeConfig.modalState,
+        alignedBaseStep ? alignedBaseStep.name : sourceVariable.name,
+        alignedSteps
+      ),
+    };
+  }
+
+  nextModes[modeId] = currentModeConfig;
+
+  const storedConfig: StoredStepGeneratorConfig = {
+    version: 2,
+    sourceVariableId: sourceVariable.id,
+    sourceName: sourceVariable.name,
+    baseStepName,
+    generatedSteps: currentModeConfig.generatedSteps,
+    steps: currentModeConfig.steps,
+    modalState: currentModeConfig.modalState,
+    modes: nextModes,
+    updatedAt: new Date().toISOString(),
+  };
+
+  sourceVariable.setPluginData(STEP_GENERATOR_CONFIG_KEY, JSON.stringify(storedConfig));
+}
+
+function readStepGeneratorConfig(variable: Variable): StoredStepGeneratorConfig | null {
+  const raw = variable.getPluginData(STEP_GENERATOR_CONFIG_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.version !== 1 && parsed.version !== 2) return null;
+
+    const generatedSteps = Array.isArray(parsed.generatedSteps)
+      ? parsed.generatedSteps
+          .filter((step: unknown) =>
+            step &&
+            typeof step === 'object' &&
+            typeof (step as StoredStepData).id === 'string' &&
+            typeof (step as StoredStepData).name === 'string' &&
+            typeof (step as StoredStepData).ratio === 'number'
+          )
+          .map((step: StoredStepData) => ({
+            id: step.id,
+            name: step.name,
+            ratio: step.ratio,
+          }))
+      : [];
+    const baseStepName = typeof parsed.baseStepName === 'string' ? parsed.baseStepName : variable.name;
+    const steps = normalizeStoredStepEntries(baseStepName, generatedSteps, parsed.steps);
+    const modalState = buildStoredStepModalState(parsed.modalState, baseStepName, steps);
+
+    return {
+      version: 2,
+      sourceVariableId: typeof parsed.sourceVariableId === 'string' ? parsed.sourceVariableId : variable.id,
+      sourceName: typeof parsed.sourceName === 'string' ? parsed.sourceName : variable.name,
+      baseStepName,
+      generatedSteps,
+      steps,
+      modalState,
+      modes: normalizeStoredStepModes(parsed.modes, baseStepName, steps, generatedSteps, modalState),
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function clearStepGeneratorConfig(variable: Variable): void {
+  variable.setPluginData(STEP_GENERATOR_CONFIG_KEY, '');
 }
 
 function sortVariableData(variableData: UIVariableData[]): UIVariableData[] {
@@ -921,6 +1450,33 @@ async function resolveSourceVariableRgb(
   return null;
 }
 
+async function resolveSourceVariableNumber(
+  variable: Variable,
+  modeId: string,
+  visited = new Set<string>()
+): Promise<number | null> {
+  if (visited.has(variable.id)) {
+    return null;
+  }
+
+  visited.add(variable.id);
+  const value = variable.valuesByMode[modeId];
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (value && typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+    const referencedVariable = await figma.variables.getVariableByIdAsync(value.id);
+    if (!referencedVariable || referencedVariable.resolvedType !== 'FLOAT') {
+      return null;
+    }
+    return resolveSourceVariableNumber(referencedVariable, modeId, visited);
+  }
+
+  return null;
+}
+
 async function buildUiState(): Promise<UIState> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const variables = await figma.variables.getLocalVariablesAsync();
@@ -984,6 +1540,7 @@ async function buildUiState(): Promise<UIState> {
 // Fetch and send all data to UI
 async function fetchData() {
   await syncManagedShadeSources();
+  await syncManagedStepSources();
   const { collectionData, variableData, shadeGroups, hash } = await buildUiState();
 
   lastDataHash = hash;
@@ -1186,6 +1743,11 @@ async function updateVariableValue(id: string, newValue: string, modeId?: string
       const targetModeId = modeId || Object.keys(variable.valuesByMode)[0];
       const parsedValue = await parseValue(newValue, variable.resolvedType);
       variable.setValueForMode(targetModeId, parsedValue);
+
+      if (variable.resolvedType === 'FLOAT') {
+        await syncManagedStepSourceForMode(variable, targetModeId);
+      }
+
       await fetchData();
       figma.ui.postMessage({ type: 'update-success' });
     }
@@ -1788,6 +2350,81 @@ async function syncManagedShadeSources(): Promise<boolean> {
   return syncedAny;
 }
 
+async function syncManagedStepSources(): Promise<boolean> {
+  const variables = await figma.variables.getLocalVariablesAsync();
+  let syncedAny = false;
+
+  for (const variable of variables) {
+    if (variable.resolvedType !== 'FLOAT') continue;
+
+    const storedConfig = readStepGeneratorConfig(variable);
+    if (!storedConfig) continue;
+
+    const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+    if (!collection) continue;
+
+    const renamed = variable.name !== storedConfig.sourceName;
+    if (!renamed) continue;
+
+    const updatedConfig: StoredStepGeneratorConfig = {
+      version: storedConfig.version,
+      sourceVariableId: storedConfig.sourceVariableId,
+      sourceName: variable.name,
+      baseStepName: storedConfig.baseStepName,
+      generatedSteps: storedConfig.generatedSteps,
+      steps: storedConfig.steps,
+      modalState: storedConfig.modalState,
+      modes: storedConfig.modes,
+      updatedAt: new Date().toISOString(),
+    };
+    variable.setPluginData(STEP_GENERATOR_CONFIG_KEY, JSON.stringify(updatedConfig));
+
+    syncedAny = true;
+  }
+
+  return syncedAny;
+}
+
+async function syncManagedStepSourceForMode(
+  variable: Variable,
+  modeId: string
+): Promise<boolean> {
+  if (variable.resolvedType !== 'FLOAT') return false;
+
+  const storedConfig = readStepGeneratorConfig(variable);
+  if (!storedConfig) return false;
+  const storedModeConfig = getStoredStepModeConfig(storedConfig, modeId);
+  if (!storedModeConfig) return false;
+
+  const baseValue = await resolveSourceVariableNumber(variable, modeId);
+  if (baseValue === null) return false;
+
+  const variables = await figma.variables.getLocalVariablesAsync('FLOAT');
+
+  for (const stepData of storedModeConfig.generatedSteps) {
+    const stepVar = variables.find(candidate => candidate.id === stepData.id);
+    if (!stepVar) continue;
+
+    const calculatedValue = baseValue * stepData.ratio;
+    stepVar.setValueForMode(modeId, Math.round(calculatedValue * 100) / 100);
+  }
+
+  const updatedConfig: StoredStepGeneratorConfig = {
+    version: storedConfig.version,
+    sourceVariableId: storedConfig.sourceVariableId,
+    sourceName: variable.name,
+    baseStepName: storedConfig.baseStepName,
+    generatedSteps: storedConfig.generatedSteps,
+    steps: storedConfig.steps,
+    modalState: storedConfig.modalState,
+    modes: storedConfig.modes,
+    updatedAt: new Date().toISOString(),
+  };
+  variable.setPluginData(STEP_GENERATOR_CONFIG_KEY, JSON.stringify(updatedConfig));
+
+  return true;
+}
+
 // Create color shades
 async function createShades(
   collectionId: string,
@@ -1874,11 +2511,167 @@ async function removeShades(
   }
 }
 
-// Create number steps
+function getManagedStepDefinition(
+  steps: { name: string; value: string }[]
+): {
+  baseVariableRef: string | null;
+  baseStepIndex: number;
+  stepIsReference: boolean[];
+} {
+  let baseVariableRef: string | null = null;
+  let baseStepIndex = -1;
+  const stepIsReference: boolean[] = [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const refMatch = steps[i].value.match(/^\{(.+)\}$/);
+    stepIsReference.push(!!refMatch);
+    if (refMatch) {
+      baseVariableRef = refMatch[1];
+      baseStepIndex = i;
+    }
+  }
+
+  return { baseVariableRef, baseStepIndex, stepIsReference };
+}
+
+async function buildManagedStepRatios(
+  steps: { name: string; value: string }[],
+  allVariables: Variable[],
+  targetModeId: string,
+  baseVariableRef: string | null,
+  baseStepIndex: number,
+  stepIsReference: boolean[]
+): Promise<{ baseVariable: Variable | null; stepRatios: number[] }> {
+  const baseVariable = baseVariableRef
+    ? allVariables.find(variable => variable.name === baseVariableRef) || null
+    : null;
+  const baseValue = baseVariable
+    ? await resolveSourceVariableNumber(baseVariable, targetModeId)
+    : null;
+
+  const stepRatios = steps.map((step, index) => {
+    if (index === baseStepIndex) {
+      return 1;
+    }
+    if (stepIsReference[index]) {
+      return 1;
+    }
+    const parsedValue = Number.parseFloat(step.value);
+    if (baseValue && baseValue !== 0 && !Number.isNaN(parsedValue)) {
+      return parsedValue / baseValue;
+    }
+    return 1;
+  });
+
+  return { baseVariable, stepRatios };
+}
+
+async function resolveManagedStepValue(
+  step: { name: string; value: string },
+  index: number,
+  baseStepIndex: number,
+  stepIsReference: boolean[],
+  stepRatios: number[],
+  baseValue: number | null
+): Promise<any> {
+  if (index === baseStepIndex) {
+    return parseValue(step.value, 'FLOAT');
+  }
+
+  if (baseValue !== null && !stepIsReference[index]) {
+    return Math.round(baseValue * stepRatios[index] * 100) / 100;
+  }
+
+  return parseValue(step.value, 'FLOAT');
+}
+
+function buildStoredStepEntries(
+  variables: Variable[],
+  stepRatios: number[],
+  baseStepIndex: number
+): StoredStepEntry[] {
+  return variables.map((variable, index) => ({
+    id: variable.id,
+    name: variable.name,
+    ratio: stepRatios[index] || 1,
+    isBase: index === baseStepIndex,
+  }));
+}
+
+function getManagedStepExistingOrder(
+  deleteIds: string[],
+  previousConfig: StoredStepGeneratorConfig | null,
+  targetModeId: string
+): Map<string, number> {
+  const order = new Map<string, number>();
+  const storedModeConfig = previousConfig ? getStoredStepModeConfig(previousConfig, targetModeId) : null;
+  const preferredIds = storedModeConfig
+    ? storedModeConfig.steps
+        .filter(step => !step.isBase && typeof step.id === 'string')
+        .map(step => step.id as string)
+    : deleteIds;
+
+  preferredIds.forEach((id, index) => {
+    order.set(id, index);
+  });
+
+  return order;
+}
+
+function buildTemporaryStepVariableName(variable: Variable, index: number): string {
+  return variable.name + '__tmp__' + variable.id.replace(/[:;]/g, '_') + '__' + String(index);
+}
+
+async function getStepModalState(sourceVariableId: string, modeId?: string): Promise<void> {
+  const sourceVariable = await figma.variables.getVariableByIdAsync(sourceVariableId);
+  if (!sourceVariable || sourceVariable.resolvedType !== 'FLOAT') {
+    figma.ui.postMessage({ type: 'step-modal-state', sourceVariableId, modeId: modeId || null, state: null });
+    return;
+  }
+
+  const storedConfig = readStepGeneratorConfig(sourceVariable);
+  if (!storedConfig) {
+    figma.ui.postMessage({ type: 'step-modal-state', sourceVariableId, modeId: modeId || null, state: null });
+    return;
+  }
+
+  const storedModeConfig = getStoredStepModeConfig(storedConfig, modeId || null);
+  if (!storedModeConfig) {
+    figma.ui.postMessage({ type: 'step-modal-state', sourceVariableId, modeId: modeId || null, state: null });
+    return;
+  }
+
+  const resolvedModeId = modeId || Object.keys(sourceVariable.valuesByMode)[0];
+  const baseValue = resolvedModeId
+    ? await resolveSourceVariableNumber(sourceVariable, resolvedModeId)
+    : null;
+  const editableSteps = storedModeConfig.steps.map(step => ({
+    name: getStepShortName(step.name),
+    value: step.isBase || baseValue === null
+      ? Math.round((baseValue || 0) * 100) / 100
+      : Math.round(baseValue * step.ratio * 100) / 100,
+  }));
+
+  figma.ui.postMessage({
+    type: 'step-modal-state',
+    sourceVariableId,
+    modeId: modeId || null,
+    state: {
+      ratioPreset: storedModeConfig.modalState.ratioPreset,
+      customRatio: storedModeConfig.modalState.customRatio,
+      stepsPreset: storedModeConfig.modalState.stepsPreset,
+      stepsList: storedModeConfig.modalState.stepsList,
+      baseStep: storedModeConfig.modalState.baseStep,
+      editableSteps,
+    },
+  });
+}
+
 async function createSteps(
   collectionId: string,
   steps: { name: string; value: string }[],
-  modeId?: string
+  modeId?: string,
+  modalState?: StoredStepModalState
 ) {
   try {
     const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
@@ -1886,89 +2679,55 @@ async function createSteps(
     const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
     if (!targetModeId) throw new Error('No mode found for collection');
 
-    // Get all existing variables in the collection
     const allVariables = await figma.variables.getLocalVariablesAsync('FLOAT');
     const existingVarsMap = new Map<string, Variable>();
-    for (const v of allVariables) {
-      if (v.variableCollectionId === collectionId) {
-        existingVarsMap.set(v.name, v);
+    for (const variable of allVariables) {
+      if (variable.variableCollectionId === collectionId) {
+        existingVarsMap.set(variable.name, variable);
       }
     }
 
-    // Find the base variable reference and calculate ratio for each step
-    let baseVariableRef: string | null = null;
-    let baseStepIndex = -1;
-    const stepRatios: number[] = [];
-    const stepIsReference: boolean[] = [];
-
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      const refMatch = step.value.match(/^\{(.+)\}$/);
-      stepIsReference.push(!!refMatch);
-
-      if (refMatch) {
-        baseVariableRef = refMatch[1];
-        baseStepIndex = i;
-      }
-    }
-
-    // If we found a base reference, calculate ratios for other steps
-    // We need to get a base value from the current mode to calculate ratios
-    if (baseVariableRef && baseStepIndex !== -1) {
-      const baseVar = allVariables.find(v => v.name === baseVariableRef);
-      if (baseVar) {
-        const baseValue = baseVar.valuesByMode[targetModeId];
-
-        if (typeof baseValue === 'number' && baseValue !== 0) {
-          for (let i = 0; i < steps.length; i++) {
-            if (i === baseStepIndex) {
-              stepRatios.push(1); // Base step has ratio of 1
-            } else if (!stepIsReference[i]) {
-              const stepValue = parseFloat(steps[i].value);
-              if (!isNaN(stepValue)) {
-                stepRatios.push(stepValue / baseValue);
-              } else {
-                stepRatios.push(1);
-              }
-            } else {
-              stepRatios.push(1);
-            }
-          }
-        }
-      }
-    }
+    const { baseVariableRef, baseStepIndex, stepIsReference } = getManagedStepDefinition(steps);
+    const { baseVariable, stepRatios } = await buildManagedStepRatios(
+      steps,
+      allVariables,
+      targetModeId,
+      baseVariableRef,
+      baseStepIndex,
+      stepIsReference
+    );
+    const baseValue = baseVariable
+      ? await resolveSourceVariableNumber(baseVariable, targetModeId)
+      : null;
+    const finalStepVariables: Variable[] = [];
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       const existing = existingVarsMap.get(step.name);
       const variable = existing || figma.variables.createVariable(step.name, collection, 'FLOAT');
-      let valueToSet: any;
-
-      // If this is the base step with a variable reference, use the alias
-      if (i === baseStepIndex && baseVariableRef) {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      }
-      // If we have ratios calculated, recalculate for the selected mode only
-      else if (baseVariableRef && stepRatios.length > 0) {
-        const baseVar = allVariables.find(v => v.name === baseVariableRef);
-        if (baseVar) {
-          const baseValueForMode = baseVar.valuesByMode[targetModeId];
-          if (typeof baseValueForMode === 'number') {
-            const calculatedValue = baseValueForMode * stepRatios[i];
-            valueToSet = Math.round(calculatedValue * 100) / 100;
-          } else {
-            valueToSet = await parseValue(step.value, 'FLOAT');
-          }
-        } else {
-          valueToSet = await parseValue(step.value, 'FLOAT');
-        }
-      }
-      // Otherwise just use the provided value
-      else {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      }
+      const valueToSet = await resolveManagedStepValue(
+        step,
+        i,
+        baseStepIndex,
+        stepIsReference,
+        stepRatios,
+        baseValue
+      );
 
       variable.setValueForMode(targetModeId, valueToSet);
+      finalStepVariables.push(variable);
+    }
+
+    if (baseVariable && baseStepIndex !== -1) {
+      const previousConfig = readStepGeneratorConfig(baseVariable);
+      const storedSteps = buildStoredStepEntries(finalStepVariables, stepRatios, baseStepIndex);
+      persistStoredStepModeConfig(
+        baseVariable,
+        previousConfig,
+        targetModeId,
+        storedSteps,
+        modalState || buildStoredStepModalState(null, steps[baseStepIndex].name, storedSteps)
+      );
     }
 
     await fetchData();
@@ -1978,12 +2737,12 @@ async function createSteps(
   }
 }
 
-// Update number steps (update existing, delete extras, create new ones as needed)
 async function updateSteps(
   collectionId: string,
   deleteIds: string[],
   steps: { name: string; value: string }[],
-  modeId?: string
+  modeId?: string,
+  modalState?: StoredStepModalState
 ) {
   try {
     const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
@@ -1991,124 +2750,147 @@ async function updateSteps(
     const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
     if (!targetModeId) throw new Error('No mode found for collection');
 
-    // Get all variables to find base reference
     const allVariables = await figma.variables.getLocalVariablesAsync('FLOAT');
-
-    // Find the base variable reference and calculate ratios
-    let baseVariableRef: string | null = null;
-    let baseStepIndex = -1;
-    const stepRatios: number[] = [];
-    const stepIsReference: boolean[] = [];
-
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      const refMatch = step.value.match(/^\{(.+)\}$/);
-      stepIsReference.push(!!refMatch);
-
-      if (refMatch) {
-        baseVariableRef = refMatch[1];
-        baseStepIndex = i;
-      }
-    }
-
-    if (baseVariableRef && baseStepIndex !== -1) {
-      const baseVar = allVariables.find(v => v.name === baseVariableRef);
-      if (baseVar) {
-        const baseValue = baseVar.valuesByMode[targetModeId];
-
-        if (typeof baseValue === 'number' && baseValue !== 0) {
-          for (let i = 0; i < steps.length; i++) {
-            if (i === baseStepIndex) {
-              stepRatios.push(1);
-            } else if (!stepIsReference[i]) {
-              const stepValue = parseFloat(steps[i].value);
-              if (!isNaN(stepValue)) {
-                stepRatios.push(stepValue / baseValue);
-              } else {
-                stepRatios.push(1);
-              }
-            } else {
-              stepRatios.push(1);
-            }
-          }
-        }
-      }
-    }
-
-    // Get existing variables from the deleteIds list
+    const { baseVariableRef, baseStepIndex, stepIsReference } = getManagedStepDefinition(steps);
+    const { baseVariable, stepRatios } = await buildManagedStepRatios(
+      steps,
+      allVariables,
+      targetModeId,
+      baseVariableRef,
+      baseStepIndex,
+      stepIsReference
+    );
+    const previousConfig = baseVariable ? readStepGeneratorConfig(baseVariable) : null;
+    const existingOrder = getManagedStepExistingOrder(deleteIds, previousConfig, targetModeId);
     const existingVars: { id: string; variable: Variable }[] = [];
-    for (const id of deleteIds) {
+
+    for (const id of Array.from(new Set(deleteIds))) {
       const variable = await figma.variables.getVariableByIdAsync(id);
       if (variable) {
         existingVars.push({ id, variable });
       }
     }
 
-    // Steps arrive in the correct order from UI, so preserve that order
-    // Match existing variables to new steps by index position
+    existingVars.sort((a, b) => {
+      const indexA = existingOrder.has(a.id) ? existingOrder.get(a.id) as number : Number.MAX_SAFE_INTEGER;
+      const indexB = existingOrder.has(b.id) ? existingOrder.get(b.id) as number : Number.MAX_SAFE_INTEGER;
+      return indexA - indexB;
+    });
+
+    const baseValue = baseVariable
+      ? await resolveSourceVariableNumber(baseVariable, targetModeId)
+      : null;
+    const finalStepVariables: Variable[] = [];
     const reusedCount = Math.min(existingVars.length, steps.length);
+
+    // Rename reused variables out of the way first so swaps/reorders do not
+    // collide with existing names still present in the collection.
     for (let i = 0; i < reusedCount; i++) {
       const variable = existingVars[i].variable;
-      const step = steps[i];
-
-      // Update name
-      variable.name = step.name;
-      let valueToSet: any;
-
-      if (i === baseStepIndex && baseVariableRef) {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      } else if (baseVariableRef && stepRatios.length > 0 && !stepIsReference[i]) {
-        const baseVar = allVariables.find(v => v.name === baseVariableRef);
-        if (baseVar) {
-          const baseValueForMode = baseVar.valuesByMode[targetModeId];
-          if (typeof baseValueForMode === 'number') {
-            const calculatedValue = baseValueForMode * stepRatios[i];
-            valueToSet = Math.round(calculatedValue * 100) / 100;
-          } else {
-            valueToSet = await parseValue(step.value, 'FLOAT');
-          }
-        } else {
-          valueToSet = await parseValue(step.value, 'FLOAT');
-        }
-      } else {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      }
-
-      variable.setValueForMode(targetModeId, valueToSet);
+      variable.name = buildTemporaryStepVariableName(variable, i);
     }
 
-    // Delete excess variables if we have more existing than needed
     for (let i = reusedCount; i < existingVars.length; i++) {
       existingVars[i].variable.remove();
     }
 
-    // Create new variables if we need more than we had
+    for (let i = 0; i < reusedCount; i++) {
+      const variable = existingVars[i].variable;
+      const step = steps[i];
+      const valueToSet = await resolveManagedStepValue(
+        step,
+        i,
+        baseStepIndex,
+        stepIsReference,
+        stepRatios,
+        baseValue
+      );
+
+      variable.name = step.name;
+      variable.setValueForMode(targetModeId, valueToSet);
+      finalStepVariables.push(variable);
+    }
+
     for (let i = reusedCount; i < steps.length; i++) {
       const step = steps[i];
       const variable = figma.variables.createVariable(step.name, collection, 'FLOAT');
-      let valueToSet: any;
-
-      if (i === baseStepIndex && baseVariableRef) {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      } else if (baseVariableRef && stepRatios.length > 0 && !stepIsReference[i]) {
-        const baseVar = allVariables.find(v => v.name === baseVariableRef);
-        if (baseVar) {
-          const baseValueForMode = baseVar.valuesByMode[targetModeId];
-          if (typeof baseValueForMode === 'number') {
-            const calculatedValue = baseValueForMode * stepRatios[i];
-            valueToSet = Math.round(calculatedValue * 100) / 100;
-          } else {
-            valueToSet = await parseValue(step.value, 'FLOAT');
-          }
-        } else {
-          valueToSet = await parseValue(step.value, 'FLOAT');
-        }
-      } else {
-        valueToSet = await parseValue(step.value, 'FLOAT');
-      }
+      const valueToSet = await resolveManagedStepValue(
+        step,
+        i,
+        baseStepIndex,
+        stepIsReference,
+        stepRatios,
+        baseValue
+      );
 
       variable.setValueForMode(targetModeId, valueToSet);
+      finalStepVariables.push(variable);
     }
+
+    if (baseVariable && baseStepIndex !== -1) {
+      const storedSteps = buildStoredStepEntries(finalStepVariables, stepRatios, baseStepIndex);
+      persistStoredStepModeConfig(
+        baseVariable,
+        previousConfig,
+        targetModeId,
+        storedSteps,
+        modalState || buildStoredStepModalState(null, steps[baseStepIndex].name, storedSteps)
+      );
+    }
+
+    await fetchData();
+    figma.ui.postMessage({ type: 'update-success' });
+  } catch (error: any) {
+    figma.ui.postMessage({ type: 'update-error', error: error.message });
+  }
+}
+
+async function removeManagedSteps(sourceVariableId: string): Promise<void> {
+  try {
+    const sourceVariable = await figma.variables.getVariableByIdAsync(sourceVariableId);
+    if (!sourceVariable || sourceVariable.resolvedType !== 'FLOAT') {
+      throw new Error('Source variable not found');
+    }
+
+    const storedConfig = readStepGeneratorConfig(sourceVariable);
+    const deleteIds = new Set<string>();
+    const variables = await figma.variables.getLocalVariablesAsync('FLOAT');
+    const prefix = sourceVariable.name + '/';
+
+    if (storedConfig) {
+      for (const step of storedConfig.steps || []) {
+        if (!step.isBase && typeof step.id === 'string') {
+          deleteIds.add(step.id);
+        }
+      }
+      if (storedConfig.modes) {
+        for (const modeConfig of Object.values(storedConfig.modes)) {
+          for (const step of modeConfig.steps) {
+            if (!step.isBase && typeof step.id === 'string') {
+              deleteIds.add(step.id);
+            }
+          }
+        }
+      }
+    }
+
+    for (const variable of variables) {
+      if (
+        variable.variableCollectionId === sourceVariable.variableCollectionId &&
+        variable.name.startsWith(prefix)
+      ) {
+        deleteIds.add(variable.id);
+      }
+    }
+
+    for (const id of deleteIds) {
+      const variable = await figma.variables.getVariableByIdAsync(id);
+      if (variable) {
+        variable.remove();
+      }
+    }
+
+    clearStepGeneratorConfig(sourceVariable);
 
     await fetchData();
     figma.ui.postMessage({ type: 'update-success' });
@@ -2125,7 +2907,6 @@ async function removeSteps(
   modeId?: string
 ) {
   try {
-    // Delete all steps
     for (const id of deleteIds) {
       const variable = await figma.variables.getVariableByIdAsync(id);
       if (variable) {
@@ -2133,7 +2914,6 @@ async function removeSteps(
       }
     }
 
-    // Create single number
     const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
     if (!collection) throw new Error('Collection not found');
     const targetModeId = modeId || (collection.modes[0] ? collection.modes[0].modeId : null);
@@ -2230,7 +3010,8 @@ async function updateFromJson(data: { collections: CollectionData[], variables: 
 // Poll for changes
 async function checkForChanges() {
   const syncedManagedShades = await syncManagedShadeSources();
-  if (syncedManagedShades) {
+  const syncedManagedSteps = await syncManagedStepSources();
+  if (syncedManagedShades || syncedManagedSteps) {
     await fetchData();
     return;
   }
@@ -2315,15 +3096,23 @@ figma.ui.onmessage = async (msg: any) => {
       break;
 
     case 'create-steps':
-      await createSteps(msg.collectionId, msg.steps, msg.modeId);
+      await createSteps(msg.collectionId, msg.steps, msg.modeId, msg.modalState);
       break;
 
     case 'update-steps':
-      await updateSteps(msg.collectionId, msg.deleteIds, msg.steps, msg.modeId);
+      await updateSteps(msg.collectionId, msg.deleteIds, msg.steps, msg.modeId, msg.modalState);
       break;
 
     case 'remove-steps':
-      await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber, msg.modeId);
+      if (msg.sourceVariableId) {
+        await removeManagedSteps(msg.sourceVariableId);
+      } else {
+        await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber, msg.modeId);
+      }
+      break;
+
+    case 'get-step-modal-state':
+      await getStepModalState(msg.sourceVariableId, msg.modeId);
       break;
 
     case 'reorder-variable':
