@@ -195,16 +195,22 @@ export function StepsModal() {
       return;
     }
 
-    skipNextPreviewSyncRef.current = false;
+    // Update basic group info
     setGroupName(selectedNumberGroup.name);
     setExistingGroup(selectedNumberGroup.count > 1);
-    setRatioPreset(DEFAULT_RATIO_PRESET);
-    setCustomRatio(DEFAULT_CUSTOM_RATIO);
-    setStepsPreset(DEFAULT_STEPS_PRESET);
-    setStepsList(DEFAULT_STEPS_LIST);
-    setBaseStep(DEFAULT_BASE_STEP);
-    setEditableSteps([]);
-  }, [isOpen, selectedNumberGroup, selectedModeId]);
+
+    // Only reset form fields if NOT preselected (stored state will load in next effect)
+    const hasPreselected = !!preSelectedGroup;
+    if (!hasPreselected) {
+      skipNextPreviewSyncRef.current = false;
+      setRatioPreset(DEFAULT_RATIO_PRESET);
+      setCustomRatio(DEFAULT_CUSTOM_RATIO);
+      setStepsPreset(DEFAULT_STEPS_PRESET);
+      setStepsList(DEFAULT_STEPS_LIST);
+      setBaseStep(DEFAULT_BASE_STEP);
+      setEditableSteps([]);
+    }
+  }, [isOpen, selectedNumberGroup, selectedModeId, preSelectedGroup]);
 
   React.useEffect(() => {
     if (!isOpen || !selectedSourceVariableId) return;
