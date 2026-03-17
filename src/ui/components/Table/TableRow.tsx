@@ -7,6 +7,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
+import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
 
@@ -157,6 +158,9 @@ export const TableRow = memo(function TableRow({
           variable={variable}
           onShowColorMenu={onShowColorMenu}
         />
+      </td>
+      <td>
+        <CollectionCell variable={variable} />
       </td>
       <td className="accessibility-cell">
         {contrastResult ? (

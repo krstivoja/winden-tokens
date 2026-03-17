@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Winden Tokens - Professional Design Token Management for Figma</title>
+    <meta
+      name="description"
+      content="Free Figma plugin for managing design tokens at scale. Generate color palettes, number scales, visual graphs, WCAG contrast checking, and bulk editing."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+
+      .grid-pattern {
+        background-image:
+          linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+        background-size: 60px 60px;
+      }
+
+      .grid-pattern-strong {
+        background-image:
+          linear-gradient(rgba(99, 102, 241, 0.15) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
+        background-size: 80px 80px;
+      }
+
+      .grid-pattern-dark {
+        background-image:
+          linear-gradient(rgba(99, 102, 241, 0.2) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 102, 241, 0.2) 1px, transparent 1px);
+        background-size: 80px 80px;
+      }
+    </style>
+  </head>
+  <body class="bg-white antialiased">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="flex h-16 items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 text-sm font-bold text-white">
+              WT
+            </div>
+            <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+          </div>
+
+          <nav class="hidden items-center gap-8 md:flex">
+            <a href="#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Features</a>
+            <a href="#videos" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Videos</a>
+            <a href="#updates" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Updates</a>
+            <a href="#comparison" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Compare</a>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">GitHub</a>
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+              Get Plugin
+            </a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="relative overflow-hidden bg-gradient-to-b from-indigo-50 to-white py-24">
+      <div class="grid-pattern absolute inset-0"></div>
+      <div class="relative mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="text-center">
+          <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700">
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+            Free & Open Source
+          </div>
+
+          <h1 class="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
+            Design tokens
+            <span class="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">made manageable</span>
+          </h1>
+
+          <p class="mt-6 text-xl leading-relaxed text-slate-600">
+            The only Figma plugin with spreadsheet editing, automated palette generation, visual relationship graphs, and WCAG contrast checking—all in one place.
+          </p>
+
+          <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 hover:shadow-indigo-600/40 transition">
+              Install Free Plugin
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            </a>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="inline-flex items-center gap-2 rounded-lg border-2 border-slate-300 bg-white px-8 py-4 text-base font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition">
+              <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              View on GitHub
+            </a>
+          </div>
+
+          <div class="mt-16 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+            <img src="./assets/features/overview.png" alt="Winden Tokens interface" class="w-full rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- USPs -->
+    <section class="border-y border-slate-200 bg-white py-16">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="grid gap-8 md:grid-cols-3">
+          <div class="text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h3 class="mt-4 text-lg font-bold text-slate-900">10x Faster Workflows</h3>
+            <p class="mt-2 text-sm text-slate-600">Generate 50-950 shade palettes and entire spacing scales in seconds, not hours</p>
+          </div>
+          <div class="text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <h3 class="mt-4 text-lg font-bold text-slate-900">Built-in Accessibility</h3>
+            <p class="mt-2 text-sm text-slate-600">WCAG 2.1 contrast checking with AA/AAA badges for every color pair</p>
+          </div>
+          <div class="text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+            </div>
+            <h3 class="mt-4 text-lg font-bold text-slate-900">Visual Relationship Graphs</h3>
+            <p class="mt-2 text-sm text-slate-600">Interactive node graphs show token dependencies and aliases at a glance</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="grid-pattern-dark relative bg-black py-24">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-400">Features</h2>
+          <p class="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">
+            Six specialized views
+          </p>
+          <p class="mt-4 text-lg text-slate-300">
+            Everything you need to manage design tokens at scale
+          </p>
+        </div>
+
+        <div class="mt-16 grid gap-8 lg:grid-cols-3">
+          <!-- Feature 1 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Table View</h3>
+            <p class="mt-2 text-slate-600">Spreadsheet-style editing with inline controls, collection switching, and instant search</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Edit 100s of variables faster than native UI
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Move variables between collections via dropdown
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Auto-groups by slash-separated paths
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 2 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Shades Generator</h3>
+            <p class="mt-2 text-slate-600">Generate 50-950 color palettes with advanced Bezier curve controls</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Bezier curves for lightness, saturation, hue
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Managed shades auto-update when base changes
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Real-time preview with accessibility badges
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 3 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Steps Generator</h3>
+            <p class="mt-2 text-slate-600">Create spacing/sizing scales with Golden Ratio, Major Third, and more</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                8 preset ratios + custom values
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Reference existing variables as base
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                T-shirt, numeric, or custom naming
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 4 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Node Graphs</h3>
+            <p class="mt-2 text-slate-600">Interactive graphs for colors and numbers showing all token relationships</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Drag to create variable aliases
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Visualize complex token hierarchies
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Pan, zoom, and keyboard shortcuts
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 5 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Contrast Checker</h3>
+            <p class="mt-2 text-slate-600">WCAG 2.1 compliance with real-time AA/AAA badges</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Per-variable or per-group checking
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Pick colors or reference variables
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Instant ratio calculation
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 6 -->
+          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+            </div>
+            <h3 class="mt-6 text-xl font-bold text-slate-900">Bulk Editing</h3>
+            <p class="mt-2 text-slate-600">CSV and JSON editors for importing/exporting entire token sets</p>
+            <ul class="mt-4 space-y-2 text-sm text-slate-600">
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Paste from spreadsheets (CSV)
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                JSON editor for power users
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Preview before applying
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Videos -->
+    <section id="videos" class="border-t border-slate-200 bg-white py-24">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-600">Learn</h2>
+          <p class="mt-2 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+            Video Tutorials
+          </p>
+          <p class="mt-4 text-lg text-slate-600">
+            Watch step-by-step guides to master every feature
+          </p>
+        </div>
+
+        <div id="videos-container" class="mt-16 grid gap-8 lg:grid-cols-2">
+          <!-- Videos will be loaded here dynamically -->
+          <div class="col-span-full text-center text-slate-500">
+            <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-slate-300 border-r-transparent"></div>
+            <p class="mt-4">Loading videos...</p>
+          </div>
+        </div>
+
+        <div class="mt-8 text-center">
+          <a href="https://youtube.com/@yourchannel" target="_blank" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-indigo-600 transition">
+            View all tutorials
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Updates -->
+    <section id="updates" class="border-t border-slate-200 bg-slate-50 py-24">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-600">What's New</h2>
+          <p class="mt-2 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+            Latest Updates
+          </p>
+          <p class="mt-4 text-lg text-slate-600">
+            Recent improvements and new features
+          </p>
+        </div>
+
+        <div class="mx-auto mt-16 max-w-3xl">
+          <div class="space-y-8">
+            <!-- Update 1 -->
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-slate-900">Version 1.5.0 - Multi-Mode Support</h3>
+                    <span class="text-sm text-slate-500">March 2025</span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Added full support for Light/Dark modes and custom mode switching. You can now edit variables across all modes simultaneously.
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">New Feature</span>
+                    <span class="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">Multi-Mode</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Update 2 -->
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-slate-900">Version 1.4.0 - Performance Improvements</h3>
+                    <span class="text-sm text-slate-500">February 2025</span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Significantly improved rendering speed for large token sets. Tables with 500+ variables now load instantly.
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Performance</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Update 3 -->
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-slate-900">Version 1.3.0 - Node Graphs</h3>
+                    <span class="text-sm text-slate-500">January 2025</span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Introduced visual relationship graphs for colors and numbers. Drag connections to create aliases and visualize token hierarchies.
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">New Feature</span>
+                    <span class="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">Visualization</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-8 text-center">
+            <a href="https://github.com/krstivoja/winden-tokens/releases" target="_blank" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-indigo-600 transition">
+              View all releases
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison -->
+    <section id="comparison" class="bg-white py-24">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-base font-semibold uppercase tracking-wider text-indigo-600">Comparison</h2>
+          <p class="mt-2 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+            vs Native Figma Variables
+          </p>
+          <p class="mt-4 text-lg text-slate-600">
+            Figma provides the foundation. Winden Tokens adds the workflows.
+          </p>
+        </div>
+
+        <div class="mt-12 overflow-hidden rounded-2xl border border-slate-200 shadow-lg">
+          <table class="w-full">
+            <thead class="border-b-2 border-slate-200 bg-slate-50">
+              <tr>
+                <th class="px-6 py-4 text-left text-sm font-bold text-slate-900">Feature</th>
+                <th class="px-6 py-4 text-center text-sm font-bold text-slate-900">Winden Tokens</th>
+                <th class="px-6 py-4 text-center text-sm font-bold text-slate-900">Native Figma</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 bg-white">
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Spreadsheet-style editing</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Yes
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm text-slate-500">Limited</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Move variables between collections</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Dropdown
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm text-slate-500">Manual copy/paste</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Auto-generate 50-950 color palettes</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Bezier curves
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Number scale generator (Golden Ratio, etc.)</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    8 presets
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Visual node graphs for relationships</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Colors + Numbers
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">WCAG contrast checking</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    AA/AAA badges
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">CSV/JSON batch editing</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Both
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Auto-sync with native variables (2s)</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Yes
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm text-slate-500">N/A</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Multi-mode support (Light/Dark)</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Yes
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Yes
+                  </span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">Group operations (move, edit, contrast)</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    Yes
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm text-slate-500">Manual only</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 text-sm font-medium text-slate-900">All variable types (Color, Number, String, Boolean)</td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    All 4
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    All 4
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="grid-pattern border-t border-slate-800 bg-black py-24">
+      <div class="mx-auto max-w-4xl px-6 text-center lg:px-8">
+        <h2 class="text-4xl font-black tracking-tight text-white sm:text-5xl">
+          Manage tokens like a pro
+        </h2>
+        <p class="mt-6 text-xl text-slate-300">
+          Free, open source, and used by designers at top companies.
+        </p>
+        <div class="mt-10">
+          <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-white px-8 py-4 text-lg font-semibold text-slate-900 shadow-lg hover:bg-slate-100 transition">
+            Install Free Plugin
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 bg-white py-12">
+      <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="grid gap-12 md:grid-cols-3">
+          <div>
+            <div class="flex items-center gap-3">
+              <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 text-sm font-bold text-white">
+                WT
+              </div>
+              <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+            </div>
+            <p class="mt-3 text-sm text-slate-600">
+              Professional design token management for Figma
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Resources</h3>
+            <ul class="mt-4 space-y-3">
+              <li>
+                <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+                  Figma Community
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+                  GitHub Repository
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/krstivoja/winden-tokens/issues" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+                  Report Issues
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">License</h3>
+            <p class="mt-4 text-sm text-slate-600">
+              MIT licensed • Free forever • Contributions welcome
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-8 border-t border-slate-200 pt-8 text-center text-sm text-slate-600">
+          <p>&copy; 2025 Winden Tokens. Built by Marko Krstic.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // YouTube API Configuration
+      const YOUTUBE_API_KEY = 'YOUR_YOUTUBE_API_KEY'; // Replace with your API key
+      const PLAYLIST_ID = 'YOUR_PLAYLIST_ID'; // Replace with your playlist ID
+
+      // Function to fetch latest videos from YouTube playlist
+      async function loadYouTubeVideos() {
+        const container = document.getElementById('videos-container');
+
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=3&playlistId=${PLAYLIST_ID}&key=${YOUTUBE_API_KEY}`
+          );
+
+          if (!response.ok) {
+            throw new Error('Failed to fetch videos');
+          }
+
+          const data = await response.json();
+
+          // Clear loading state
+          container.innerHTML = '';
+
+          // Check if we have videos
+          if (!data.items || data.items.length === 0) {
+            container.innerHTML = `
+              <div class="col-span-full text-center text-slate-500">
+                <p>No videos available yet. Check back soon!</p>
+              </div>
+            `;
+            return;
+          }
+
+          // Render videos
+          data.items.forEach(item => {
+            const videoId = item.snippet.resourceId.videoId;
+            const title = item.snippet.title;
+            const description = item.snippet.description.substring(0, 120) + '...';
+
+            const videoCard = `
+              <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition">
+                <div class="aspect-video w-full overflow-hidden rounded-lg bg-slate-100">
+                  <iframe
+                    class="h-full w-full"
+                    src="https://www.youtube.com/embed/${videoId}"
+                    title="${title}"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                  </iframe>
+                </div>
+                <h3 class="mt-4 text-xl font-bold text-slate-900">${title}</h3>
+                <p class="mt-2 text-sm text-slate-600">${description}</p>
+              </div>
+            `;
+
+            container.innerHTML += videoCard;
+          });
+
+        } catch (error) {
+          console.error('Error loading YouTube videos:', error);
+          container.innerHTML = `
+            <div class="col-span-full text-center text-slate-500">
+              <p>Unable to load videos. Please try again later.</p>
+            </div>
+          `;
+        }
+      }
+
+      // Load videos when page loads
+      if (YOUTUBE_API_KEY !== 'YOUR_YOUTUBE_API_KEY' && PLAYLIST_ID !== 'YOUR_PLAYLIST_ID') {
+        loadYouTubeVideos();
+      } else {
+        document.getElementById('videos-container').innerHTML = `
+          <div class="col-span-full rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-12 text-center">
+            <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <h3 class="mt-4 text-lg font-semibold text-slate-900">Setup Required</h3>
+            <div class="mx-auto mt-4 max-w-xl space-y-2 text-left text-sm text-slate-600">
+              <p><strong>To display YouTube videos:</strong></p>
+              <ol class="ml-6 list-decimal space-y-1">
+                <li>Get a YouTube Data API v3 key from <a href="https://console.developers.google.com" target="_blank" class="text-indigo-600 hover:underline">Google Cloud Console</a></li>
+                <li>Find your playlist ID (it's in the URL: youtube.com/playlist?list=<strong>PLAYLIST_ID</strong>)</li>
+                <li>Replace <code class="rounded bg-slate-200 px-1 py-0.5">YOUR_YOUTUBE_API_KEY</code> and <code class="rounded bg-slate-200 px-1 py-0.5">YOUR_PLAYLIST_ID</code> in the script at the bottom of index.html</li>
+              </ol>
+            </div>
+          </div>
+        `;
+      }
+    </script>
+  </body>
+</html>

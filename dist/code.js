@@ -1287,6 +1287,95 @@ async function updateVariableName(id, newName) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+// Move variable to different collection
+async function moveVariableToCollection(variableId, targetCollectionId) {
+    try {
+        const variable = await figma.variables.getVariableByIdAsync(variableId);
+        const targetCollection = await figma.variables.getVariableCollectionByIdAsync(targetCollectionId);
+        if (!variable || !targetCollection) {
+            figma.ui.postMessage({ type: 'update-error', error: 'Variable or collection not found' });
+            return;
+        }
+        // Get source collection
+        const sourceCollection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+        if (!sourceCollection) {
+            figma.ui.postMessage({ type: 'update-error', error: 'Source collection not found' });
+            return;
+        }
+        // Store variable data before deletion
+        const variableName = variable.name;
+        const variableType = variable.resolvedType;
+        const valuesByMode = {};
+        // Get all mode values from source collection
+        for (const modeId of Object.keys(variable.valuesByMode)) {
+            valuesByMode[modeId] = variable.valuesByMode[modeId];
+        }
+        // Delete the variable from source collection
+        variable.remove();
+        // Create new variable in target collection
+        const newVariable = figma.variables.createVariable(variableName, targetCollection, variableType);
+        // Map modes from source to target collection
+        // Use first mode of target collection if modes don't match
+        const targetModeId = targetCollection.modes[0].modeId;
+        const sourceModeId = sourceCollection.modes[0].modeId;
+        const valueToSet = valuesByMode[sourceModeId];
+        if (valueToSet !== undefined) {
+            newVariable.setValueForMode(targetModeId, valueToSet);
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+// Move group of variables to different collection
+async function moveGroupToCollection(variableIds, targetCollectionId) {
+    try {
+        const targetCollection = await figma.variables.getVariableCollectionByIdAsync(targetCollectionId);
+        if (!targetCollection) {
+            figma.ui.postMessage({ type: 'update-error', error: 'Target collection not found' });
+            return;
+        }
+        // Move each variable in the group
+        for (const variableId of variableIds) {
+            const variable = await figma.variables.getVariableByIdAsync(variableId);
+            if (!variable)
+                continue;
+            // Skip if already in target collection
+            if (variable.variableCollectionId === targetCollectionId)
+                continue;
+            // Get source collection
+            const sourceCollection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+            if (!sourceCollection)
+                continue;
+            // Store variable data
+            const variableName = variable.name;
+            const variableType = variable.resolvedType;
+            const valuesByMode = {};
+            // Get all mode values
+            for (const modeId of Object.keys(variable.valuesByMode)) {
+                valuesByMode[modeId] = variable.valuesByMode[modeId];
+            }
+            // Delete from source
+            variable.remove();
+            // Create in target
+            const newVariable = figma.variables.createVariable(variableName, targetCollection, variableType);
+            // Transfer value from first mode
+            const targetModeId = targetCollection.modes[0].modeId;
+            const sourceModeId = sourceCollection.modes[0].modeId;
+            const valueToSet = valuesByMode[sourceModeId];
+            if (valueToSet !== undefined) {
+                newVariable.setValueForMode(targetModeId, valueToSet);
+            }
+        }
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
 // Update variable value
 async function updateVariableValue(id, newValue, modeId) {
     try {
@@ -2324,6 +2413,12 @@ figma.ui.onmessage = async (msg) => {
             break;
         case 'update-variable-name':
             await updateVariableName(msg.id, msg.name);
+            break;
+        case 'move-variable-to-collection':
+            await moveVariableToCollection(msg.variableId, msg.targetCollectionId);
+            break;
+        case 'move-group-to-collection':
+            await moveGroupToCollection(msg.variableIds, msg.targetCollectionId);
             break;
         case 'update-variable-value':
             await updateVariableValue(msg.id, msg.value, msg.modeId);

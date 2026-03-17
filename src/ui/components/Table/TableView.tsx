@@ -76,6 +76,7 @@ export function TableView() {
             <tr>
               <th className="col-name">NAME</th>
               <th className="col-value">VALUE</th>
+              <th className="col-collection">COLLECTION</th>
               <th className="col-accessibility">ACCESSIBILITY</th>
               <th className="col-modifier">MODIFIER</th>
               <th className="col-actions">ACTIONS</th>
@@ -83,7 +84,7 @@ export function TableView() {
           </thead>
           <tbody>
             <tr className="empty-state-row">
-              <td colSpan={5}>
+              <td colSpan={6}>
                 <div className="empty-state">No variables yet</div>
               </td>
             </tr>
@@ -100,6 +101,7 @@ export function TableView() {
           <tr>
             <th className="col-name">NAME</th>
             <th className="col-value">VALUE</th>
+            <th className="col-collection">COLLECTION</th>
             <th className="col-accessibility">ACCESSIBILITY</th>
             <th className="col-modifier">MODIFIER</th>
             <th className="col-actions">ACTIONS</th>
