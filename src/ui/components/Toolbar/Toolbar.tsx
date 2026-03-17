@@ -7,6 +7,7 @@ import { PlusIcon, SearchIcon } from '../Icons';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
 import { VariableTypeFilters } from './VariableTypeFilters';
+import { ModeSelector } from './ModeSelector';
 import { useModalContext } from '../Modals/ModalContext';
 
 interface ToolbarProps {
@@ -78,6 +79,7 @@ export function Toolbar({ status }: ToolbarProps) {
         >
           <span className="icon"><PlusIcon /></span>
         </button>
+        <ModeSelector />
       </div>
 
       <div className="toolbar-divider" />

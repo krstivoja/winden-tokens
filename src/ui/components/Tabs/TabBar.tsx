@@ -5,8 +5,8 @@ import { RefreshIcon, ExpandIcon, CollapseIcon } from '../Icons';
 import { post } from '../../hooks/usePluginMessages';
 
 interface TabBarProps {
-  activeTab: 'table' | 'json' | 'node-colors' | 'node-numbers';
-  onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers') => void;
+  activeTab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
+  onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings') => void;
 }
 
 export function TabBar({ activeTab, onTabChange }: TabBarProps) {
@@ -57,6 +57,12 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         onClick={() => onTabChange('node-numbers')}
       >
         Node Numbers
+      </button>
+      <button
+        className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
+        onClick={() => onTabChange('settings')}
+      >
+        Settings
       </button>
       <div className="spacer" />
       <button

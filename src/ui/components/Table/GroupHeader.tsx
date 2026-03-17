@@ -7,6 +7,7 @@ import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
 import { ContrastPicker } from './ContrastPicker';
+import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';
 
 interface GroupHeaderProps {
@@ -162,6 +163,9 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
         </div>
       </td>
       <td></td>
+      <td>
+        <GroupCollectionCell variables={variables} />
+      </td>
       <td className="accessibility-cell">
         {groupType === 'COLOR' && (
           <div

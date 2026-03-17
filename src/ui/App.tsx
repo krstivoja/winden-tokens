@@ -15,8 +15,9 @@ import { ColorReferenceModal } from './components/Modals/ColorReferenceModal';
 import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
 import { RelationshipsView } from './components/Relationships/RelationshipsView';
+import { SettingsView } from './components/Tabs/SettingsView';
 
-export type ActiveTab = 'table' | 'json' | 'node-colors' | 'node-numbers';
+export type ActiveTab = 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
 
 export function App() {
   const { setData } = useAppContext();
@@ -27,6 +28,7 @@ export function App() {
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
       console.log('[UI] data-loaded received:', msg.collections?.length, 'collections,', msg.variables?.length, 'variables');
+      console.log('[UI] Collections with modes:', msg.collections);
       setData(msg.collections || [], msg.variables || [], msg.shadeGroups || []);
       setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },
@@ -76,6 +78,12 @@ export function App() {
       {activeTab === 'node-numbers' && (
         <div id="node-numbers-tab" className="tab-content active">
           <RelationshipsView variableType="FLOAT" />
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div id="settings-tab" className="tab-content active">
+          <SettingsView />
         </div>
       )}
 

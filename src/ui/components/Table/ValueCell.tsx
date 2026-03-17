@@ -11,34 +11,48 @@ interface ValueCellProps {
 }
 
 export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
-  const { variables } = useAppContext();
-  const [inputValue, setInputValue] = useState(variable.value);
+  const { variables, selectedModeId } = useAppContext();
+
+  // Get the value for the selected mode, fallback to first mode value
+  const currentValue = (selectedModeId && variable.valuesByMode[selectedModeId])
+    ? variable.valuesByMode[selectedModeId]
+    : variable.value;
+
+  const [inputValue, setInputValue] = useState(currentValue);
 
   const handleValueChange = useCallback((newValue: string) => {
-    post({ type: 'update-variable-value', id: variable.id, value: newValue });
-  }, [variable.id]);
+    post({
+      type: 'update-variable-value',
+      id: variable.id,
+      value: newValue,
+      modeId: selectedModeId
+    });
+  }, [variable.id, selectedModeId]);
 
   const handleBlur = useCallback(() => {
-    if (inputValue !== variable.value) {
+    if (inputValue !== currentValue) {
       handleValueChange(inputValue);
     }
-  }, [inputValue, variable.value, handleValueChange]);
+  }, [inputValue, currentValue, handleValueChange]);
 
-  // Update local state when prop changes
+  // Update local state when prop changes or mode changes
   React.useEffect(() => {
-    setInputValue(variable.value);
-  }, [variable.value]);
+    setInputValue(currentValue);
+  }, [currentValue]);
 
   if (variable.resolvedType === 'COLOR') {
     // Check if this is a reference (format: {variableName})
-    const refMatch = variable.value.match(/^\{(.+)\}$/);
-    let displayColor = variable.value;
+    const refMatch = currentValue.match(/^\{(.+)\}$/);
+    let displayColor = currentValue;
 
     if (refMatch) {
       const refName = refMatch[1];
       const refVariable = variables.find(rv => rv.name === refName);
       if (refVariable && refVariable.resolvedType === 'COLOR') {
-        displayColor = refVariable.value;
+        // Get the referenced variable's value for the selected mode
+        displayColor = (selectedModeId && refVariable.valuesByMode[selectedModeId])
+          ? refVariable.valuesByMode[selectedModeId]
+          : refVariable.value;
       } else {
         displayColor = '#888888';
       }
@@ -48,7 +62,7 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
       <div className="color-value-cell">
         <div
           className="color-swatch"
-          onClick={(e) => onShowColorMenu(e, variable.id, variable.value)}
+          onClick={(e) => onShowColorMenu(e, variable.id, currentValue)}
         >
           <div
             className="color-swatch-inner"
@@ -70,13 +84,13 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
       <div className="cell">
         <div className="bool-toggle">
           <button
-            className={variable.value === 'true' ? 'active' : ''}
+            className={currentValue === 'true' ? 'active' : ''}
             onClick={() => handleValueChange('true')}
           >
             True
           </button>
           <button
-            className={variable.value === 'false' ? 'active' : ''}
+            className={currentValue === 'false' ? 'active' : ''}
             onClick={() => handleValueChange('false')}
           >
             False
