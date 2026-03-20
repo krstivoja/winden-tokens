@@ -99,14 +99,17 @@
 // ── React Flow custom node styles ──────────────────────────────────
 
 .rf-group-box {
-  background: white;
-  border: 1px solid black;
+  display: flex;
+  flex-direction: column;
+  background: #f0f0f0;
+  border: 1px solid #4a4a4a;
   border-radius: 4px;
   overflow: visible;
   font-family: var(--font-family);
 
   &.shader {
     border-color: #b86e00;
+    background: #fff4df;
   }
 }
 
@@ -209,8 +212,13 @@
 }
 
 .rf-group-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  background: #fff;
+  border-radius: 5px 5px 4px 4px;
+  border: 1px solid #d4d4d4;
 }
 
 .rf-variable-row {

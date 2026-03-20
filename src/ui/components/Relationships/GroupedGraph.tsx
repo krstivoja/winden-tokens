@@ -39,6 +39,7 @@ const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
 const GENERATED_CONNECTION_COLOR = '#b86e00';
 const REFERENCE_CONNECTION_COLOR = '#1877f2';
+const IDLE_HANDLE_BORDER_COLOR = '#4a4a4a';
 const DEFAULT_GROUP_CHILD_NAME = 'base';
 
 // ── Interfaces ─────────────────────────────────────────────────────
@@ -552,7 +553,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
   return (
     <div
       className={`rf-group-box ${group.kind}`}
-      style={{ width: GROUP_WIDTH, height }}
+      style={{ width: GROUP_WIDTH, height, padding: 2 }}
     >
       {/* Header */}
       <div
@@ -658,7 +659,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 style={{
                   top: ROW_HEIGHT / 2,
                   background: hasInput ? inputColor : 'white',
-                  borderColor: hasInput ? inputColor : 'black',
+                  borderColor: hasInput ? inputColor : IDLE_HANDLE_BORDER_COLOR,
                 }}
               />
 
@@ -725,7 +726,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                   style={{
                     top: ROW_HEIGHT / 2,
                     background: hasOutput ? outputColor : 'white',
-                    borderColor: hasOutput ? outputColor : 'black',
+                    borderColor: hasOutput ? outputColor : IDLE_HANDLE_BORDER_COLOR,
                   }}
                 />
               )}
