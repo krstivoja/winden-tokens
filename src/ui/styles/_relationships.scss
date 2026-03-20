@@ -107,7 +107,7 @@
   background: white;
   border: 1px solid black;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
   font-family: var(--font-family);
 
   &.shader {
@@ -122,6 +122,8 @@
   padding: 0 12px;
   cursor: move;
   user-select: none;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
 }
 
 .rf-group-title {
@@ -184,22 +186,48 @@
 
 // React Flow handles
 .rf-handle {
-  width: 8px !important;
-  height: 8px !important;
+  width: 12px !important;
+  height: 12px !important;
   border-radius: 50% !important;
-  border-width: 1px !important;
+  border-width: 2px !important;
   border-style: solid !important;
   transition: transform 0.15s ease;
+  z-index: 2 !important;
+  transform-origin: center center;
 
-  &:hover {
-    transform: scale(1.5);
+  &.react-flow__handle-left:hover {
+    transform: translate(-50%, -50%) scale(2);
+  }
+
+  &.react-flow__handle-right:hover {
+    transform: translate(50%, -50%) scale(2);
+  }
+
+  &.react-flow__handle-top:hover {
+    transform: translate(-50%, -50%) scale(2);
+  }
+
+  &.react-flow__handle-bottom:hover {
+    transform: translate(-50%, 50%) scale(2);
   }
 
   &.disabled {
     cursor: default !important;
 
-    &:hover {
-      transform: none;
+    &.react-flow__handle-left:hover {
+      transform: translate(-50%, -50%);
+    }
+
+    &.react-flow__handle-right:hover {
+      transform: translate(50%, -50%);
+    }
+
+    &.react-flow__handle-top:hover {
+      transform: translate(-50%, -50%);
+    }
+
+    &.react-flow__handle-bottom:hover {
+      transform: translate(-50%, 50%);
     }
   }
 }
