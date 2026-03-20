@@ -11,7 +11,7 @@ interface RelationshipsViewProps {
 }
 
 export function RelationshipsView({ variableType }: RelationshipsViewProps) {
-  const { variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
+  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
 
   // Count stats - filter by selected collections
   const filteredVars = variables.filter(
@@ -33,6 +33,7 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
       </div>
 
       <GroupedGraph
+        collections={collections}
         variables={variables}
         selectedCollectionIds={selectedCollectionIds}
         variableType={variableType}

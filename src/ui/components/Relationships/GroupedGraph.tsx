@@ -21,8 +21,9 @@ import type {
   EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ShadeGroupData, VariableData } from '../../types';
+import { CollectionData, ShadeGroupData, VariableData } from '../../types';
 import { parseColorToRgb, rgbObjToHex } from '../../utils/color';
+import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
 import { post } from '../../hooks/usePluginMessages';
 import { useModalContext } from '../Modals/ModalContext';
 
@@ -39,6 +40,7 @@ const DEFAULT_GROUP_CHILD_NAME = 'base';
 
 // ── Interfaces ─────────────────────────────────────────────────────
 interface GroupedGraphProps {
+  collections: CollectionData[];
   variables: VariableData[];
   selectedCollectionIds: Set<string>;
   variableType: 'COLOR' | 'FLOAT';
@@ -182,14 +184,12 @@ function formatVariableNode(
   variable: VariableData,
   varsByName: Map<string, VariableData>,
   isColorType: boolean,
+  collections: CollectionData[],
   selectedModeId: string | null
 ): VariableNode {
   const refPattern = /^\{(.+)\}$/;
 
-  // Get value for the selected mode, fall back to default value
-  const modeValue = selectedModeId && variable.valuesByMode?.[selectedModeId]
-    ? variable.valuesByMode[selectedModeId]
-    : variable.value;
+  const modeValue = getVariableValueForMode(collections, variable, selectedModeId);
 
   const refMatch = modeValue.match(refPattern);
   const isReference = !!refMatch;
@@ -199,16 +199,12 @@ function formatVariableNode(
   if (isReference && referenceName) {
     const refVar = varsByName.get(referenceName);
     if (refVar) {
-      const refVarModeValue = selectedModeId && refVar.valuesByMode?.[selectedModeId]
-        ? refVar.valuesByMode[selectedModeId]
-        : refVar.value;
+      const refVarModeValue = getVariableValueForMode(collections, refVar, selectedModeId);
       const refRefMatch = refVarModeValue.match(refPattern);
       if (refRefMatch) {
         const deepRef = varsByName.get(refRefMatch[1]);
         if (deepRef) {
-          resolvedValue = selectedModeId && deepRef.valuesByMode?.[selectedModeId]
-            ? deepRef.valuesByMode[selectedModeId]
-            : deepRef.value;
+          resolvedValue = getVariableValueForMode(collections, deepRef, selectedModeId);
         }
       } else {
         resolvedValue = refVarModeValue;
@@ -703,6 +699,7 @@ const edgeTypes: EdgeTypes = {
 // ── Inner component (needs ReactFlowProvider context) ──────────────
 
 function GroupedGraphInner({
+  collections,
   variables,
   selectedCollectionIds,
   variableType,
@@ -727,6 +724,10 @@ function GroupedGraphInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<GroupNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<CustomEdgeData>>([]);
+  const variablesById = useMemo(
+    () => new Map(variables.map(variable => [variable.id, variable])),
+    [variables]
+  );
 
   // Load saved positions on mount
   useEffect(() => {
@@ -829,8 +830,12 @@ function GroupedGraphInner({
   }, []);
 
   const handleDisconnect = useCallback((receiverVarId: string, resolvedValue: string) => {
-    post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId: selectedModeId });
-  }, [selectedModeId]);
+    const receiverVariable = variablesById.get(receiverVarId);
+    const modeId = receiverVariable
+      ? resolveModeIdForCollection(collections, receiverVariable.collectionId, selectedModeId)
+      : selectedModeId;
+    post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId });
+  }, [collections, selectedModeId, variablesById]);
 
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(selectedCollectionIds)[0];
@@ -883,7 +888,7 @@ function GroupedGraphInner({
         if (id !== sourceVariable.id) managedGeneratedIds.add(id);
       });
 
-      const sourceNode = formatVariableNode(sourceVariable, varsByName, true, selectedModeId);
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, true, collections, selectedModeId);
       const sourceGroupKey = `source:${sourceVariable.id}`;
       const shaderGroupKey = `shader:${sourceVariable.id}`;
       const shadesGroupKey = `shades:${sourceVariable.id}`;
@@ -891,7 +896,7 @@ function GroupedGraphInner({
       const managedShades = typeVars
         .filter(v => shadeGroup.deleteIds.includes(v.id) && v.id !== sourceVariable.id)
         .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
-      const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true, selectedModeId));
+      const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true, collections, selectedModeId));
       const shaderNode = createShaderNode(shadeGroup, sourceColor);
       const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
 
@@ -942,11 +947,11 @@ function GroupedGraphInner({
 
     managedStepGroups.forEach((stepGroup, index) => {
       const sourceVariable = stepGroup.sourceVariable;
-      const sourceNode = formatVariableNode(sourceVariable, varsByName, false, selectedModeId);
+      const sourceNode = formatVariableNode(sourceVariable, varsByName, false, collections, selectedModeId);
       const sourceGroupKey = `source:${sourceVariable.id}`;
       const shaderGroupKey = `shader:${sourceVariable.id}`;
       const stepsGroupKey = `steps:${sourceVariable.id}`;
-      const stepNodes = stepGroup.stepVariables.map(v => formatVariableNode(v, varsByName, false, selectedModeId));
+      const stepNodes = stepGroup.stepVariables.map(v => formatVariableNode(v, varsByName, false, collections, selectedModeId));
       const stepsNode = createStepsNode(sourceVariable.id, stepNodes.length);
       const outputNode: VariableNode = {
         id: `palette:${sourceVariable.id}`,
@@ -1017,7 +1022,7 @@ function GroupedGraphInner({
       const parts = variable.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
       const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType, selectedModeId));
+      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType, collections, selectedModeId));
       unmanagedGroupsMap.set(groupName, existing);
     });
 
@@ -1133,7 +1138,7 @@ function GroupedGraphInner({
     }
 
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
-  }, [variables, variableType, shadeGroups, isColorType, selectedModeId]);
+  }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
@@ -1254,8 +1259,12 @@ function GroupedGraphInner({
     if (sourceVarInfo.node.connectionsDisabled || targetVarInfo.node.connectionsDisabled) return;
 
     const newValue = `{${sourceVarInfo.node.name}}`;
-    post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId: selectedModeId });
-  }, [variableMap, selectedModeId]);
+    const targetVariable = variablesById.get(targetVarInfo.node.id);
+    const modeId = targetVariable
+      ? resolveModeIdForCollection(collections, targetVariable.collectionId, selectedModeId)
+      : selectedModeId;
+    post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId });
+  }, [collections, selectedModeId, variableMap, variablesById]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;

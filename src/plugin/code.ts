@@ -1477,6 +1477,45 @@ async function resolveSourceVariableNumber(
   return null;
 }
 
+async function resolveModeIdForVariable(
+  variable: Variable,
+  requestedModeId?: string | null
+): Promise<string | null> {
+  const availableModeIds = Object.keys(variable.valuesByMode);
+  if (availableModeIds.length === 0) {
+    return null;
+  }
+
+  if (requestedModeId && availableModeIds.includes(requestedModeId)) {
+    return requestedModeId;
+  }
+
+  if (requestedModeId) {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    let requestedModeName: string | null = null;
+
+    for (const collection of collections) {
+      const mode = collection.modes.find(candidate => candidate.modeId === requestedModeId);
+      if (mode) {
+        requestedModeName = mode.name;
+        break;
+      }
+    }
+
+    if (requestedModeName) {
+      const targetCollection = collections.find(collection => collection.id === variable.variableCollectionId);
+      const matchingMode = targetCollection
+        ? targetCollection.modes.find(mode => mode.name === requestedModeName)
+        : null;
+      if (matchingMode && availableModeIds.includes(matchingMode.modeId)) {
+        return matchingMode.modeId;
+      }
+    }
+  }
+
+  return availableModeIds[0];
+}
+
 async function buildUiState(): Promise<UIState> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const variables = await figma.variables.getLocalVariablesAsync();
@@ -1844,8 +1883,11 @@ async function updateVariableValue(id: string, newValue: string, modeId?: string
   try {
     const variable = await figma.variables.getVariableByIdAsync(id);
     if (variable) {
-      // Use provided modeId or fallback to first mode
-      const targetModeId = modeId || Object.keys(variable.valuesByMode)[0];
+      const targetModeId = await resolveModeIdForVariable(variable, modeId);
+      if (!targetModeId) {
+        throw new Error(`No mode available for variable: ${variable.name}`);
+      }
+
       const parsedValue = await parseValue(newValue, variable.resolvedType);
       variable.setValueForMode(targetModeId, parsedValue);
 
@@ -3128,8 +3170,8 @@ async function checkForChanges() {
   }
 }
 
-// Start polling
-setInterval(checkForChanges, 2000);
+// Start polling - check every 5 seconds to reduce overhead
+setInterval(checkForChanges, 5000);
 
 // Initial fetch
 fetchData();
