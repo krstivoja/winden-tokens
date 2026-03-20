@@ -41,6 +41,12 @@
     background: var(--bg-hover);
   }
 
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+    pointer-events: none;
+  }
+
   &-icon {
     width: 28px;
     padding: 0;

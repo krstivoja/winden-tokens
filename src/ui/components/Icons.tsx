@@ -61,6 +61,24 @@ export function RefreshIcon() {
   );
 }
 
+export function UndoIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <path d="M6.2 4.2 3 7.4l3.2 3.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 7.4h5.3a3.7 3.7 0 1 1 0 7.4H7.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function RedoIcon() {
+  return (
+    <svg viewBox="0 0 16 16">
+      <path d="m9.8 4.2 3.2 3.2-3.2 3.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7.4H6.7a3.7 3.7 0 1 0 0 7.4h1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function ExpandIcon() {
   return (
     <svg viewBox="0 0 16 16">

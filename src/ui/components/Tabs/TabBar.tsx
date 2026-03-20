@@ -1,17 +1,19 @@
 // Tab bar component
 
 import React from 'react';
-import { RefreshIcon, ExpandIcon, CollapseIcon } from '../Icons';
+import { RefreshIcon, ExpandIcon, CollapseIcon, UndoIcon, RedoIcon } from '../Icons';
 import { post } from '../../hooks/usePluginMessages';
 
 interface TabBarProps {
   activeTab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
   onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings') => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const DEFAULT_WINDOW_SIZE = { width: 750, height: 500 };
 
-export function TabBar({ activeTab, onTabChange }: TabBarProps) {
+export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [lastSize, setLastSize] = React.useState(DEFAULT_WINDOW_SIZE);
 
@@ -24,6 +26,16 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
 
   const handleRefresh = () => {
     post({ type: 'refresh' });
+  };
+
+  const handleUndo = () => {
+    if (!canUndo) return;
+    post({ type: 'undo' });
+  };
+
+  const handleRedo = () => {
+    if (!canRedo) return;
+    post({ type: 'redo' });
   };
 
   const handleToggleExpand = () => {
@@ -74,6 +86,24 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         Settings
       </button>
       <div className="spacer" />
+      <button
+        id="undo-btn"
+        className="btn btn-icon"
+        title="Undo (Ctrl/Cmd+Z)"
+        onClick={handleUndo}
+        disabled={!canUndo}
+      >
+        <span className="icon"><UndoIcon /></span>
+      </button>
+      <button
+        id="redo-btn"
+        className="btn btn-icon"
+        title="Redo (Ctrl/Cmd+Shift+Z)"
+        onClick={handleRedo}
+        disabled={!canRedo}
+      >
+        <span className="icon"><RedoIcon /></span>
+      </button>
       <button
         id="refresh-btn"
         className="btn btn-icon"
