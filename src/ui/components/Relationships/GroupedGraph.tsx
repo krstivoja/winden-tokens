@@ -553,6 +553,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
           const canRenameVariable = !node.isVirtual && (group.kind === 'standard' || group.kind === 'source');
           const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
+          const showOutputHandle = !node.connectionsDisabled || node.virtualType === 'shader';
 
           return (
             <div
@@ -628,18 +629,20 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               )}
 
               {/* Right handle (source) */}
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`${node.name}::out`}
-                className={`rf-handle ${hasOutput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
-                isConnectable={!node.connectionsDisabled}
-                style={{
-                  top: ROW_HEIGHT / 2,
-                  background: hasOutput ? outputColor : 'white',
-                  borderColor: hasOutput ? outputColor : 'black',
-                }}
-              />
+              {showOutputHandle && (
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`${node.name}::out`}
+                  className={`rf-handle ${hasOutput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
+                  isConnectable={!node.connectionsDisabled}
+                  style={{
+                    top: ROW_HEIGHT / 2,
+                    background: hasOutput ? outputColor : 'white',
+                    borderColor: hasOutput ? outputColor : 'black',
+                  }}
+                />
+              )}
             </div>
           );
         })}
