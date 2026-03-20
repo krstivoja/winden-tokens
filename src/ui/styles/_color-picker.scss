@@ -41,7 +41,7 @@
   height: 18px;
   border: 3px solid white;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 1px var(--border-soft), inset 0 0 0 1px var(--border-soft);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 2;
@@ -73,7 +73,7 @@
   background: transparent;
   border: 3px solid white;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 1px var(--border-soft), inset 0 0 0 1px var(--border-soft);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -105,7 +105,7 @@
   &.active {
     background: var(--bg);
     color: var(--text);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
   }
 }
 

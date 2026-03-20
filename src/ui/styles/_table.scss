@@ -160,7 +160,7 @@ tr.hidden-by-group {
   }
 
   &.danger:hover {
-    background: #ffe5e5;
+    background: var(--danger-bg);
     color: var(--danger);
   }
 
@@ -308,12 +308,12 @@ tr.drag-over-below {
   font-weight: 500;
 
   &.pass {
-    background: #e6f9f0;
+    background: var(--success-bg);
     color: var(--success);
   }
 
   &.fail {
-    background: #ffe5e5;
+    background: var(--danger-bg);
     color: var(--danger);
   }
 }
@@ -364,14 +364,14 @@ tr.drag-over-below {
   }
 
   &.dirty {
-    border-color: #d9a441;
-    background: #fff8e6;
-    color: #8a5a00;
+    border-color: var(--border-warning);
+    background: var(--warning-bg);
+    color: var(--text-on-warning);
 
     &:hover {
-      border-color: #c18400;
-      background: #fff2cc;
-      color: #8a5a00;
+      border-color: var(--border-warning-strong);
+      background: var(--warning-bg-strong);
+      color: var(--text-on-warning);
     }
   }
 }
@@ -426,7 +426,7 @@ tr.drag-over-below {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   z-index: 1000;
   min-width: 160px;
 

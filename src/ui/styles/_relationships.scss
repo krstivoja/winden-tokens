@@ -4,7 +4,9 @@
   flex: 1;
   overflow: hidden;
   position: relative;
-  background: url('./assets/dots-bg.svg') repeat;
+  background-color: var(--canvas-bg);
+  background-image: radial-gradient(circle, var(--canvas-dot) 0.8px, transparent 0.8px);
+  background-size: 20px 20px;
   display: flex;
   flex-direction: column;
 }
@@ -55,8 +57,8 @@
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -101,15 +103,15 @@
 .rf-group-box {
   display: flex;
   flex-direction: column;
-  background: #f0f0f0;
-  border: 1px solid #4a4a4a;
+  background: var(--graph-card-bg);
+  border: 1px solid var(--graph-card-border);
   border-radius: 4px;
   overflow: visible;
   font-family: var(--font-family);
 
   &.shader {
-    border-color: #b86e00;
-    background: #fff4df;
+    border-color: var(--graph-edge-generated);
+    background: var(--graph-card-shader-bg);
   }
 }
 
@@ -129,7 +131,7 @@
   min-width: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -148,7 +150,7 @@
   height: 20px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--bg);
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 600;
@@ -186,8 +188,8 @@
   padding: 6px 0;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-lg);
   z-index: 8;
 }
 
@@ -216,9 +218,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--graph-card-body-bg);
   border-radius: 5px 5px 4px 4px;
-  border: 1px solid #d4d4d4;
+  border: 1px solid var(--graph-swatch-border);
 }
 
 .rf-variable-row {
@@ -230,15 +232,15 @@
   margin: 0 1px;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.03);
+    background: var(--graph-row-hover);
   }
 
   &.shader-row {
     cursor: pointer;
-    background: rgba(255, 228, 184, 0.28);
+    background: var(--graph-row-shader);
 
     &:hover {
-      background: rgba(255, 228, 184, 0.5);
+      background: var(--graph-row-shader-hover);
     }
   }
 }
@@ -297,7 +299,7 @@
   width: 20px;
   height: 20px;
   border-radius: 2px;
-  border: 0.5px solid #ccc;
+  border: 0.5px solid var(--graph-swatch-border);
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
@@ -319,13 +321,13 @@
   pointer-events: none;
 
   &.shader {
-    background: #ffe4b8;
-    color: #8a5a00;
+    background: var(--graph-badge-shader-bg);
+    color: var(--graph-badge-shader-text);
   }
 
   &.palette {
-    background: #dceaff;
-    color: #2457a5;
+    background: var(--graph-badge-palette-bg);
+    color: var(--graph-badge-palette-text);
   }
 }
 
@@ -335,7 +337,7 @@
   transform: translateY(-50%);
   font-size: 12px;
   font-family: monospace;
-  color: #333;
+  color: var(--text);
   pointer-events: none;
   white-space: nowrap;
 
@@ -368,7 +370,7 @@
   height: 16px;
   border: 1px solid var(--border);
   border-radius: 3px;
-  background: #fff;
+  background: var(--bg);
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 600;
@@ -393,12 +395,12 @@
 // Connection line styles (used in custom edge)
 .connection-group {
   &:hover .connection-line {
-    stroke: #e53935;
+    stroke: var(--graph-edge-delete);
     stroke-width: 2.5;
   }
 
   &.generated:hover .connection-line {
-    stroke: #b86e00;
+    stroke: var(--graph-edge-generated);
     stroke-width: 2.5;
   }
 }

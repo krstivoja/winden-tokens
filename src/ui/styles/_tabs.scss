@@ -55,6 +55,8 @@
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text);
   padding: 12px;
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 11px;
@@ -67,6 +69,6 @@
 
   &.error {
     border-color: var(--danger);
-    background: #fff5f5;
+    background: var(--danger-bg-soft);
   }
 }

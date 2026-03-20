@@ -37,9 +37,12 @@ const HEADER_HEIGHT = 36;
 const GROUP_PADDING = 8;
 const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
-const GENERATED_CONNECTION_COLOR = '#b86e00';
-const REFERENCE_CONNECTION_COLOR = '#1877f2';
-const IDLE_HANDLE_BORDER_COLOR = '#4a4a4a';
+const GENERATED_CONNECTION_COLOR = 'var(--graph-edge-generated)';
+const REFERENCE_CONNECTION_COLOR = 'var(--graph-edge-reference)';
+const IDLE_HANDLE_BORDER_COLOR = 'var(--graph-handle-idle)';
+const IDLE_HANDLE_FILL_COLOR = 'var(--graph-card-body-bg)';
+const STANDARD_GROUP_HEADER_FILL = 'var(--graph-card-header-bg)';
+const SHADER_GROUP_HEADER_FILL = 'var(--graph-card-header-shader-bg)';
 const DEFAULT_GROUP_CHILD_NAME = 'base';
 
 // ── Interfaces ─────────────────────────────────────────────────────
@@ -658,7 +661,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 isConnectable={!node.connectionsDisabled}
                 style={{
                   top: ROW_HEIGHT / 2,
-                  background: hasInput ? inputColor : 'white',
+                  background: hasInput ? inputColor : IDLE_HANDLE_FILL_COLOR,
                   borderColor: hasInput ? inputColor : IDLE_HANDLE_BORDER_COLOR,
                 }}
               />
@@ -698,7 +701,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 className="rf-var-value"
                 style={{
                   right: showDeleteAction ? 42 : 16,
-                  color: node.isReference ? '#666' : '#999',
+                  color: node.isReference ? 'var(--text-secondary)' : 'var(--text-muted)',
                 }}
               >
                 {node.displayName}
@@ -725,7 +728,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                   isConnectable={!node.connectionsDisabled}
                   style={{
                     top: ROW_HEIGHT / 2,
-                    background: hasOutput ? outputColor : 'white',
+                    background: hasOutput ? outputColor : IDLE_HANDLE_FILL_COLOR,
                     borderColor: hasOutput ? outputColor : IDLE_HANDLE_BORDER_COLOR,
                   }}
                 />
@@ -1127,19 +1130,19 @@ function GroupedGraphInner({
         {
           key: sourceGroupKey, title: sourceVariable.name, variables: [sourceNode],
           x: 0, y: 0, initialX: 0, initialY: baseY,
-          kind: 'source', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
+          kind: 'source', sourceGroupName: sourceVariable.name, headerFill: STANDARD_GROUP_HEADER_FILL,
           collectionId: shadeGroup.collectionId,
         },
         {
           key: shaderGroupKey, title: 'Shader', variables: [shaderNode],
           x: 0, y: 0, initialX: GROUP_WIDTH + GROUP_GAP_X, initialY: baseY,
-          kind: 'shader', sourceGroupName: sourceVariable.name, headerFill: '#fff4df',
+          kind: 'shader', sourceGroupName: sourceVariable.name, headerFill: SHADER_GROUP_HEADER_FILL,
           collectionId: shadeGroup.collectionId,
         },
         {
           key: shadesGroupKey, title: `${sourceVariable.name} shades`, variables: [paletteNode, ...shadeNodes],
           x: 0, y: 0, initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2, initialY: baseY,
-          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
+          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: STANDARD_GROUP_HEADER_FILL,
           collectionId: shadeGroup.collectionId,
         },
       ];
@@ -1195,19 +1198,19 @@ function GroupedGraphInner({
         {
           key: sourceGroupKey, title: sourceVariable.name, variables: [sourceNode],
           x: 0, y: 0, initialX: 0, initialY: baseY,
-          kind: 'source', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
+          kind: 'source', sourceGroupName: sourceVariable.name, headerFill: STANDARD_GROUP_HEADER_FILL,
           collectionId: sourceVariable.collectionId,
         },
         {
           key: shaderGroupKey, title: 'Steps', variables: [stepsNode],
           x: 0, y: 0, initialX: GROUP_WIDTH + GROUP_GAP_X, initialY: baseY,
-          kind: 'shader', sourceGroupName: sourceVariable.name, headerFill: '#fff4df',
+          kind: 'shader', sourceGroupName: sourceVariable.name, headerFill: SHADER_GROUP_HEADER_FILL,
           collectionId: sourceVariable.collectionId,
         },
         {
           key: stepsGroupKey, title: `${sourceVariable.name} steps`, variables: [outputNode, ...stepNodes],
           x: 0, y: 0, initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2, initialY: baseY,
-          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
+          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: STANDARD_GROUP_HEADER_FILL,
           collectionId: sourceVariable.collectionId,
         },
       ];
@@ -1270,7 +1273,7 @@ function GroupedGraphInner({
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: primitiveY,
-        kind: 'standard', sourceGroupName: entry.groupName, headerFill: '#f0f0f0',
+        kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
       };
       groupsArray.push(groupData);
@@ -1289,7 +1292,7 @@ function GroupedGraphInner({
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: semanticY,
-        kind: 'standard', sourceGroupName: entry.groupName, headerFill: '#f0f0f0',
+        kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
       };
       groupsArray.push(groupData);

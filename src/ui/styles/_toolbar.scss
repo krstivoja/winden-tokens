@@ -60,20 +60,20 @@
   &-primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
 
     &:hover {
-      background: #0d8de5;
+      background: var(--accent-hover);
     }
   }
 
   &-danger {
     background: var(--danger);
     border-color: var(--danger);
-    color: white;
+    color: var(--text-on-danger);
 
     &:hover {
-      background: #c43030;
+      background: var(--danger-hover);
     }
   }
 }
@@ -115,7 +115,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   min-width: 200px;
   z-index: 100;
 }
@@ -192,7 +192,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   min-width: 150px;
   z-index: 100;
 
@@ -258,7 +258,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   min-width: 180px;
   z-index: 100;
 }
@@ -317,13 +317,13 @@
   border-radius: 4px;
 
   &.success {
-    background: #e6f9f0;
+    background: var(--success-bg);
     color: var(--success);
   }
 
   &.warning {
-    background: #fff8e6;
-    color: #b86e00;
+    background: var(--warning-bg);
+    color: var(--warning);
   }
 }
 

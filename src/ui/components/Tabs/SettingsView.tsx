@@ -3,8 +3,14 @@
 import React, { useState } from 'react';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
+import type { ThemeMode } from '../../App';
 
-export function SettingsView() {
+interface SettingsViewProps {
+  themeMode: ThemeMode;
+  onThemeModeChange: (themeMode: ThemeMode) => void;
+}
+
+export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps) {
   const { collections, variables } = useAppContext();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -29,6 +35,31 @@ export function SettingsView() {
 
   return (
     <div className="settings-view">
+      <div className="settings-section">
+        <h3 className="settings-heading">Appearance</h3>
+        <p className="settings-description">
+          Follow Figma automatically, or force a light or dark UI theme for this plugin.
+        </p>
+
+        <div className="settings-control">
+          <label className="settings-label" htmlFor="theme-mode-select">Theme</label>
+          <select
+            id="theme-mode-select"
+            className="settings-select"
+            value={themeMode}
+            onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
+          >
+            <option value="figma">Follow Figma</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+
+        <p className="settings-note">
+          Follow Figma uses the editor theme passed into the plugin via `themeColors`.
+        </p>
+      </div>
+
       <div className="settings-section">
         <h3 className="settings-heading">Danger Zone</h3>
         <p className="settings-description">
