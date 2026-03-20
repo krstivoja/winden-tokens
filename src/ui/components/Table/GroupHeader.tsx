@@ -122,8 +122,8 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    openStepsModal({ groupName });
-  }, [openStepsModal, groupName]);
+    openStepsModal({ groupName, collectionId: variables[0]?.collectionId });
+  }, [openStepsModal, groupName, variables]);
 
   // Close picker when clicking outside
   React.useEffect(() => {

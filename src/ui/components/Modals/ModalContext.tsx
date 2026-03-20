@@ -32,6 +32,7 @@ interface ShadesModalConfig {
 
 interface StepsModalConfig {
   groupName: string;
+  collectionId?: string;
 }
 
 interface ModalState {

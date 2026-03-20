@@ -114,8 +114,8 @@ export const TableRow = memo(function TableRow({
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    openStepsModal({ groupName: variable.name });
-  }, [openStepsModal, variable.name]);
+    openStepsModal({ groupName: variable.name, collectionId: variable.collectionId });
+  }, [openStepsModal, variable.collectionId, variable.name]);
 
   // Close picker when clicking outside
   useEffect(() => {

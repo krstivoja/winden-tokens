@@ -26,6 +26,9 @@ import { parseColorToRgb, rgbObjToHex } from '../../utils/color';
 import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
 import { post } from '../../hooks/usePluginMessages';
 import { useModalContext } from '../Modals/ModalContext';
+import { ColorValueMenu } from '../Table/ColorValueMenu';
+import { CollectionFilters } from '../Toolbar/CollectionFilters';
+import { ModeSelector } from '../Toolbar/ModeSelector';
 
 // ── Constants ──────────────────────────────────────────────────────
 const GROUP_WIDTH = 260;
@@ -115,7 +118,9 @@ type GroupNodeData = {
   variableType: 'COLOR' | 'FLOAT';
   connectedVars: Map<string, ConnectionFlags>;
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
+  onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;
   onAddVariable: (group: GroupData) => void;
+  onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
 };
@@ -511,7 +516,7 @@ function arrangeGroupsByConnectedBlocks(
 // ── Custom Node Component ──────────────────────────────────────────
 
 function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
-  const { group, isColorType, connectedVars, onGeneratorOpen, onAddVariable, onDeleteVariable } = data;
+  const { group, isColorType, connectedVars, onGeneratorOpen, onShowColorMenu, onAddVariable, onRenameVariable, onDeleteVariable } = data;
   const height = getGroupHeight(group);
   const canManageGroupVariables = group.kind === 'standard';
 
@@ -546,6 +551,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
           const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
           const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
+          const canRenameVariable = !node.isVirtual && (group.kind === 'standard' || group.kind === 'source');
           const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
 
           return (
@@ -571,7 +577,12 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
               {/* Color swatch */}
               {isColorType && !node.isVirtual && (
-                <div className="rf-color-swatch" style={{ background: node.color }} />
+                <div
+                  className="rf-color-swatch"
+                  style={{ background: node.color }}
+                  onClick={(e) => onShowColorMenu(e, node)}
+                  title="Edit color"
+                />
               )}
 
               {/* Virtual badge */}
@@ -582,7 +593,15 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               )}
 
               {/* Name */}
-              <span className="rf-var-name" style={{ left: node.isVirtual ? 52 : (isColorType ? 42 : 14) }}>
+              <span
+                className={`rf-var-name ${canRenameVariable ? 'editable' : ''}`}
+                style={{ left: node.isVirtual ? 52 : (isColorType ? 42 : 14) }}
+                onDoubleClick={canRenameVariable ? (e) => {
+                  e.stopPropagation();
+                  onRenameVariable(node);
+                } : undefined}
+                title={canRenameVariable ? 'Double-click to rename' : undefined}
+              >
                 {node.shortName}
               </span>
 
@@ -708,6 +727,7 @@ function GroupedGraphInner({
 }: GroupedGraphProps) {
   const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
+  const groupedGraphRef = useRef<HTMLDivElement>(null);
   const gridSettingsRef = useRef<HTMLDivElement>(null);
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
@@ -728,6 +748,34 @@ function GroupedGraphInner({
     () => new Map(variables.map(variable => [variable.id, variable])),
     [variables]
   );
+  const [colorMenu, setColorMenu] = useState<{
+    show: boolean;
+    position: { top: number; left: number };
+    variableId: string;
+    value: string;
+  }>({ show: false, position: { top: 0, left: 0 }, variableId: '', value: '' });
+
+  const hideColorMenu = useCallback(() => {
+    setColorMenu(prev => ({ ...prev, show: false }));
+  }, []);
+
+  const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
+    event.stopPropagation();
+    if (!isColorType || node.isVirtual || !groupedGraphRef.current) return;
+
+    const graphRect = groupedGraphRef.current.getBoundingClientRect();
+    const targetRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+
+    setColorMenu({
+      show: true,
+      position: {
+        top: targetRect.bottom - graphRect.top + 4,
+        left: targetRect.left - graphRect.left,
+      },
+      variableId: node.id,
+      value: node.value,
+    });
+  }, [isColorType]);
 
   // Load saved positions on mount
   useEffect(() => {
@@ -789,13 +837,27 @@ function GroupedGraphInner({
     };
   }, [isGridSettingsOpen]);
 
+  useEffect(() => {
+    if (!colorMenu.show) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('#color-value-menu') && !target.closest('.rf-color-swatch')) {
+        hideColorMenu();
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [colorMenu.show, hideColorMenu]);
+
   // Callbacks for node actions
   const handleGeneratorOpen = useCallback((group: GroupData, node: VariableNode) => {
     if (group.kind === 'shader' && node.virtualType === 'shader' && group.sourceGroupName) {
       if (isColorType) {
         openShadesModal({ groupName: group.sourceGroupName });
       } else {
-        openStepsModal({ groupName: group.sourceGroupName });
+        openStepsModal({ groupName: group.sourceGroupName, collectionId: group.collectionId });
       }
     }
   }, [isColorType, openShadesModal, openStepsModal]);
@@ -828,6 +890,30 @@ function GroupedGraphInner({
       post({ type: 'delete-variable', id: node.id });
     }
   }, []);
+
+  const handleRenameGraphVariable = useCallback((node: VariableNode) => {
+    if (node.isVirtual) return;
+
+    openInputModal({
+      title: `Rename ${node.shortName}`,
+      label: 'Variable name',
+      confirmText: 'Rename',
+      initialValue: node.shortName,
+      onConfirm: value => {
+        const variableName = normalizePathSegment(value);
+        if (!variableName || variableName === node.shortName) return;
+
+        const parts = node.name.split('/');
+        parts[parts.length - 1] = variableName;
+
+        post({
+          type: 'update-variable-name',
+          id: node.id,
+          name: parts.join('/'),
+        });
+      },
+    });
+  }, [openInputModal]);
 
   const handleDisconnect = useCallback((receiverVarId: string, resolvedValue: string) => {
     const receiverVariable = variablesById.get(receiverVarId);
@@ -921,7 +1007,7 @@ function GroupedGraphInner({
         {
           key: shadesGroupKey, title: `${sourceVariable.name} shades`, variables: [paletteNode, ...shadeNodes],
           x: 0, y: 0, initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2, initialY: baseY,
-          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#eef4ff',
+          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
           collectionId: shadeGroup.collectionId,
         },
       ];
@@ -989,7 +1075,7 @@ function GroupedGraphInner({
         {
           key: stepsGroupKey, title: `${sourceVariable.name} steps`, variables: [outputNode, ...stepNodes],
           x: 0, y: 0, initialX: (GROUP_WIDTH + GROUP_GAP_X) * 2, initialY: baseY,
-          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#eef4ff',
+          kind: 'shades', sourceGroupName: sourceVariable.name, headerFill: '#f0f0f0',
           collectionId: sourceVariable.collectionId,
         },
       ];
@@ -1188,7 +1274,9 @@ function GroupedGraphInner({
           variableType,
           connectedVars,
           onGeneratorOpen: handleGeneratorOpen,
+          onShowColorMenu: handleShowColorMenu,
           onAddVariable: handleAddVariableToGroup,
+          onRenameVariable: handleRenameGraphVariable,
           onDeleteVariable: handleDeleteGraphVariable,
           onDisconnect: handleDisconnect,
         },
@@ -1223,7 +1311,7 @@ function GroupedGraphInner({
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
       selectedCollectionIds, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
-      handleDeleteGraphVariable, handleDisconnect, setNodes, setEdges]);
+      handleRenameGraphVariable, handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1312,72 +1400,79 @@ function GroupedGraphInner({
   }, [gridLayoutDraft, variableType, handleArrangeGrid]);
 
   return (
-    <div className="grouped-graph" style={{ width: '100%', height: '100%' }}>
+    <div className="grouped-graph" style={{ width: '100%', height: '100%' }} ref={groupedGraphRef}>
       <div className="graph-top-controls" onMouseDown={e => e.stopPropagation()}>
-        <button
-          type="button"
-          className="graph-action-btn"
-          onClick={handleCreateGroup}
-          disabled={selectedCollectionIds.size === 0}
-        >
-          New Group
-        </button>
-        <button type="button" className="graph-action-btn" onClick={() => handleArrangeGrid()}>
-          Arrange Grid
-        </button>
-        <div ref={gridSettingsRef} className="graph-settings-menu" onMouseDown={e => e.stopPropagation()}>
+        <div className="toolbar-group">
           <button
             type="button"
             className="graph-action-btn"
-            onClick={() => {
-              if (isGridSettingsOpen) { setIsGridSettingsOpen(false); return; }
-              setGridLayoutDraft({
-                gapX: String(gridLayoutSettings.gapX),
-                gapY: String(gridLayoutSettings.gapY),
-              });
-              setIsGridSettingsOpen(true);
-            }}
+            onClick={handleCreateGroup}
+            disabled={selectedCollectionIds.size === 0}
           >
-            Grid Settings
+            New Group
           </button>
-          {isGridSettingsOpen && (
-            <div className="graph-settings-popover">
-              <div className="graph-settings-title">Grid Layout</div>
-              <div className="form-group">
-                <label htmlFor="grid-gap-x">Horizontal gap</label>
-                <input
-                  id="grid-gap-x" type="number" min="0" className="form-input"
-                  value={gridLayoutDraft.gapX}
-                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
-                />
+          <button type="button" className="graph-action-btn" onClick={() => handleArrangeGrid()}>
+            Arrange Grid
+          </button>
+          <div ref={gridSettingsRef} className="graph-settings-menu" onMouseDown={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className="graph-action-btn"
+              onClick={() => {
+                if (isGridSettingsOpen) { setIsGridSettingsOpen(false); return; }
+                setGridLayoutDraft({
+                  gapX: String(gridLayoutSettings.gapX),
+                  gapY: String(gridLayoutSettings.gapY),
+                });
+                setIsGridSettingsOpen(true);
+              }}
+            >
+              Grid Settings
+            </button>
+            {isGridSettingsOpen && (
+              <div className="graph-settings-popover">
+                <div className="graph-settings-title">Grid Layout</div>
+                <div className="form-group">
+                  <label htmlFor="grid-gap-x">Horizontal gap</label>
+                  <input
+                    id="grid-gap-x" type="number" min="0" className="form-input"
+                    value={gridLayoutDraft.gapX}
+                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="grid-gap-y">Vertical gap</label>
+                  <input
+                    id="grid-gap-y" type="number" min="0" className="form-input"
+                    value={gridLayoutDraft.gapY}
+                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
+                  />
+                </div>
+                <div className="graph-settings-actions">
+                  <button
+                    type="button" className="graph-action-btn"
+                    onClick={() => {
+                      setGridLayoutDraft({
+                        gapX: String(gridLayoutSettings.gapX),
+                        gapY: String(gridLayoutSettings.gapY),
+                      });
+                      setIsGridSettingsOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="graph-action-btn" onClick={handleApplyGridSettings}>
+                    Apply
+                  </button>
+                </div>
               </div>
-              <div className="form-group">
-                <label htmlFor="grid-gap-y">Vertical gap</label>
-                <input
-                  id="grid-gap-y" type="number" min="0" className="form-input"
-                  value={gridLayoutDraft.gapY}
-                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
-                />
-              </div>
-              <div className="graph-settings-actions">
-                <button
-                  type="button" className="graph-action-btn"
-                  onClick={() => {
-                    setGridLayoutDraft({
-                      gapX: String(gridLayoutSettings.gapX),
-                      gapY: String(gridLayoutSettings.gapY),
-                    });
-                    setIsGridSettingsOpen(false);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button type="button" className="graph-action-btn" onClick={handleApplyGridSettings}>
-                  Apply
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+        <div className="spacer" />
+        <div className="toolbar-group">
+          <CollectionFilters />
+          <ModeSelector />
         </div>
       </div>
       <ReactFlow
@@ -1395,6 +1490,14 @@ function GroupedGraphInner({
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
       />
+      {colorMenu.show && (
+        <ColorValueMenu
+          position={colorMenu.position}
+          variableId={colorMenu.variableId}
+          currentValue={colorMenu.value}
+          onClose={hideColorMenu}
+        />
+      )}
     </div>
   );
 }

@@ -9,9 +9,18 @@ interface TabBarProps {
   onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings') => void;
 }
 
+const DEFAULT_WINDOW_SIZE = { width: 750, height: 500 };
+
 export function TabBar({ activeTab, onTabChange }: TabBarProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  const [lastSize, setLastSize] = React.useState({ width: 0, height: 0 });
+  const [lastSize, setLastSize] = React.useState(DEFAULT_WINDOW_SIZE);
+
+  React.useEffect(() => {
+    const maxWidth = Math.max(400, window.screen.availWidth - 20);
+    const maxHeight = Math.max(300, window.screen.availHeight - 100);
+    post({ type: 'resize', width: maxWidth, height: maxHeight });
+    setIsExpanded(true);
+  }, []);
 
   const handleRefresh = () => {
     post({ type: 'refresh' });
@@ -25,8 +34,8 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
       post({ type: 'resize', width: maxWidth, height: maxHeight });
       setIsExpanded(true);
     } else {
-      const width = lastSize.width || 600;
-      const height = lastSize.height || 500;
+      const width = lastSize.width || DEFAULT_WINDOW_SIZE.width;
+      const height = lastSize.height || DEFAULT_WINDOW_SIZE.height;
       post({ type: 'resize', width, height });
       setIsExpanded(false);
     }
@@ -41,12 +50,6 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         Table
       </button>
       <button
-        className={`tab ${activeTab === 'json' ? 'active' : ''}`}
-        onClick={() => onTabChange('json')}
-      >
-        JSON
-      </button>
-      <button
         className={`tab ${activeTab === 'node-colors' ? 'active' : ''}`}
         onClick={() => onTabChange('node-colors')}
       >
@@ -57,6 +60,12 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
         onClick={() => onTabChange('node-numbers')}
       >
         Node Numbers
+      </button>
+      <button
+        className={`tab ${activeTab === 'json' ? 'active' : ''}`}
+        onClick={() => onTabChange('json')}
+      >
+        JSON
       </button>
       <button
         className={`tab ${activeTab === 'settings' ? 'active' : ''}`}

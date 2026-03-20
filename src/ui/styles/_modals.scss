@@ -27,6 +27,17 @@
 
   &.modal-steps {
     width: 560px;
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
   }
 }
 
@@ -391,6 +402,42 @@ rect.handle-active {
   max-height: 280px;
   overflow-y: auto;
   background: var(--bg);
+}
+
+.steps-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.steps-list-section {
+  flex: 1;
+  min-height: 0;
+}
+
+.steps-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-right: 8px;
+  gap: 8px;
+}
+
+.steps-table-header-grid {
+  display: grid;
+  grid-template-columns: 16px 24px minmax(0, 1fr) 180px 48px;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.steps-list-section .steps-editable-table {
+  height: 100%;
+  max-height: none;
 }
 
 .steps-editable-row {
