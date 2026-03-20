@@ -4,6 +4,8 @@ figma.showUI(__html__, { width: 750, height: 500, themeColors: true } as any);
 
 // Track variable state for change detection
 let lastDataHash = '';
+const RELAUNCH_COMMAND = 'open';
+const RELAUNCH_DESCRIPTION = 'Manage variables and design tokens';
 
 interface UIVariableData {
   id: string;
@@ -155,6 +157,13 @@ const SHADE_GENERATOR_CONFIG_KEY = 'shadeGeneratorConfig';
 const STEP_GENERATOR_CONFIG_KEY = 'stepGeneratorConfig';
 const DEFAULT_SHADE_LIGHT_VALUE = 5;
 const DEFAULT_SHADE_DARK_VALUE = 90;
+
+function setSidebarRelaunchData(): void {
+  const relaunchData = { [RELAUNCH_COMMAND]: RELAUNCH_DESCRIPTION };
+
+  figma.root.setRelaunchData(relaunchData);
+  figma.currentPage.setRelaunchData(relaunchData);
+}
 
 // Get stored variable order
 function getVariableOrder(): string[] {
@@ -3169,6 +3178,11 @@ async function checkForChanges() {
     figma.ui.postMessage({ type: 'changes-detected' });
   }
 }
+
+setSidebarRelaunchData();
+figma.on('currentpagechange', () => {
+  setSidebarRelaunchData();
+});
 
 // Start polling - check every 5 seconds to reduce overhead
 setInterval(checkForChanges, 5000);
