@@ -2278,6 +2278,169 @@ async function updateVariableName(id: string, newName: string) {
   }
 }
 
+function buildGroupVariableName(currentName: string, currentGroupName: string, nextGroupName: string): string {
+  if (currentName === currentGroupName) {
+    return nextGroupName;
+  }
+
+  const prefix = `${currentGroupName}/`;
+  if (currentName.indexOf(prefix) === 0) {
+    return `${nextGroupName}/${currentName.slice(prefix.length)}`;
+  }
+
+  return currentName;
+}
+
+function buildTemporaryGroupVariableName(variable: Variable, index: number): string {
+  const sanitizedId = variable.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `__tmp_group_${Date.now()}_${index}_${sanitizedId}`;
+}
+
+function doesGroupNameExist(
+  variables: Variable[],
+  collectionId: string,
+  groupName: string,
+  ignoredIds?: Set<string>
+): boolean {
+  const prefix = `${groupName}/`;
+
+  return variables.some(variable => {
+    if (variable.variableCollectionId !== collectionId) return false;
+    if (ignoredIds && ignoredIds.has(variable.id)) return false;
+    return variable.name === groupName || variable.name.indexOf(prefix) === 0;
+  });
+}
+
+function buildDuplicateGroupName(
+  variables: Variable[],
+  collectionId: string,
+  groupName: string
+): string {
+  let candidate = `${groupName} copy`;
+  let index = 2;
+
+  while (doesGroupNameExist(variables, collectionId, candidate)) {
+    candidate = `${groupName} copy ${index}`;
+    index++;
+  }
+
+  return candidate;
+}
+
+async function renameGroup(variableIds: string[], currentGroupName: string, nextGroupName: string) {
+  try {
+    const normalizedGroupName = nextGroupName.trim();
+    if (!normalizedGroupName || normalizedGroupName === currentGroupName) {
+      await fetchData();
+      figma.ui.postMessage({ type: 'update-success' });
+      return;
+    }
+
+    const groupVariables: Array<{ variable: Variable; originalName: string }> = [];
+    for (const variableId of variableIds) {
+      const variable = await figma.variables.getVariableByIdAsync(variableId);
+      if (variable) {
+        groupVariables.push({ variable, originalName: variable.name });
+      }
+    }
+
+    if (groupVariables.length === 0) {
+      throw new Error('Group variables not found');
+    }
+
+    const collectionId = groupVariables[0].variable.variableCollectionId;
+    const allVariables = await figma.variables.getLocalVariablesAsync();
+    const ignoredIds = new Set(groupVariables.map(entry => entry.variable.id));
+
+    if (doesGroupNameExist(allVariables, collectionId, normalizedGroupName, ignoredIds)) {
+      throw new Error(`Group already exists: ${normalizedGroupName}`);
+    }
+
+    groupVariables.forEach((entry, index) => {
+      entry.variable.name = buildTemporaryGroupVariableName(entry.variable, index);
+    });
+
+    groupVariables.forEach(entry => {
+      entry.variable.name = buildGroupVariableName(entry.originalName, currentGroupName, normalizedGroupName);
+    });
+
+    await fetchData();
+    figma.ui.postMessage({ type: 'update-success' });
+  } catch (error: any) {
+    figma.ui.postMessage({ type: 'update-error', error: error.message });
+  }
+}
+
+async function duplicateGroup(variableIds: string[], groupName: string) {
+  try {
+    const sourceVariables: Variable[] = [];
+    for (const variableId of variableIds) {
+      const variable = await figma.variables.getVariableByIdAsync(variableId);
+      if (variable) {
+        sourceVariables.push(variable);
+      }
+    }
+
+    if (sourceVariables.length === 0) {
+      throw new Error('Group variables not found');
+    }
+
+    const collectionId = sourceVariables[0].variableCollectionId;
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (!collection) {
+      throw new Error('Collection not found');
+    }
+
+    const allVariables = await figma.variables.getLocalVariablesAsync();
+    const nextGroupName = buildDuplicateGroupName(allVariables, collectionId, groupName);
+    const duplicatedVariables = new Map<string, Variable>();
+
+    sourceVariables
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(variable => {
+        const duplicatedVariable = figma.variables.createVariable(
+          buildGroupVariableName(variable.name, groupName, nextGroupName),
+          collection,
+          variable.resolvedType
+        );
+        duplicatedVariables.set(variable.id, duplicatedVariable);
+      });
+
+    sourceVariables.forEach(variable => {
+      const duplicatedVariable = duplicatedVariables.get(variable.id);
+      if (!duplicatedVariable) return;
+
+      Object.keys(variable.valuesByMode).forEach(modeId => {
+        const sourceValue = variable.valuesByMode[modeId];
+        let nextValue = sourceValue;
+
+        if (
+          sourceValue &&
+          typeof sourceValue === 'object' &&
+          'type' in sourceValue &&
+          (sourceValue as any).type === 'VARIABLE_ALIAS'
+        ) {
+          const aliasTarget = duplicatedVariables.get((sourceValue as any).id);
+          if (aliasTarget) {
+            nextValue = {
+              type: 'VARIABLE_ALIAS',
+              id: aliasTarget.id,
+            };
+          }
+        }
+
+        duplicatedVariable.setValueForMode(modeId, nextValue);
+      });
+    });
+
+    await fetchData();
+    figma.ui.postMessage({ type: 'update-success' });
+  } catch (error: any) {
+    figma.ui.postMessage({ type: 'update-error', error: error.message });
+  }
+}
+
 // Move variable to different collection
 async function moveVariableToCollection(variableId: string, targetCollectionId: string) {
   try {
@@ -3741,8 +3904,16 @@ figma.ui.onmessage = async (msg: any) => {
       await runMutationWithHistory(() => deleteGroup(msg.ids));
       break;
 
+    case 'rename-group':
+      await runMutationWithHistory(() => renameGroup(msg.variableIds, msg.groupName, msg.newGroupName));
+      break;
+
     case 'duplicate-variable':
       await runMutationWithHistory(() => duplicateVariable(msg.id));
+      break;
+
+    case 'duplicate-group':
+      await runMutationWithHistory(() => duplicateGroup(msg.variableIds, msg.groupName));
       break;
 
     case 'bulk-update-group':

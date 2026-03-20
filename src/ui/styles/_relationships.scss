@@ -122,6 +122,8 @@
 }
 
 .rf-group-title {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   color: #333;
@@ -130,7 +132,15 @@
   white-space: nowrap;
 }
 
-.rf-group-add-btn {
+.rf-group-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.rf-group-add-btn,
+.rf-group-menu-btn {
   width: 20px;
   height: 20px;
   border: 1px solid var(--border);
@@ -149,6 +159,52 @@
     background: var(--bg-hover);
     color: var(--text);
     border-color: var(--text-dim);
+  }
+}
+
+.rf-group-menu {
+  position: relative;
+}
+
+.rf-group-menu-btn {
+  padding: 0;
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.rf-group-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 132px;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  z-index: 8;
+}
+
+.rf-group-menu-item {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.danger {
+    color: var(--danger);
   }
 }
 

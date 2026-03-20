@@ -120,6 +120,9 @@ type GroupNodeData = {
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
   onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;
   onAddVariable: (group: GroupData) => void;
+  onRenameGroup: (group: GroupData) => void;
+  onDuplicateGroup: (group: GroupData) => void;
+  onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
@@ -516,9 +519,35 @@ function arrangeGroupsByConnectedBlocks(
 // ── Custom Node Component ──────────────────────────────────────────
 
 function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
-  const { group, isColorType, connectedVars, onGeneratorOpen, onShowColorMenu, onAddVariable, onRenameVariable, onDeleteVariable } = data;
+  const {
+    group,
+    isColorType,
+    connectedVars,
+    onGeneratorOpen,
+    onShowColorMenu,
+    onAddVariable,
+    onRenameGroup,
+    onDuplicateGroup,
+    onDeleteGroup,
+    onRenameVariable,
+    onDeleteVariable,
+  } = data;
   const height = getGroupHeight(group);
   const canManageGroupVariables = group.kind === 'standard';
+  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isGroupMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (groupMenuRef.current?.contains(event.target as globalThis.Node)) return;
+      setIsGroupMenuOpen(false);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => window.removeEventListener('mousedown', handlePointerDown);
+  }, [isGroupMenuOpen]);
 
   return (
     <div
@@ -532,13 +561,70 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
       >
         <span className="rf-group-title">{group.title}</span>
         {canManageGroupVariables && (
-          <button
-            type="button"
-            className="rf-group-add-btn"
-            onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
-          >
-            +
-          </button>
+          <div className="rf-group-header-actions">
+            <button
+              type="button"
+              className="rf-group-add-btn"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
+            >
+              +
+            </button>
+            <div className="rf-group-menu" ref={groupMenuRef}>
+              <button
+                type="button"
+                className="rf-group-menu-btn"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsGroupMenuOpen(open => !open);
+                }}
+                aria-label={`Open actions for ${group.title}`}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M3 4.5h10M3 8h10M3 11.5h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                </svg>
+              </button>
+              {isGroupMenuOpen && (
+                <div
+                  className="rf-group-menu-popover"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="rf-group-menu-item"
+                    onClick={() => {
+                      setIsGroupMenuOpen(false);
+                      onRenameGroup(group);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="rf-group-menu-item"
+                    onClick={() => {
+                      setIsGroupMenuOpen(false);
+                      onDuplicateGroup(group);
+                    }}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    className="rf-group-menu-item danger"
+                    onClick={() => {
+                      setIsGroupMenuOpen(false);
+                      onDeleteGroup(group);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -866,8 +952,7 @@ function GroupedGraphInner({
   }, [isColorType, openShadesModal, openStepsModal]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
-    const firstCollectionId = Array.from(selectedCollectionIds)[0];
-    if (!firstCollectionId || group.kind !== 'standard' || !group.sourceGroupName) return;
+    if (group.kind !== 'standard' || !group.sourceGroupName) return;
 
     openInputModal({
       title: `New Variable in ${group.sourceGroupName}`,
@@ -878,14 +963,57 @@ function GroupedGraphInner({
         if (!variableName) return;
         post({
           type: 'create-variable',
-          collectionId: firstCollectionId,
+          collectionId: group.collectionId,
           name: `${group.sourceGroupName}/${variableName}`,
           varType: variableType,
           value: getDefaultVariableValue(variableType),
         });
       },
     });
-  }, [openInputModal, selectedCollectionIds, variableType]);
+  }, [openInputModal, variableType]);
+
+  const handleRenameGroup = useCallback((group: GroupData) => {
+    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+
+    openInputModal({
+      title: `Rename ${group.sourceGroupName}`,
+      label: 'Group name',
+      confirmText: 'Rename',
+      initialValue: group.sourceGroupName,
+      onConfirm: value => {
+        const groupName = normalizePathSegment(value);
+        if (!groupName || groupName === group.sourceGroupName) return;
+
+        post({
+          type: 'rename-group',
+          variableIds: group.variables.filter(node => !node.isVirtual).map(node => node.id),
+          groupName: group.sourceGroupName,
+          newGroupName: groupName,
+        });
+      },
+    });
+  }, [openInputModal]);
+
+  const handleDuplicateGroup = useCallback((group: GroupData) => {
+    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+
+    post({
+      type: 'duplicate-group',
+      variableIds: group.variables.filter(node => !node.isVirtual).map(node => node.id),
+      groupName: group.sourceGroupName,
+    });
+  }, []);
+
+  const handleDeleteGraphGroup = useCallback((group: GroupData) => {
+    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+
+    const variableIds = group.variables.filter(node => !node.isVirtual).map(node => node.id);
+    if (variableIds.length === 0) return;
+
+    if (confirm(`Delete group ${group.sourceGroupName}?`)) {
+      post({ type: 'delete-group', ids: variableIds });
+    }
+  }, []);
 
   const handleDeleteGraphVariable = useCallback((node: VariableNode) => {
     if (node.isVirtual) return;
@@ -1279,6 +1407,9 @@ function GroupedGraphInner({
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
           onAddVariable: handleAddVariableToGroup,
+          onRenameGroup: handleRenameGroup,
+          onDuplicateGroup: handleDuplicateGroup,
+          onDeleteGroup: handleDeleteGraphGroup,
           onRenameVariable: handleRenameGraphVariable,
           onDeleteVariable: handleDeleteGraphVariable,
           onDisconnect: handleDisconnect,
@@ -1314,7 +1445,8 @@ function GroupedGraphInner({
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
       selectedCollectionIds, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
-      handleRenameGraphVariable, handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
+      handleRenameGroup, handleDuplicateGroup, handleDeleteGraphGroup, handleRenameGraphVariable,
+      handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
