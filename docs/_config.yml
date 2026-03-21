@@ -1,7 +1,7 @@
 title: Winden Tokens
 description: Professional Design Token Management for Figma
-baseurl: "/winden-tokens"
-url: "https://krstivoja.github.io"
+baseurl: "" # Empty for production (root domain)
+url: "https://krstivoja.github.io" # Update this to your actual domain
 
 # Build settings
 markdown: kramdown
