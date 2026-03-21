@@ -17,6 +17,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/ui/**/*", "vite.config.ts"],
+  "include": ["src/ui/**/*", ".storybook/**/*", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

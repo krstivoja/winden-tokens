@@ -6,9 +6,18 @@ import { VariableData } from '../../types';
 import { TableRow } from './TableRow';
 import { GroupHeader } from './GroupHeader';
 import { ColorValueMenu } from './ColorValueMenu';
+import { ExpandIcon, CollapseIcon } from '../Icons';
 
 export function TableView() {
-  const { filteredVariables, colorVariables, isGroupCollapsed, getGroupContrastColor, getSingleContrastColor } = useAppContext();
+  const {
+    filteredVariables,
+    colorVariables,
+    isGroupCollapsed,
+    collapseGroups,
+    expandGroups,
+    getGroupContrastColor,
+    getSingleContrastColor,
+  } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
@@ -56,6 +65,47 @@ export function TableView() {
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
 
+  const canExpandAllGroups = sortedGroups.some(groupName => isGroupCollapsed(groupName));
+  const canCollapseAllGroups = sortedGroups.some(groupName => !isGroupCollapsed(groupName));
+
+  const handleExpandAllGroups = useCallback(() => {
+    expandGroups(sortedGroups);
+  }, [expandGroups, sortedGroups]);
+
+  const handleCollapseAllGroups = useCallback(() => {
+    collapseGroups(sortedGroups);
+  }, [collapseGroups, sortedGroups]);
+
+  const nameHeader = (
+    <div className="table-header-content">
+      <span>NAME</span>
+      {sortedGroups.length > 0 && (
+        <div className="table-header-actions">
+          <button
+            type="button"
+            className="table-header-action"
+            onClick={handleExpandAllGroups}
+            disabled={!canExpandAllGroups}
+            title="Expand all groups"
+            aria-label="Expand all groups"
+          >
+            <ExpandIcon />
+          </button>
+          <button
+            type="button"
+            className="table-header-action"
+            onClick={handleCollapseAllGroups}
+            disabled={!canCollapseAllGroups}
+            title="Collapse all groups"
+            aria-label="Collapse all groups"
+          >
+            <CollapseIcon />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   // Close menus when clicking outside
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -74,7 +124,7 @@ export function TableView() {
         <table className="spreadsheet">
           <thead>
             <tr>
-              <th className="col-name">NAME</th>
+              <th className="col-name">{nameHeader}</th>
               <th className="col-value">VALUE</th>
               <th className="col-collection">COLLECTION</th>
               <th className="col-accessibility">ACCESSIBILITY</th>
@@ -99,7 +149,7 @@ export function TableView() {
       <table className="spreadsheet">
         <thead>
           <tr>
-            <th className="col-name">NAME</th>
+            <th className="col-name">{nameHeader}</th>
             <th className="col-value">VALUE</th>
             <th className="col-collection">COLLECTION</th>
             <th className="col-accessibility">ACCESSIBILITY</th>

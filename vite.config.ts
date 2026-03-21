@@ -13,13 +13,13 @@ export default defineConfig({
     rollupOptions: {
       input: path.resolve(__dirname, 'src/ui/index.html'),
       output: {
-        entryFileNames: 'ui.js',
-      },
-    },
+        entryFileNames: 'ui.js'
+      }
+    }
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
-  },
+      '@': path.resolve(__dirname, 'src')
+    }
+  }
 });

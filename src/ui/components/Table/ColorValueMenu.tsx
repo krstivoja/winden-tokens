@@ -4,9 +4,9 @@ import React from 'react';
 import { useModalContext } from '../Modals/ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { ShadesIcon, TypeIcons } from '../Icons';
 import { hexToRgb } from '../../utils/color';
 import { resolveModeIdForCollection } from '../../utils/modes';
+import { ColorMenu } from './ColorMenu';
 
 interface ColorValueMenuProps {
   position: { top: number; left: number };
@@ -45,19 +45,12 @@ export function ColorValueMenu({ position, variableId, currentValue, onClose }: 
   };
 
   return (
-    <div
+    <ColorMenu
       id="color-value-menu"
-      className="color-value-menu open"
-      style={{ top: position.top, left: position.left }}
-    >
-      <button onClick={handlePickColor}>
-        <span className="icon"><ShadesIcon /></span>
-        Pick Color
-      </button>
-      <button onClick={handleReferenceColor}>
-        <span className="icon">{TypeIcons.COLOR}</span>
-        Reference Color
-      </button>
-    </div>
+      position={position}
+      onPickColor={handlePickColor}
+      onReferenceColor={handleReferenceColor}
+      className="color-value-menu"
+    />
   );
 }

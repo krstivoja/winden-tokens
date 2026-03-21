@@ -24,6 +24,8 @@ interface AppContextValue extends AppState {
   toggleAllCollections: () => void;
   setSearchQuery: (query: string) => void;
   toggleGroup: (groupName: string) => void;
+  collapseGroups: (groupNames: string[]) => void;
+  expandGroups: (groupNames: string[]) => void;
   isGroupCollapsed: (groupName: string) => boolean;
   filteredVariables: VariableData[];
   colorVariables: VariableData[];
@@ -145,6 +147,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const collapseGroups = useCallback((groupNames: string[]) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      groupNames.forEach(groupName => next.add(groupName));
+      return next;
+    });
+  }, []);
+
+  const expandGroups = useCallback((groupNames: string[]) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      groupNames.forEach(groupName => next.delete(groupName));
+      return next;
+    });
+  }, []);
+
   const isGroupCollapsed = useCallback((groupName: string) => {
     return collapsedGroups.has(groupName);
   }, [collapsedGroups]);
@@ -244,6 +262,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleAllCollections,
     setSearchQuery,
     toggleGroup,
+    collapseGroups,
+    expandGroups,
     isGroupCollapsed,
     filteredVariables,
     colorVariables,
