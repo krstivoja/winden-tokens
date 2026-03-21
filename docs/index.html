@@ -653,58 +653,5 @@ layout: none
     </section>
 
     {% include footer.html %}
-
-    <!-- GSAP Animations -->
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
-    <script>
-      gsap.registerPlugin(ScrollTrigger);
-
-      // Wait for page to load before animating
-      window.addEventListener('load', function() {
-        // Hero section animations - only animate once on load
-        const heroSection = document.querySelector('section');
-
-        // Don't animate header - it should be immediately visible for navigation
-
-        gsap.from(heroSection.querySelector("h1"), {
-          y: 50,
-          opacity: 0,
-          duration: 1,
-          delay: 0.3,
-          ease: "power3.out"
-        });
-
-        gsap.from(heroSection.querySelector("h1").nextElementSibling, {
-          y: 30,
-          opacity: 0,
-          duration: 1,
-          delay: 0.5,
-          ease: "power3.out"
-        });
-
-        const heroButtons = heroSection.querySelectorAll(".mt-10 a");
-        gsap.from(heroButtons, {
-          y: 20,
-          opacity: 0,
-          duration: 0.8,
-          delay: 0.7,
-          stagger: 0.2,
-          ease: "power3.out"
-        });
-
-        // Hero image
-        const heroImage = heroSection.querySelector("img[alt='Winden Tokens interface']");
-        if (heroImage) {
-          gsap.from(heroImage.parentElement, {
-            scale: 0.95,
-            opacity: 0,
-            duration: 1.2,
-            delay: 0.9,
-            ease: "power3.out"
-          });
-        }
-      });
-    </script>
   </body>
 </html>
