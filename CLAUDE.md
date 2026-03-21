@@ -13,6 +13,18 @@ npm run lint:fix   # Run ESLint with auto-fix
 
 After building, load the plugin in Figma via Plugins > Development > Import plugin from manifest.
 
+## Project Structure
+
+```
+/                      # Root - plugin source code
+├── docs/              # Project documentation (markdown files)
+├── site/              # Jekyll GitHub Pages website (published separately)
+├── dist/              # Build output for Figma plugin
+└── ...
+```
+
+**Important:** The `site/` folder contains the Jekyll GitHub Pages website and should be kept separate from the plugin code. Do not mix plugin files with website files.
+
 ## Architecture
 
 This is a Figma plugin for managing design tokens (variables). It uses a two-file architecture required by Figma plugins:
