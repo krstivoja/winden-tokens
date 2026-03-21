@@ -19,15 +19,21 @@ category: releases
       <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         All Posts
       </a>
+      {% if site.categories.releases.size > 0 %}
       <a href="{{ '/blog/releases' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
         Releases
       </a>
-      <a href="{{ '/blog/features' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
-        Features
-      </a>
+      {% endif %}
+      {% if site.categories.tutorials.size > 0 %}
       <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         Tutorials
       </a>
+      {% endif %}
+      {% if site.categories.videos.size > 0 %}
+      <a href="{{ '/blog/videos' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
+        Videos
+      </a>
+      {% endif %}
     </div>
   </div>
 </section>

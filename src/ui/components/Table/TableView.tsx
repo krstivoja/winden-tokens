@@ -53,9 +53,20 @@ export function TableView() {
     e.stopPropagation();
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
+
+    // Account for table container scroll position
+    const container = tableContainerRef.current;
+    const scrollTop = container?.scrollTop || 0;
+    const containerRect = container?.getBoundingClientRect();
+    const containerTop = containerRect?.top || 0;
+
+    // Calculate position relative to the container
+    const top = rect.bottom - containerTop + scrollTop + 4;
+    const left = rect.left - (containerRect?.left || 0);
+
     setColorMenu({
       show: true,
-      position: { top: rect.bottom + 4, left: rect.left },
+      position: { top, left },
       variableId,
       value,
     });

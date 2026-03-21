@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '../components/common/Textarea/Textarea';
 import { Textarea } from '../components/common/Textarea/Textarea';
 
 const meta = {

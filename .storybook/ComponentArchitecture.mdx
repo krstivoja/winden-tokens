@@ -1,0 +1,425 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Architecture/Component Structure" />
+
+# Component Architecture
+
+This document describes the component architecture and organization for the Winden Tokens plugin.
+
+## Component Hierarchy
+
+```
+src/ui/components/
+├── common/              # Reusable UI primitives
+│   ├── Button/
+│   ├── Input/
+│   ├── Checkbox/
+│   ├── Select/
+│   ├── Textarea/
+│   ├── Modal/
+│   ├── Dropdown/
+│   ├── FormGroup/
+│   ├── IconButton/
+│   └── Label/
+├── Table/              # Table view components
+│   ├── TableView.tsx
+│   ├── TableRow.tsx
+│   ├── ValueCell.tsx
+│   ├── CollectionCell.tsx
+│   └── ...
+├── Toolbar/            # Toolbar components
+│   ├── Toolbar.tsx
+│   ├── AddMenu.tsx
+│   ├── CollectionFilters.tsx
+│   └── ...
+├── Modals/             # Modal dialogs
+│   ├── InputModal.tsx
+│   ├── BulkEditModal.tsx
+│   ├── ColorPickerModal.tsx
+│   └── ...
+├── Tabs/               # Tab content
+│   ├── TabBar.tsx
+│   ├── SettingsView.tsx
+│   └── JsonEditor.tsx
+└── Relationships/      # Relationship graph
+    ├── RelationshipsView.tsx
+    └── GroupedGraph.tsx
+```
+
+## Component Categories
+
+### 1. Common Components
+
+**Purpose:** Reusable UI primitives that can be used across the application
+
+**Characteristics:**
+- No business logic
+- Highly reusable
+- Well-tested
+- Fully documented in Storybook
+- Support all necessary variants and states
+
+**Examples:**
+- Button (primary, secondary, danger)
+- Input (text, number, email)
+- Checkbox (with/without label)
+- Select (dropdown with options)
+
+**Usage Example:**
+```tsx
+import { Button, Input, FormGroup } from '@/ui/components/common';
+
+function MyForm() {
+  return (
+    <FormGroup label="Email">
+      <Input type="email" placeholder="email@example.com" />
+      <Button variant="primary">Submit</Button>
+    </FormGroup>
+  );
+}
+```
+
+### 2. Feature Components
+
+**Purpose:** Complex components that implement specific features
+
+**Characteristics:**
+- Combine multiple common components
+- Contain business logic
+- Connected to app context/state
+- Handle Figma plugin communication
+
+**Examples:**
+- TableView (main spreadsheet interface)
+- ColorPickerModal (color selection dialog)
+- ShadesModal (shade generation interface)
+
+### 3. Layout Components
+
+**Purpose:** Structural components that organize the UI
+
+**Characteristics:**
+- Define page structure
+- Handle responsive layout
+- Manage spacing and alignment
+
+**Examples:**
+- Toolbar (top navigation bar)
+- TabBar (tab navigation)
+- ResizeHandles (window resizing)
+
+## Component Design Principles
+
+### 1. Single Responsibility
+Each component should do one thing well.
+
+❌ **Bad:**
+```tsx
+function UserFormWithValidationAndSubmit() {
+  // Too many responsibilities
+}
+```
+
+✅ **Good:**
+```tsx
+function UserForm() {
+  return (
+    <FormGroup label="Name">
+      <Input validation={validate} />
+      <Button onClick={handleSubmit}>Submit</Button>
+    </FormGroup>
+  );
+}
+```
+
+### 2. Composition Over Inheritance
+Build complex components by combining simple ones.
+
+✅ **Good:**
+```tsx
+<Modal title="Edit Variable">
+  <FormGroup label="Name">
+    <Input value={name} onChange={setName} />
+  </FormGroup>
+  <FormGroup label="Value">
+    <Input value={value} onChange={setValue} />
+  </FormGroup>
+</Modal>
+```
+
+### 3. Props Interface
+Clear, typed props with sensible defaults.
+
+```tsx
+export interface ButtonProps {
+  variant?: 'primary' | 'secondary' | 'danger'; // Optional with default
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  loading?: boolean;
+  children: React.ReactNode; // Required
+  onClick?: () => void;
+}
+```
+
+### 4. Ref Forwarding
+Input components should forward refs for focus management.
+
+```tsx
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  (props, ref) => {
+    return <input ref={ref} {...props} />;
+  }
+);
+```
+
+## State Management
+
+### Local State (useState)
+For component-specific state that doesn't need to be shared.
+
+```tsx
+function ColorPicker() {
+  const [color, setColor] = useState('#000000');
+  return <input type="color" value={color} onChange={e => setColor(e.target.value)} />;
+}
+```
+
+### Context (useContext)
+For shared state across multiple components.
+
+```tsx
+const { variables, collections, selectedModeId } = useAppContext();
+```
+
+### Modal State (useModalContext)
+For managing modal visibility and configuration.
+
+```tsx
+const { openInputModal, closeInputModal } = useModalContext();
+```
+
+## Communication Patterns
+
+### 1. Plugin Messages (Parent → UI)
+```tsx
+// Listen for messages from plugin
+usePluginMessages({
+  'data-loaded': (data) => {
+    setVariables(data.variables);
+  },
+});
+```
+
+### 2. UI → Plugin Messages
+```tsx
+import { post } from '@/ui/hooks/usePluginMessages';
+
+// Send message to plugin
+post({
+  type: 'update-variable-value',
+  id: variableId,
+  value: newValue,
+});
+```
+
+### 3. Component Events
+```tsx
+// Child → Parent communication via callbacks
+<Button onClick={handleSave}>Save</Button>
+```
+
+## Styling Approach
+
+### CSS Modules / SCSS
+Components use SCSS for styling with BEM-like naming.
+
+```scss
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+
+  &.btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  &.btn-danger {
+    background: var(--danger);
+  }
+}
+```
+
+### CSS Variables for Theming
+```scss
+.component {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+```
+
+## Testing Strategy
+
+### Unit Tests (Vitest)
+Test component logic, props, and events.
+
+```tsx
+it('calls onChange when value changes', () => {
+  const handleChange = vi.fn();
+  render(<Input onChange={handleChange} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'test' } });
+  expect(handleChange).toHaveBeenCalled();
+});
+```
+
+### Visual Tests (Storybook)
+Document all component variants and states.
+
+```tsx
+export const Primary: Story = {
+  args: { variant: 'primary', children: 'Button' },
+};
+```
+
+### Integration Tests
+Test component interactions in real scenarios.
+
+```tsx
+it('submits form when button clicked', async () => {
+  const onSubmit = vi.fn();
+  render(<MyForm onSubmit={onSubmit} />);
+
+  await userEvent.type(screen.getByLabelText('Name'), 'John');
+  await userEvent.click(screen.getByText('Submit'));
+
+  expect(onSubmit).toHaveBeenCalledWith({ name: 'John' });
+});
+```
+
+## Accessibility Requirements
+
+### Semantic HTML
+Use proper HTML elements for their intended purpose.
+
+✅ **Good:**
+```tsx
+<button onClick={handleClick}>Click me</button>
+```
+
+❌ **Bad:**
+```tsx
+<div onClick={handleClick}>Click me</div>
+```
+
+### ARIA Attributes
+Provide context for screen readers.
+
+```tsx
+<button aria-label="Close dialog" onClick={onClose}>
+  ×
+</button>
+```
+
+### Keyboard Navigation
+Support keyboard interactions.
+
+```tsx
+<div
+  role="button"
+  tabIndex={0}
+  onClick={handleClick}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      handleClick();
+    }
+  }}
+>
+  Click me
+</div>
+```
+
+### Focus Management
+Manage focus for modals and dialogs.
+
+```tsx
+useEffect(() => {
+  if (isOpen) {
+    inputRef.current?.focus();
+  }
+}, [isOpen]);
+```
+
+## Performance Considerations
+
+### Memoization
+Use `useMemo` for expensive computations.
+
+```tsx
+const sortedVariables = useMemo(() => {
+  return variables.sort((a, b) => a.name.localeCompare(b.name));
+}, [variables]);
+```
+
+### Callback Memoization
+Use `useCallback` to prevent unnecessary re-renders.
+
+```tsx
+const handleClick = useCallback(() => {
+  post({ type: 'update-variable', id, value });
+}, [id, value]);
+```
+
+### Lazy Loading
+Load components only when needed.
+
+```tsx
+const ColorPickerModal = lazy(() => import('./ColorPickerModal'));
+```
+
+## Best Practices
+
+### 1. Keep Components Small
+If a component is over 300 lines, consider splitting it.
+
+### 2. Extract Reusable Logic
+Use custom hooks for shared logic.
+
+```tsx
+function useClickOutside(ref, handler) {
+  useEffect(() => {
+    const listener = (e) => {
+      if (!ref.current?.contains(e.target)) {
+        handler();
+      }
+    };
+    document.addEventListener('mousedown', listener);
+    return () => document.removeEventListener('mousedown', listener);
+  }, [ref, handler]);
+}
+```
+
+### 3. Type Everything
+Use TypeScript for all props and state.
+
+### 4. Document Complex Logic
+Add comments for non-obvious code.
+
+### 5. Test Edge Cases
+Test error states, empty states, and boundary conditions.
+
+## Migration Guide
+
+When refactoring existing components to use common components:
+
+1. **Identify pattern**: Find repeated UI patterns (buttons, inputs, etc.)
+2. **Create common component**: Build reusable version
+3. **Add tests**: Write unit tests and Storybook stories
+4. **Gradual migration**: Replace instances one at a time
+5. **Verify**: Test functionality after each replacement
+
+## Resources
+
+- [Component Quick Start](https://github.com/yourusername/winden-tokens/blob/main/COMPONENT_QUICK_START.md)
+- [Testing Guide](https://github.com/yourusername/winden-tokens/blob/main/TESTING.md)
+- [React Best Practices](https://react.dev/learn)
+- [Accessibility Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)

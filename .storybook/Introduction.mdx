@@ -1,0 +1,141 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Introduction" />
+
+# Winden Tokens - Component Library
+
+Welcome to the Winden Tokens component library documentation. This Storybook showcases all the UI components used in the Figma plugin for managing design tokens.
+
+## Overview
+
+This plugin helps designers and developers manage design tokens (variables) in Figma with a spreadsheet-style interface. The UI is built with React and organized into reusable components.
+
+## Component Organization
+
+### Common Components
+Basic, reusable UI primitives used throughout the application:
+- **Button** - Clickable buttons with variants (primary, secondary, danger)
+- **Input** - Text and number inputs with validation
+- **Checkbox** - Checkboxes with labels
+- **Select** - Dropdown selects
+- **Textarea** - Multi-line text inputs
+- **Modal** - Dialog overlays
+- **Dropdown** - Menu dropdowns with click-outside handling
+- **FormGroup** - Form field wrappers with labels
+- **IconButton** - Icon-only buttons
+- **Label** - Form labels
+
+### Feature Components
+Complex components that combine multiple common components:
+- **TableView** - Main spreadsheet interface for variables
+- **Toolbar** - Top toolbar with filters and actions
+- **SettingsView** - Settings panel
+- **JsonEditor** - JSON import/export interface
+- **RelationshipsView** - Variable relationship graph
+- **Modals** - Various modals for specific tasks
+
+## Using This Documentation
+
+### Controls
+Each component story includes interactive controls in the bottom panel. Use these to:
+- Test different prop values
+- See how components respond to changes
+- Understand available options
+
+### Accessibility
+The **A11y** addon (bottom panel) shows accessibility issues. All components should:
+- Have proper ARIA labels
+- Support keyboard navigation
+- Pass contrast checks
+- Work with screen readers
+
+### Actions
+The **Actions** addon logs events like clicks, changes, and focus. Use this to:
+- Verify event handlers work
+- Debug interaction flows
+- Understand component behavior
+
+## Development Workflow
+
+### 1. Visual Development
+```bash
+npm run storybook
+```
+Opens at http://localhost:6006
+
+### 2. Testing
+```bash
+npm test              # Run tests once
+npm test:watch        # Run tests in watch mode
+npm test:coverage     # Generate coverage report
+```
+
+### 3. Building
+```bash
+npm run build         # Build plugin for Figma
+npm run build-storybook  # Build static Storybook
+```
+
+## Design System Tokens
+
+The components use CSS variables for theming:
+
+```css
+/* Colors */
+--bg: Background color
+--fg: Foreground/card color
+--text: Primary text color
+--text-muted: Secondary text color
+--border: Border color
+--accent: Accent/primary color
+--danger: Danger/error color
+
+/* Spacing */
+--gap-sm: 8px
+--gap-md: 16px
+--gap-lg: 24px
+
+/* Typography */
+--font-family: Inter, system-ui
+--font-size-sm: 11px
+--font-size-md: 13px
+--font-size-lg: 16px
+```
+
+## Component Guidelines
+
+### Accessibility First
+- Use semantic HTML
+- Include ARIA attributes
+- Support keyboard navigation
+- Provide focus indicators
+
+### Consistent API
+- Use `className` for custom styling
+- Forward refs when appropriate
+- Support common HTML attributes
+- Document all props
+
+### Testing Requirements
+- Unit tests for logic
+- Visual tests in Storybook
+- Accessibility checks
+- Integration tests where needed
+
+## Resources
+
+- [Component Quick Start](https://github.com/yourusername/winden-tokens/blob/main/COMPONENT_QUICK_START.md)
+- [Testing Guide](https://github.com/yourusername/winden-tokens/blob/main/TESTING.md)
+- [Figma Plugin API](https://www.figma.com/plugin-docs/)
+
+## Contributing
+
+When adding new components:
+
+1. Create component in `src/ui/components/common/[Name]/`
+2. Add Storybook story with all variants
+3. Write unit tests
+4. Verify accessibility
+5. Update documentation
+
+See [COMPONENT_QUICK_START.md](https://github.com/yourusername/winden-tokens/blob/main/COMPONENT_QUICK_START.md) for detailed instructions.

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Development Guide</title>
+    <meta name="description" content="Professional Design Token Management for Figma" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .prose { max-width: 65ch; }
+      .prose p { margin: 1em 0; }
+      .prose ul { margin: 1em 0; padding-left: 1.5em; }
+      .prose li { margin: 0.5em 0; }
+    </style>
+  </head>
+  <body class="bg-white antialiased">
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/winden-tokens/" class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </a>
+      </div>
+      <nav class="hidden items-center gap-8 md:flex">
+        <a href="/winden-tokens/#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Features</a>
+        <a href="/winden-tokens/blog" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Blog</a>
+        <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">GitHub</a>
+        <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+          Get Plugin
+        </a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+
+    <main>
+      <article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Local Development Guide</h1>
+  </header>
+
+  <div class="post-content">
+    <h1 id="local-development-guide">Local Development Guide</h1>
+
+<h2 id="requirements">Requirements</h2>
+
+<ul>
+  <li><strong>Ruby 3.0+</strong> (system Ruby 2.6 won’t work)</li>
+  <li>Install via Homebrew: <code class="language-plaintext highlighter-rouge">brew install ruby</code></li>
+  <li>The <code class="language-plaintext highlighter-rouge">serve.sh</code> script automatically uses Homebrew Ruby</li>
+</ul>
+
+<h2 id="quick-start">Quick Start</h2>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Navigate to docs folder</span>
+<span class="nb">cd </span>docs
+
+<span class="c"># Run local server (with live reload)</span>
+./serve.sh
+</code></pre></div></div>
+
+<p>Visit: http://localhost:4000/winden-tokens/</p>
+
+<p>The server will automatically reload when you make changes!</p>
+
+<h2 id="manual-commands">Manual Commands</h2>
+
+<p>If you prefer to run commands manually:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Install dependencies (first time only)</span>
+bundle <span class="nb">install</span>
+
+<span class="c"># Start Jekyll server</span>
+bundle <span class="nb">exec </span>jekyll serve <span class="nt">--livereload</span>
+
+<span class="c"># Build only (no server)</span>
+bundle <span class="nb">exec </span>jekyll build
+</code></pre></div></div>
+
+<h2 id="why-use-local-preview">Why Use Local Preview?</h2>
+
+<ul>
+  <li><strong>See changes instantly</strong> - No need to push to GitHub</li>
+  <li><strong>Debug faster</strong> - See errors immediately</li>
+  <li><strong>Iterate quickly</strong> - Edit and refresh</li>
+</ul>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3 id="ruby-version-error">Ruby version error?</h3>
+<p>If you get errors about Ruby version being incompatible:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Install Ruby via Homebrew</span>
+brew <span class="nb">install </span>ruby
+
+<span class="c"># The serve.sh script will automatically use it</span>
+<span class="c"># Or manually add to your PATH:</span>
+<span class="nb">export </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">"/opt/homebrew/opt/ruby/bin:</span><span class="nv">$PATH</span><span class="s2">"</span>
+</code></pre></div></div>
+
+<h3 id="posts-not-showing">Posts not showing?</h3>
+<ul>
+  <li>Make sure you’re in the <code class="language-plaintext highlighter-rouge">docs/</code> folder</li>
+  <li>Run <code class="language-plaintext highlighter-rouge">bundle exec jekyll build</code> to see build errors</li>
+  <li>Check that posts are in correct folders (<code class="language-plaintext highlighter-rouge">_posts/releases/</code>, etc.)</li>
+</ul>
+
+<h3 id="port-already-in-use">Port already in use?</h3>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Use a different port</span>
+bundle <span class="nb">exec </span>jekyll serve <span class="nt">--port</span> 4001
+</code></pre></div></div>
+
+<h3 id="dependencies-out-of-date">Dependencies out of date?</h3>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>bundle update
+</code></pre></div></div>
+
+  </div>
+
+</article>
+
+    </main>
+
+    <footer class="border-t border-slate-200 bg-slate-50 py-12">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="grid gap-12 md:grid-cols-3">
+      <div>
+        <div class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">
+          Professional design token management for Figma
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Resources</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Community
+            </a>
+          </li>
+          <li>
+            <a href="/winden-tokens/blog" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Blog & Updates
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens/issues" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Report Issues
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Connect</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://github.com/krstivoja" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub
+            </a>
+          </li>
+          <li>
+            <a href="https://www.figma.com/@dplugins" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Profile
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 border-t border-slate-200 pt-8">
+      <p class="text-center text-sm text-slate-600">
+        © 2026 Winden Tokens. Open source and free forever.
+      </p>
+    </div>
+  </div>
+</footer>
+
+  </body>
+</html>

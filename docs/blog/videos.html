@@ -1,17 +1,17 @@
 ---
 layout: default
-title: Features - Blog
-category: features
+title: Videos - Blog
+category: videos
 ---
 
 <!-- Blog Header -->
 <section class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-16 border-b border-slate-200">
   <div class="max-w-4xl mx-auto px-6">
     <h1 class="text-4xl font-bold text-slate-900 sm:text-5xl mb-4">
-      Feature Announcements
+      Video Tutorials
     </h1>
     <p class="text-xl text-slate-600 mb-6">
-      New features and improvements to Winden Tokens
+      Watch video guides and tutorials about design tokens
     </p>
 
     <!-- Category Filter -->
@@ -19,15 +19,21 @@ category: features
       <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         All Posts
       </a>
+      {% if site.categories.releases.size > 0 %}
       <a href="{{ '/blog/releases' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         Releases
       </a>
-      <a href="{{ '/blog/features' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
-        Features
-      </a>
+      {% endif %}
+      {% if site.categories.tutorials.size > 0 %}
       <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         Tutorials
       </a>
+      {% endif %}
+      {% if site.categories.videos.size > 0 %}
+      <a href="{{ '/blog/videos' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
+        Videos
+      </a>
+      {% endif %}
     </div>
   </div>
 </section>
@@ -36,7 +42,7 @@ category: features
 <section class="bg-white py-16">
   <div class="max-w-4xl mx-auto px-6">
     <div class="space-y-12">
-      {% for post in site.categories.features %}
+      {% for post in site.categories.videos %}
       <article class="group border-b border-slate-200 pb-12 last:border-0">
         <div class="flex items-center gap-4 mb-4">
           <time class="text-sm font-medium text-slate-500">{{ post.date | date: "%B %d, %Y" }}</time>
@@ -53,7 +59,7 @@ category: features
         </div>
 
         <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-semibold group/link">
-          Read full article
+          Watch video
           <svg class="h-4 w-4 transition group-hover/link:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
         </a>
       </article>

@@ -31,14 +31,6 @@ defaults:
       layout: "post"
       categories: releases
 
-  # Features category defaults
-  - scope:
-      path: "_posts/features"
-      type: "posts"
-    values:
-      layout: "post"
-      categories: features
-
   # Tutorials category defaults
   - scope:
       path: "_posts/tutorials"
@@ -46,6 +38,14 @@ defaults:
     values:
       layout: "post"
       categories: tutorials
+
+  # Videos category defaults
+  - scope:
+      path: "_posts/videos"
+      type: "posts"
+    values:
+      layout: "post"
+      categories: videos
 
 # Exclude from processing
 exclude:

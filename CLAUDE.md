@@ -70,14 +70,26 @@ Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as 
 
 All AI specifications are organized in the [specs/](specs/) folder:
 
+### Component Documentation
+- [COMPONENT_QUICK_START.md](specs/COMPONENT_QUICK_START.md) - Quick guide to component development
+- [COMPONENTS_COMPLETE.md](specs/COMPONENTS_COMPLETE.md) - Complete component reference
+- [COMPONENT_SUMMARY.md](specs/COMPONENT_SUMMARY.md) - Component summary and overview
+- [COMPONENT_USAGE_EXAMPLES.md](specs/COMPONENT_USAGE_EXAMPLES.md) - Usage examples and patterns
+- [TESTING.md](specs/TESTING.md) - Testing guide and conventions
+
+### Feature & Release Documentation
 - [Changelog.md](specs/Changelog.md) - Version history and release notes
 - [FEATURES.md](specs/FEATURES.md) - Complete feature documentation and usage guide
 - [RELEASE.md](specs/RELEASE.md) - Release process and versioning guidelines
+
+### Storybook Documentation
 - [STORYBOOK_QUICK_START.md](specs/STORYBOOK_QUICK_START.md) - Quick guide to Storybook setup
 - [STORYBOOK_COMPONENTS.md](specs/STORYBOOK_COMPONENTS.md) - Component documentation for Storybook
 - [STORYBOOK_AUTOMATION.md](specs/STORYBOOK_AUTOMATION.md) - Storybook automation workflows
 
 **When working on this project, always review relevant specification files to understand:**
+- Component structure and development patterns
+- Testing approaches and conventions
 - Existing features and their implementation
 - Design decisions and architecture choices
 - Release workflows and versioning strategy
