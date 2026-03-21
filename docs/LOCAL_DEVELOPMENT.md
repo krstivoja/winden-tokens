@@ -1,5 +1,11 @@
 # Local Development Guide
 
+## Requirements
+
+- **Ruby 3.0+** (system Ruby 2.6 won't work)
+- Install via Homebrew: `brew install ruby`
+- The `serve.sh` script automatically uses Homebrew Ruby
+
 ## Quick Start
 
 ```bash
@@ -36,6 +42,17 @@ bundle exec jekyll build
 - **Iterate quickly** - Edit and refresh
 
 ## Troubleshooting
+
+### Ruby version error?
+If you get errors about Ruby version being incompatible:
+```bash
+# Install Ruby via Homebrew
+brew install ruby
+
+# The serve.sh script will automatically use it
+# Or manually add to your PATH:
+export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+```
 
 ### Posts not showing?
 - Make sure you're in the `docs/` folder
