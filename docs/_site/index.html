@@ -286,13 +286,13 @@
       </div>
     </section>
 
-    <!-- Tutorials -->
-    <section id="tutorials" class="border-t border-slate-200 bg-white py-24">
+    <!-- Latest Videos -->
+    <section id="videos" class="border-t border-slate-200 bg-white py-24">
       <div class="mx-auto max-w-7xl px-6 lg:px-8">
         <div class="mx-auto max-w-2xl text-center">
           <h2 class="text-base font-semibold uppercase tracking-wider text-slate-600">Learn</h2>
           <p class="mt-2 text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
-            Latest Tutorials
+            Latest Videos
           </p>
           <p class="mt-4 text-lg text-slate-600">
             Step-by-step guides to master every feature
@@ -300,28 +300,46 @@
         </div>
 
         
+        
         <div class="mt-16 grid gap-8 lg:grid-cols-3">
           
-          <article class="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition">
-            <div class="flex items-center gap-3 mb-4">
-              <time class="text-sm text-slate-500">Mar 10, 2024</time>
+          
+          <article class="group rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-lg transition">
+            <!-- Video Thumbnail -->
+            <div class="aspect-video w-full bg-slate-100 relative overflow-hidden">
+              <img
+                src="https://img.youtube.com/vi/DBpWtI3KMyY/maxresdefault.jpg"
+                alt="5 Best Practices for Organizing Design Tokens at Scale"
+                class="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+              />
+              <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+                <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
+                  <svg class="w-6 w-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              </div>
             </div>
 
-            <h3 class="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition">
-              <a href="/winden-tokens/blog/tutorials/tutorial/best-practices/design-tokens-best-practices/">
-                5 Best Practices for Organizing Design Tokens at Scale
-              </a>
-            </h3>
+            <!-- Content -->
+            <div class="p-6">
+              <div class="flex items-center gap-3 mb-3">
+                <time class="text-sm text-slate-500">Mar 10, 2024</time>
+              </div>
 
-            <p class="mt-3 text-slate-600 line-clamp-3">
-              Design tokens are the foundation of any scalable design system. After working with hundreds of users, we’ve identified the patterns...
-            </p>
+              <h3 class="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                <a href="/winden-tokens/blog/tutorials/tutorial/best-practices/design-tokens-best-practices/">
+                  5 Best Practices for Organizing Design Tokens at Scale
+                </a>
+              </h3>
 
-            <div class="mt-4">
-              <a href="/winden-tokens/blog/tutorials/tutorial/best-practices/design-tokens-best-practices/" class="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                Read tutorial
-                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              </a>
+              <div class="mt-4">
+                <a href="/winden-tokens/blog/tutorials/tutorial/best-practices/design-tokens-best-practices/" class="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                  Read full tutorial
+                  <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </a>
+              </div>
             </div>
           </article>
           

@@ -52,6 +52,48 @@
     <h1 class="text-4xl font-bold text-slate-900">5 Best Practices for Organizing Design Tokens at Scale</h1>
   </header>
 
+  
+  <!-- YouTube Video Player (Lazy Load) -->
+  
+  <div class="mb-12">
+    <div class="youtube-lazy-load aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-lg relative cursor-pointer group" data-youtube-id="DBpWtI3KMyY">
+      <!-- Thumbnail -->
+      <img
+        src="https://img.youtube.com/vi/DBpWtI3KMyY/maxresdefault.jpg"
+        alt="5 Best Practices for Organizing Design Tokens at Scale"
+        class="absolute inset-0 w-full h-full object-cover"
+        loading="lazy"
+      />
+      <!-- Play Button Overlay -->
+      <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
+          <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Lazy load YouTube iframe on click
+    document.querySelectorAll('.youtube-lazy-load').forEach(function(element) {
+      element.addEventListener('click', function() {
+        const youtubeId = this.getAttribute('data-youtube-id');
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('class', 'absolute inset-0 w-full h-full');
+        iframe.setAttribute('src', 'https://www.youtube.com/embed/' + youtubeId + '?autoplay=1');
+        iframe.setAttribute('title', '5 Best Practices for Organizing Design Tokens at Scale');
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        iframe.setAttribute('allowfullscreen', '');
+        this.innerHTML = '';
+        this.appendChild(iframe);
+      });
+    });
+  </script>
+  
+
   <div class="prose prose-slate max-w-none">
     <p>Design tokens are the foundation of any scalable design system. After working with hundreds of users, we’ve identified the patterns that separate good token systems from great ones.</p>
 

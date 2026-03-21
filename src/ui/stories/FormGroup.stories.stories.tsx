@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '../components/common/FormGroup/FormGroup.stories';
 import { WithInput } from '../components/common/FormGroup/FormGroup.stories';
 
 const meta = {

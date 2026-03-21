@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '../components/common/Modal/Modal.stories';
 import { Default } from '../components/common/Modal/Modal.stories';
 
 const meta = {

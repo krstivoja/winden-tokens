@@ -1,6 +1,7 @@
 ---
 title: "5 Best Practices for Organizing Design Tokens at Scale"
 categories: tutorial best-practices
+youtube: https://youtu.be/DBpWtI3KMyY
 ---
 
 Design tokens are the foundation of any scalable design system. After working with hundreds of users, we've identified the patterns that separate good token systems from great ones.

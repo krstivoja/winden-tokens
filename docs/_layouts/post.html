@@ -15,6 +15,48 @@ layout: default
     <h1 class="text-4xl font-bold text-slate-900">{{ page.title }}</h1>
   </header>
 
+  {% if page.youtube %}
+  <!-- YouTube Video Player (Lazy Load) -->
+  {% assign youtube_id = page.youtube | remove: 'https://youtu.be/' | remove: 'https://www.youtube.com/watch?v=' | remove: 'https://youtube.com/watch?v=' | split: '&' | first | split: '?' | first %}
+  <div class="mb-12">
+    <div class="youtube-lazy-load aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-lg relative cursor-pointer group" data-youtube-id="{{ youtube_id }}">
+      <!-- Thumbnail -->
+      <img
+        src="https://img.youtube.com/vi/{{ youtube_id }}/maxresdefault.jpg"
+        alt="{{ page.title }}"
+        class="absolute inset-0 w-full h-full object-cover"
+        loading="lazy"
+      />
+      <!-- Play Button Overlay -->
+      <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
+          <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Lazy load YouTube iframe on click
+    document.querySelectorAll('.youtube-lazy-load').forEach(function(element) {
+      element.addEventListener('click', function() {
+        const youtubeId = this.getAttribute('data-youtube-id');
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('class', 'absolute inset-0 w-full h-full');
+        iframe.setAttribute('src', 'https://www.youtube.com/embed/' + youtubeId + '?autoplay=1');
+        iframe.setAttribute('title', '{{ page.title }}');
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        iframe.setAttribute('allowfullscreen', '');
+        this.innerHTML = '';
+        this.appendChild(iframe);
+      });
+    });
+  </script>
+  {% endif %}
+
   <div class="prose prose-slate max-w-none">
     {{ content }}
   </div>
