@@ -45,3 +45,20 @@ Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as 
 ## UI Conventions
 
 - Any control that opens a dropdown menu should include the same downward triangle indicator (`▾`) used by the contrast controls, so menu-triggering actions are visually consistent.
+
+## Project Documentation
+
+All project documentation is organized in the [docs/](docs/) folder:
+
+- [Changelog.md](docs/Changelog.md) - Version history and release notes
+- [FEATURES.md](docs/FEATURES.md) - Complete feature documentation and usage guide
+- [RELEASE.md](docs/RELEASE.md) - Release process and versioning guidelines
+- [STORYBOOK_QUICK_START.md](docs/STORYBOOK_QUICK_START.md) - Quick guide to Storybook setup
+- [STORYBOOK_COMPONENTS.md](docs/STORYBOOK_COMPONENTS.md) - Component documentation for Storybook
+- [STORYBOOK_AUTOMATION.md](docs/STORYBOOK_AUTOMATION.md) - Storybook automation workflows
+
+**When working on this project, always review relevant documentation files to understand:**
+- Existing features and their implementation
+- Design decisions and architecture choices
+- Release workflows and versioning strategy
+- Storybook integration and component structure
