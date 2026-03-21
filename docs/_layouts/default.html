@@ -20,38 +20,12 @@
     </style>
   </head>
   <body class="bg-white antialiased">
-    <!-- Header -->
-    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="flex h-16 items-center justify-between">
-          <div class="flex items-center gap-3">
-            <a href="{{ '/' | relative_url }}" class="text-xl font-bold text-slate-900">Winden Tokens</a>
-          </div>
-          <nav class="flex items-center gap-6">
-            <a href="{{ '/blog' | relative_url }}" class="text-sm font-medium text-slate-700 hover:text-indigo-600">Blog</a>
-            <a href="#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600">Features</a>
-            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600">GitHub</a>
-          </nav>
-        </div>
-      </div>
-    </header>
+    {% include header.html %}
 
-    <!-- Main Content -->
     <main>
       {{ content }}
     </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-slate-200 bg-slate-50 py-12">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="flex items-center justify-between">
-          <p class="text-sm text-slate-600">© 2024 Winden Tokens. All rights reserved.</p>
-          <div class="flex gap-6">
-            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600">GitHub</a>
-            <a href="{{ '/blog' | relative_url }}" class="text-sm text-slate-600 hover:text-indigo-600">Updates</a>
-          </div>
-        </div>
-      </div>
-    </footer>
+    {% include footer.html %}
   </body>
 </html>

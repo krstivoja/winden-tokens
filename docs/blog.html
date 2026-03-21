@@ -3,35 +3,56 @@ layout: default
 title: Blog & Updates
 ---
 
-<div class="max-w-4xl mx-auto px-6 py-16">
-  <h1 class="text-4xl font-bold text-slate-900 mb-8">Updates & Changelog</h1>
-
-  <div class="space-y-8">
-    {% for post in site.posts %}
-    <article class="border-b border-slate-200 pb-8">
-      <div class="flex items-center gap-4 mb-3">
-        <time class="text-sm text-slate-500">{{ post.date | date: "%B %d, %Y" }}</time>
-        {% if post.version %}
-        <span class="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded">
-          v{{ post.version }}
-        </span>
-        {% endif %}
-      </div>
-
-      <h2 class="text-2xl font-bold text-slate-900 mb-3">
-        <a href="{{ post.url | relative_url }}" class="hover:text-indigo-600">
-          {{ post.title }}
-        </a>
-      </h2>
-
-      <div class="text-slate-600 prose">
-        {{ post.excerpt }}
-      </div>
-
-      <a href="{{ post.url | relative_url }}" class="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium mt-3">
-        Read more →
-      </a>
-    </article>
-    {% endfor %}
+<!-- Blog Header -->
+<section class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-16 border-b border-slate-200">
+  <div class="max-w-4xl mx-auto px-6">
+    <h1 class="text-4xl font-bold text-slate-900 sm:text-5xl mb-4">
+      Updates & Changelog
+    </h1>
+    <p class="text-xl text-slate-600">
+      Latest features, improvements, and release notes for Winden Tokens
+    </p>
   </div>
-</div>
+</section>
+
+<!-- Blog Posts -->
+<section class="bg-white py-16">
+  <div class="max-w-4xl mx-auto px-6">
+    <div class="space-y-12">
+      {% for post in site.posts %}
+      <article class="group border-b border-slate-200 pb-12 last:border-0">
+        <div class="flex items-center gap-4 mb-4">
+          <time class="text-sm font-medium text-slate-500">{{ post.date | date: "%B %d, %Y" }}</time>
+          {% if post.version %}
+          <span class="px-3 py-1 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+            v{{ post.version }}
+          </span>
+          {% endif %}
+          {% if post.categories %}
+          {% for category in post.categories limit:1 %}
+          <span class="px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-full">
+            {{ category }}
+          </span>
+          {% endfor %}
+          {% endif %}
+        </div>
+
+        <h2 class="text-3xl font-bold text-slate-900 mb-4 group-hover:text-indigo-600 transition">
+          <a href="{{ post.url | relative_url }}">
+            {{ post.title }}
+          </a>
+        </h2>
+
+        <div class="text-slate-600 prose prose-lg max-w-none mb-6">
+          {{ post.excerpt }}
+        </div>
+
+        <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-semibold group/link">
+          Read full article
+          <svg class="h-4 w-4 transition group-hover/link:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
