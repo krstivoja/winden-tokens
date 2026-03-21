@@ -1,21 +1,22 @@
 ---
 layout: default
-title: Blog & Updates
+title: Tutorials - Blog
+category: tutorials
 ---
 
 <!-- Blog Header -->
 <section class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-16 border-b border-slate-200">
   <div class="max-w-4xl mx-auto px-6">
     <h1 class="text-4xl font-bold text-slate-900 sm:text-5xl mb-4">
-      Updates & Changelog
+      Tutorials & Guides
     </h1>
     <p class="text-xl text-slate-600 mb-6">
-      Latest features, improvements, and release notes for Winden Tokens
+      Learn best practices and how to get the most out of design tokens
     </p>
 
     <!-- Category Filter -->
     <div class="flex flex-wrap gap-3 mt-8">
-      <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
+      <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         All Posts
       </a>
       <a href="{{ '/blog/releases' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
@@ -24,7 +25,7 @@ title: Blog & Updates
       <a href="{{ '/blog/features' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
         Features
       </a>
-      <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
+      <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
         Tutorials
       </a>
     </div>
@@ -35,22 +36,10 @@ title: Blog & Updates
 <section class="bg-white py-16">
   <div class="max-w-4xl mx-auto px-6">
     <div class="space-y-12">
-      {% for post in site.posts %}
+      {% for post in site.categories.tutorials %}
       <article class="group border-b border-slate-200 pb-12 last:border-0">
         <div class="flex items-center gap-4 mb-4">
           <time class="text-sm font-medium text-slate-500">{{ post.date | date: "%B %d, %Y" }}</time>
-          {% if post.version %}
-          <span class="px-3 py-1 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
-            v{{ post.version }}
-          </span>
-          {% endif %}
-          {% if post.categories %}
-          {% for category in post.categories limit:1 %}
-          <span class="px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-full">
-            {{ category }}
-          </span>
-          {% endfor %}
-          {% endif %}
         </div>
 
         <h2 class="text-3xl font-bold text-slate-900 mb-4 group-hover:text-indigo-600 transition">

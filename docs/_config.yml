@@ -11,7 +11,7 @@ theme: minima
 collections:
   posts:
     output: true
-    permalink: /blog/:year/:month/:day/:title/
+    permalink: /blog/:categories/:title/
 
 # Defaults
 defaults:

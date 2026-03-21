@@ -12,19 +12,30 @@ This folder contains the Jekyll-based website for Winden Tokens, deployed to Git
 
 ## Adding a New Blog Post
 
-Create a new file in `_posts/` with the format:
+Blog posts are organized by category in separate folders:
+
+- **Releases**: `_posts/releases/` - Version announcements and release notes
+- **Features**: `_posts/features/` - New feature announcements
+- **Tutorials**: `_posts/tutorials/` - How-to guides and best practices
+
+Create a new file in the appropriate category folder with the format:
 
 ```markdown
 ---
 layout: post
-title: "Version X.Y.Z Released"
+title: "Your Title"
 date: YYYY-MM-DD
-categories: release
-version: X.Y.Z
+categories: releases  # or features, tutorials
+version: X.Y.Z  # optional, for releases
 ---
 
 Your content here...
 ```
+
+**Examples:**
+- Release: `_posts/releases/2024-03-21-version-1-5-0.md`
+- Feature: `_posts/features/2024-03-21-dark-mode.md`
+- Tutorial: `_posts/tutorials/2024-03-21-color-palettes-guide.md`
 
 ## Local Development
 
