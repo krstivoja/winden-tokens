@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '../components/common/Button/Button.stories';
 import { Primary } from '../components/common/Button/Button.stories';
 
 const meta = {

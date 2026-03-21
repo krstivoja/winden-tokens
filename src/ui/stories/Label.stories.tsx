@@ -1,14 +1,14 @@
-import type { Meta, StoryObj } from '../components/common/Select/Select.stories';
-import { Default } from '../components/common/Select/Select.stories';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Label } from '../components/common/Label/Label';
 
 const meta = {
-  title: 'common/Select.stories',
-  component: Default,
+  title: 'common/Label',
+  component: Label,
   tags: ['autodocs'],
   argTypes: {
     // Add custom controls here
   },
-} satisfies Meta<typeof Default>;
+} satisfies Meta<typeof Label>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

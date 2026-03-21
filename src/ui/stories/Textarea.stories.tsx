@@ -1,14 +1,14 @@
-import type { Meta, StoryObj } from '../components/common/Select/Select.stories';
-import { Default } from '../components/common/Select/Select.stories';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Textarea } from '../components/common/Textarea/Textarea';
 
 const meta = {
-  title: 'common/Select.stories',
-  component: Default,
+  title: 'common/Textarea',
+  component: Textarea,
   tags: ['autodocs'],
   argTypes: {
     // Add custom controls here
   },
-} satisfies Meta<typeof Default>;
+} satisfies Meta<typeof Textarea>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

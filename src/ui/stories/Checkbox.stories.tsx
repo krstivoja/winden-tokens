@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '../components/common/Checkbox/Checkbox';
 import { Checkbox } from '../components/common/Checkbox/Checkbox';
 
 const meta = {

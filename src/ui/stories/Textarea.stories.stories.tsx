@@ -1,8 +1,8 @@
-import type { Meta, StoryObj } from '../components/common/Select/Select.stories';
-import { Default } from '../components/common/Select/Select.stories';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Default } from '../components/common/Textarea/Textarea.stories';
 
 const meta = {
-  title: 'common/Select.stories',
+  title: 'common/Textarea.stories',
   component: Default,
   tags: ['autodocs'],
   argTypes: {
