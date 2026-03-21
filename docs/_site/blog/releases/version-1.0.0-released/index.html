@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Version 1.0.0 Released</title>
+    <meta name="description" content="Professional Design Token Management for Figma" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .prose { max-width: 65ch; }
+      .prose p { margin: 1em 0; }
+      .prose ul { margin: 1em 0; padding-left: 1.5em; }
+      .prose li { margin: 0.5em 0; }
+    </style>
+  </head>
+  <body class="bg-white antialiased">
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/winden-tokens/" class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </a>
+      </div>
+      <nav class="hidden items-center gap-8 md:flex">
+        <a href="/winden-tokens/#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Features</a>
+        <a href="/winden-tokens/blog" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Blog</a>
+        <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">GitHub</a>
+        <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+          Get Plugin
+        </a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+
+    <main>
+      <article class="max-w-4xl mx-auto px-6 py-16">
+  <header class="mb-8 border-b border-slate-200 pb-8">
+    <div class="flex items-center gap-4 mb-4">
+      <time class="text-sm text-slate-500">March 19, 2026</time>
+      
+    </div>
+    <h1 class="text-4xl font-bold text-slate-900">Version 1.0.0 Released</h1>
+  </header>
+
+  
+
+  <div class="prose prose-slate max-w-none">
+    <p>Release version <strong>1.0.0</strong> is now available!</p>
+
+<h3 id="-new-features">✨ New Features</h3>
+
+<ul>
+  <li>Add managed step generator for numbers (<code class="language-plaintext highlighter-rouge">2ea0b18</code>)</li>
+  <li>Add preset import, delete-all, and multi-mode support (<code class="language-plaintext highlighter-rouge">ec7eddc</code>)</li>
+  <li>Reuse existing variables and add type filters (<code class="language-plaintext highlighter-rouge">35edc89</code>)</li>
+  <li>Add CollectionFilters and update toolbar (<code class="language-plaintext highlighter-rouge">a8e8c84</code>)</li>
+  <li>Add managed shade generator &amp; syncing (<code class="language-plaintext highlighter-rouge">9524dd3</code>)</li>
+</ul>
+
+<h3 id="-bug-fixes">🐛 Bug Fixes</h3>
+
+<ul>
+  <li>Fix Arrange Grid positions being overwritten by polling (<code class="language-plaintext highlighter-rouge">188b745</code>)</li>
+  <li>Merge pull request #8 from krstivoja/fix/standalone-group-columns (<code class="language-plaintext highlighter-rouge">7a344c4</code>)</li>
+  <li>Fix Arrange Grid placing standalone groups in managed chain columns (<code class="language-plaintext highlighter-rouge">5bd98db</code>)</li>
+  <li>Fix standalone groups overlapping managed chain columns (<code class="language-plaintext highlighter-rouge">08d51f6</code>)</li>
+  <li>Fix collection filter to hide/show nodes instead of removing them (<code class="language-plaintext highlighter-rouge">9e2fa8c</code>)</li>
+  <li>fixed grid (<code class="language-plaintext highlighter-rouge">023c720</code>)</li>
+  <li>fixed contrast ux (<code class="language-plaintext highlighter-rouge">da824a1</code>)</li>
+  <li>Fixed updating instead of deleting and recreating shades. (<code class="language-plaintext highlighter-rouge">7151bfc</code>)</li>
+</ul>
+
+<h3 id="-other-changes">🔄 Other Changes</h3>
+
+<ul>
+  <li>Compress standalone group depth columns to consecutive indices (<code class="language-plaintext highlighter-rouge">be75bfa</code>)</li>
+  <li>Revert column offset in Arrange Grid for standalone groups (<code class="language-plaintext highlighter-rouge">2bca298</code>)</li>
+  <li>Update .gitignore (<code class="language-plaintext highlighter-rouge">03c6846</code>)</li>
+  <li>Merge pull request #7 from krstivoja/claude/modest-thompson (<code class="language-plaintext highlighter-rouge">4ab4476</code>)</li>
+  <li>Migrate node graph from Rete.js/custom SVG to @xyflow/react (<code class="language-plaintext highlighter-rouge">e135509</code>)</li>
+  <li>numbers (<code class="language-plaintext highlighter-rouge">38064fe</code>)</li>
+  <li>shades (<code class="language-plaintext highlighter-rouge">0f2c701</code>)</li>
+  <li>Auto-create default variable collection (<code class="language-plaintext highlighter-rouge">e492458</code>)</li>
+  <li>Sort shade groups numerically and preserve order (<code class="language-plaintext highlighter-rouge">3e9eea1</code>)</li>
+  <li>Delete figma-deploy.yml (<code class="language-plaintext highlighter-rouge">3bcfec9</code>)</li>
+</ul>
+
+<h2 id="installation">Installation</h2>
+
+<p>To update to this version in Figma:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong></li>
+  <li>Select the updated <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
+  <li>Or pull the latest code and run <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="getting-started">Getting Started</h2>
+
+<p>If you’re new to Winden Tokens, check out our <a href="/winden-tokens/">documentation</a> and <a href="/winden-tokens/tutorials/">tutorials</a>.</p>
+
+<hr />
+
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>
+
+  </div>
+
+  <footer class="mt-16 pt-8 border-t border-slate-200">
+    <a href="/winden-tokens/blog" class="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium">
+      ← Back to all updates
+    </a>
+  </footer>
+</article>
+
+    </main>
+
+    <footer class="border-t border-slate-200 bg-slate-50 py-12">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="grid gap-12 md:grid-cols-3">
+      <div>
+        <div class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">
+          Professional design token management for Figma
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Resources</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Community
+            </a>
+          </li>
+          <li>
+            <a href="/winden-tokens/blog" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Blog & Updates
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens/issues" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Report Issues
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Connect</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://github.com/krstivoja" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub
+            </a>
+          </li>
+          <li>
+            <a href="https://www.figma.com/@dplugins" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Profile
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 border-t border-slate-200 pt-8">
+      <p class="text-center text-sm text-slate-600">
+        © 2026 Winden Tokens. Open source and free forever.
+      </p>
+    </div>
+  </div>
+</footer>
+
+  </body>
+</html>
