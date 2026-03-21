@@ -4,7 +4,7 @@ title: Blog & Updates
 ---
 
 <!-- Blog Header -->
-<section class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-16 border-b border-slate-200">
+<section class="bg-gradient-to-br from-slate-50 via-white to-slate-100 py-16 border-b border-slate-200">
   <div class="max-w-4xl mx-auto px-6">
     <h1 class="text-4xl font-bold text-slate-900 sm:text-5xl mb-4">
       Updates & Changelog
@@ -15,21 +15,21 @@ title: Blog & Updates
 
     <!-- Category Filter -->
     <div class="flex flex-wrap gap-3 mt-8">
-      <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition">
+      <a href="{{ '/blog' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white transition">
         All Posts
       </a>
       {% if site.categories.releases.size > 0 %}
-      <a href="{{ '/blog/releases' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
+      <a href="{{ '/blog/releases' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-900 hover:text-slate-900 transition">
         Releases
       </a>
       {% endif %}
       {% if site.categories.tutorials.size > 0 %}
-      <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
+      <a href="{{ '/blog/tutorials' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-900 hover:text-slate-900 transition">
         Tutorials
       </a>
       {% endif %}
       {% if site.categories.videos.size > 0 %}
-      <a href="{{ '/blog/videos' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-600 hover:text-indigo-600 transition">
+      <a href="{{ '/blog/videos' | relative_url }}" class="px-4 py-2 rounded-full text-sm font-semibold bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-900 hover:text-slate-900 transition">
         Videos
       </a>
       {% endif %}
@@ -46,7 +46,7 @@ title: Blog & Updates
         <div class="flex items-center gap-4 mb-4">
           <time class="text-sm font-medium text-slate-500">{{ post.date | date: "%B %d, %Y" }}</time>
           {% if post.version %}
-          <span class="px-3 py-1 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+          <span class="px-3 py-1 text-xs font-bold bg-slate-200 text-slate-800 rounded-full">
             v{{ post.version }}
           </span>
           {% endif %}
@@ -61,7 +61,7 @@ title: Blog & Updates
 
         <div class="flex gap-8 items-start">
           <div class="flex-1">
-            <h2 class="text-3xl font-bold text-slate-900 mb-4 group-hover:text-indigo-600 transition">
+            <h2 class="text-3xl font-bold text-slate-900 mb-4 group-hover:text-slate-900 transition">
               <a href="{{ post.url | relative_url }}">
                 {{ post.title }}
               </a>
@@ -73,7 +73,7 @@ title: Blog & Updates
             </div>
             {% endif %}
 
-            <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-semibold group/link">
+            <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-slate-900 hover:text-slate-800 font-semibold group/link">
               Read full article
               <svg class="h-4 w-4 transition group-hover/link:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </a>
@@ -82,7 +82,7 @@ title: Blog & Updates
           {% if post.youtube %}
           {% assign youtube_id = post.youtube | remove: 'https://youtu.be/' | remove: 'https://www.youtube.com/watch?v=' | remove: 'https://youtube.com/watch?v=' | split: '&' | first | split: '?' | first %}
           <a href="{{ post.url | relative_url }}" class="hidden md:block flex-shrink-0">
-            <div class="w-64 aspect-video rounded-lg overflow-hidden border-2 border-slate-200 group-hover:border-indigo-600 transition relative">
+            <div class="w-64 aspect-video rounded-lg overflow-hidden border-2 border-slate-200 group-hover:border-slate-900 transition relative">
               <img
                 src="https://img.youtube.com/vi/{{ youtube_id }}/maxresdefault.jpg"
                 alt="{{ post.title }}"
