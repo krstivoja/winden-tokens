@@ -665,12 +665,7 @@ layout: none
         // Hero section animations - only animate once on load
         const heroSection = document.querySelector('section');
 
-        gsap.from("header", {
-          y: -100,
-          opacity: 0,
-          duration: 0.8,
-          ease: "power3.out"
-        });
+        // Don't animate header - it should be immediately visible for navigation
 
         gsap.from(heroSection.querySelector("h1"), {
           y: 50,
