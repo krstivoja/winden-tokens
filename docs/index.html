@@ -660,79 +660,55 @@ layout: none
     <script>
       gsap.registerPlugin(ScrollTrigger);
 
-      // Hero section animations
-      gsap.from("header", {
-        y: -100,
-        opacity: 0,
-        duration: 0.8,
-        ease: "power3.out"
-      });
+      // Wait for page to load before animating
+      window.addEventListener('load', function() {
+        // Hero section animations - only animate once on load
+        const heroSection = document.querySelector('section');
 
-      gsap.from("h1", {
-        y: 50,
-        opacity: 0,
-        duration: 1,
-        delay: 0.3,
-        ease: "power3.out"
-      });
-
-      gsap.from("h1 + p", {
-        y: 30,
-        opacity: 0,
-        duration: 1,
-        delay: 0.5,
-        ease: "power3.out"
-      });
-
-      gsap.from(".mt-10 a", {
-        y: 20,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.7,
-        stagger: 0.2,
-        ease: "power3.out"
-      });
-
-      // Scroll-triggered animations for sections
-      gsap.utils.toArray("section").forEach((section, index) => {
-        if (index === 0) return; // Skip hero section
-
-        gsap.from(section, {
-          scrollTrigger: {
-            trigger: section,
-            start: "top 80%",
-            toggleActions: "play none none none"
-          },
-          y: 60,
+        gsap.from("header", {
+          y: -100,
           opacity: 0,
-          duration: 1,
+          duration: 0.8,
           ease: "power3.out"
         });
-      });
 
-      // Feature cards stagger animation
-      gsap.from(".grid > div", {
-        scrollTrigger: {
-          trigger: ".grid",
-          start: "top 75%"
-        },
-        y: 50,
-        opacity: 0,
-        duration: 0.8,
-        stagger: 0.15,
-        ease: "power3.out"
-      });
+        gsap.from(heroSection.querySelector("h1"), {
+          y: 50,
+          opacity: 0,
+          duration: 1,
+          delay: 0.3,
+          ease: "power3.out"
+        });
 
-      // Image fade-in
-      gsap.from("img[alt='Winden Tokens interface']", {
-        scrollTrigger: {
-          trigger: "img[alt='Winden Tokens interface']",
-          start: "top 90%"
-        },
-        scale: 0.95,
-        opacity: 0,
-        duration: 1.2,
-        ease: "power3.out"
+        gsap.from(heroSection.querySelector("h1").nextElementSibling, {
+          y: 30,
+          opacity: 0,
+          duration: 1,
+          delay: 0.5,
+          ease: "power3.out"
+        });
+
+        const heroButtons = heroSection.querySelectorAll(".mt-10 a");
+        gsap.from(heroButtons, {
+          y: 20,
+          opacity: 0,
+          duration: 0.8,
+          delay: 0.7,
+          stagger: 0.2,
+          ease: "power3.out"
+        });
+
+        // Hero image
+        const heroImage = heroSection.querySelector("img[alt='Winden Tokens interface']");
+        if (heroImage) {
+          gsap.from(heroImage.parentElement, {
+            scale: 0.95,
+            opacity: 0,
+            duration: 1.2,
+            delay: 0.9,
+            ease: "power3.out"
+          });
+        }
       });
     </script>
   </body>
