@@ -39,13 +39,15 @@ Your content here...
 
 ## Local Development
 
+**Quick start:**
 ```bash
 cd docs
-bundle install
-bundle exec jekyll serve
+./serve.sh
 ```
 
 Visit http://localhost:4000/winden-tokens/
+
+Changes will auto-reload! See [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) for details.
 
 ## Deployment
 
