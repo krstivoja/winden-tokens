@@ -54,9 +54,11 @@ category: tutorials
           </a>
         </h2>
 
-        <div class="text-slate-600 prose prose-lg max-w-none mb-6">
-          {{ post.excerpt }}
+        {% if post.excerpt %}
+        <div class="text-slate-600 leading-relaxed mb-6">
+          {{ post.excerpt | strip_html | truncatewords: 50 }}
         </div>
+        {% endif %}
 
         <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-semibold group/link">
           Read full article

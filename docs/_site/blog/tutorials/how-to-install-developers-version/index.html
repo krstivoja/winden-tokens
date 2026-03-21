@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to Install Developer's Version of the Figma Plugin</title>
+    <meta name="description" content="Professional Design Token Management for Figma" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .prose { max-width: 65ch; }
+      .prose p { margin: 1em 0; }
+      .prose ul { margin: 1em 0; padding-left: 1.5em; }
+      .prose li { margin: 0.5em 0; }
+    </style>
+  </head>
+  <body class="bg-white antialiased">
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/winden-tokens/" class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </a>
+      </div>
+      <nav class="hidden items-center gap-8 md:flex">
+        <a href="/winden-tokens/#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Features</a>
+        <a href="/winden-tokens/blog" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Blog</a>
+        <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">GitHub</a>
+        <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+          Get Plugin
+        </a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+
+    <main>
+      <article class="max-w-4xl mx-auto px-6 py-16">
+  <header class="mb-8 border-b border-slate-200 pb-8">
+    <div class="flex items-center gap-4 mb-4">
+      <time class="text-sm text-slate-500">January 28, 2026</time>
+      
+    </div>
+    <h1 class="text-4xl font-bold text-slate-900">How to Install Developer's Version of the Figma Plugin</h1>
+  </header>
+
+  
+  <!-- YouTube Video Player (Lazy Load) -->
+  
+  <div class="mb-12">
+    <div class="youtube-lazy-load aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-lg relative cursor-pointer group" data-youtube-id="jv-OrR9AhR0">
+      <!-- Thumbnail -->
+      <img
+        src="https://img.youtube.com/vi/jv-OrR9AhR0/maxresdefault.jpg"
+        alt="How to Install Developer's Version of the Figma Plugin"
+        class="absolute inset-0 w-full h-full object-cover"
+        loading="lazy"
+      />
+      <!-- Play Button Overlay -->
+      <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
+          <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Lazy load YouTube iframe on click
+    document.querySelectorAll('.youtube-lazy-load').forEach(function(element) {
+      element.addEventListener('click', function() {
+        const youtubeId = this.getAttribute('data-youtube-id');
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('class', 'absolute inset-0 w-full h-full');
+        iframe.setAttribute('src', 'https://www.youtube.com/embed/' + youtubeId + '?autoplay=1');
+        iframe.setAttribute('title', 'How to Install Developer's Version of the Figma Plugin');
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        iframe.setAttribute('allowfullscreen', '');
+        this.innerHTML = '';
+        this.appendChild(iframe);
+      });
+    });
+  </script>
+  
+
+  <div class="prose prose-slate max-w-none">
+    <h2 id="overview">Overview</h2>
+
+<p>This step-by-step tutorial walks you through the complete process of installing the developer’s version of Winden Tokens. Whether you’re a designer wanting to try the latest features or a developer looking to contribute, this guide covers everything you need to know.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Prerequisites</strong>: What you need before installing</li>
+  <li><strong>GitHub Setup</strong>: How to access and download the repository</li>
+  <li><strong>Build Process</strong>: Compiling the plugin from source code</li>
+  <li><strong>Figma Installation</strong>: Loading the plugin into Figma</li>
+  <li><strong>Troubleshooting</strong>: Common issues and how to solve them</li>
+  <li><strong>Updating</strong>: How to get the latest updates</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+
+<p>Before you begin, make sure you have:</p>
+
+<ul>
+  <li><strong>Figma Desktop App</strong>: Required for loading development plugins</li>
+  <li><strong>Node.js</strong>: Version 14 or higher (<a href="https://nodejs.org/">download here</a>)</li>
+  <li><strong>npm</strong>: Comes with Node.js</li>
+  <li><strong>Git</strong>: For cloning the repository (<a href="https://git-scm.com/">download here</a>)</li>
+  <li><strong>Code Editor</strong> (optional): VSCode, Sublime Text, or any text editor</li>
+</ul>
+
+<h2 id="installation-steps">Installation Steps</h2>
+
+<h3 id="step-1-clone-the-repository">Step 1: Clone the Repository</h3>
+
+<p>Open your terminal and run:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/yourusername/winden-tokens.git
+<span class="nb">cd </span>winden-tokens
+</code></pre></div></div>
+
+<h3 id="step-2-install-dependencies">Step 2: Install Dependencies</h3>
+
+<p>Install all required npm packages:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>npm <span class="nb">install</span>
+</code></pre></div></div>
+
+<p>This will download and install all the dependencies listed in <code class="language-plaintext highlighter-rouge">package.json</code>.</p>
+
+<h3 id="step-3-build-the-plugin">Step 3: Build the Plugin</h3>
+
+<p>Compile the TypeScript code to JavaScript:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>npm run build
+</code></pre></div></div>
+
+<p>This creates the compiled plugin files in the <code class="language-plaintext highlighter-rouge">dist/</code> directory.</p>
+
+<h3 id="step-4-load-in-figma">Step 4: Load in Figma</h3>
+
+<ol>
+  <li>Open the <strong>Figma Desktop App</strong> (not the browser version)</li>
+  <li>Go to <strong>Plugins</strong> → <strong>Development</strong> → <strong>Import plugin from manifest</strong></li>
+  <li>Navigate to your cloned repository folder</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
+  <li>Click <strong>Open</strong></li>
+</ol>
+
+<p>The plugin is now loaded and ready to use!</p>
+
+<h2 id="development-workflow">Development Workflow</h2>
+
+<h3 id="watch-mode">Watch Mode</h3>
+
+<p>For active development, use watch mode to automatically recompile on changes:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>npm run watch
+</code></pre></div></div>
+
+<p>This will monitor your source files and rebuild automatically when you save changes.</p>
+
+<h3 id="testing-changes">Testing Changes</h3>
+
+<p>After making changes:</p>
+
+<ol>
+  <li>Save your files</li>
+  <li>Wait for the build to complete (if using watch mode)</li>
+  <li>In Figma, go to <strong>Plugins</strong> → <strong>Development</strong> → <strong>Hot reload plugin</strong></li>
+  <li>Or restart the plugin manually</li>
+</ol>
+
+<h2 id="build-commands-reference">Build Commands Reference</h2>
+
+<p>Here are all available npm scripts:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>npm run build      <span class="c"># Compile TypeScript to JavaScript</span>
+npm run watch      <span class="c"># Watch mode - recompile on changes</span>
+npm run lint       <span class="c"># Run ESLint</span>
+npm run lint:fix   <span class="c"># Run ESLint with auto-fix</span>
+</code></pre></div></div>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3 id="common-issues">Common Issues</h3>
+
+<p><strong>Issue</strong>: “Node.js version not supported”</p>
+<ul>
+  <li><strong>Solution</strong>: Update Node.js to version 14 or higher</li>
+</ul>
+
+<p><strong>Issue</strong>: “npm install fails”</p>
+<ul>
+  <li><strong>Solution</strong>: Delete <code class="language-plaintext highlighter-rouge">node_modules</code> folder and <code class="language-plaintext highlighter-rouge">package-lock.json</code>, then run <code class="language-plaintext highlighter-rouge">npm install</code> again</li>
+</ul>
+
+<p><strong>Issue</strong>: “Plugin doesn’t appear in Figma”</p>
+<ul>
+  <li><strong>Solution</strong>: Make sure you’re using Figma Desktop, not the browser version</li>
+</ul>
+
+<p><strong>Issue</strong>: “Build errors”</p>
+<ul>
+  <li><strong>Solution</strong>: Check that all dependencies are installed correctly with <code class="language-plaintext highlighter-rouge">npm install</code></li>
+</ul>
+
+<p><strong>Issue</strong>: “Changes not reflected”</p>
+<ul>
+  <li><strong>Solution</strong>: Use hot reload or restart the plugin in Figma</li>
+</ul>
+
+<h3 id="getting-help">Getting Help</h3>
+
+<p>If you encounter issues:</p>
+
+<ol>
+  <li>Check the <a href="https://github.com/yourusername/winden-tokens/issues">GitHub Issues</a> page</li>
+  <li>Review the <a href="/winden-tokens/">documentation</a></li>
+  <li>Open a new issue with details about your problem</li>
+</ol>
+
+<h2 id="updating-the-plugin">Updating the Plugin</h2>
+
+<p>To get the latest updates:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c"># Pull latest changes from GitHub</span>
+git pull origin main
+
+<span class="c"># Reinstall dependencies (if package.json changed)</span>
+npm <span class="nb">install</span>
+
+<span class="c"># Rebuild the plugin</span>
+npm run build
+</code></pre></div></div>
+
+<p>Then reload the plugin in Figma.</p>
+
+<h2 id="contributing">Contributing</h2>
+
+<p>Want to contribute to Winden Tokens?</p>
+
+<ol>
+  <li>Fork the repository on GitHub</li>
+  <li>Create a new branch for your feature</li>
+  <li>Make your changes</li>
+  <li>Test thoroughly</li>
+  <li>Submit a pull request</li>
+</ol>
+
+<p>Check out the <a href="https://github.com/yourusername/winden-tokens/blob/main/CONTRIBUTING.md">contributing guidelines</a> for more details.</p>
+
+<h2 id="next-steps">Next Steps</h2>
+
+<p>Now that you have Winden Tokens installed:</p>
+
+<ol>
+  <li>Watch the <a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">introduction tutorial</a></li>
+  <li>Explore the <a href="/winden-tokens/tutorials/design-tokens-best-practices">design tokens best practices</a></li>
+  <li>Check out the <a href="/winden-tokens/tutorials/winden-tokens-march-update">latest features</a></li>
+  <li>Read the <a href="/winden-tokens/">complete documentation</a></li>
+</ol>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">Introduction to Winden Tokens</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-march-update">March 2025 Update</a></li>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+  <li><a href="https://github.com/yourusername/winden-tokens">GitHub Repository</a></li>
+  <li><a href="/winden-tokens/releases/">Release Notes</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you need help with installation:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check the <a href="/winden-tokens/#faq">FAQ section</a></li>
+</ul>
+
+<hr />
+
+<p><em>Successfully installed? Great! Now start exploring the powerful features of Winden Tokens!</em></p>
+
+  </div>
+
+  <footer class="mt-16 pt-8 border-t border-slate-200">
+    <a href="/winden-tokens/blog" class="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium">
+      ← Back to all updates
+    </a>
+  </footer>
+</article>
+
+    </main>
+
+    <footer class="border-t border-slate-200 bg-slate-50 py-12">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="grid gap-12 md:grid-cols-3">
+      <div>
+        <div class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">
+          Professional design token management for Figma
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Resources</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Community
+            </a>
+          </li>
+          <li>
+            <a href="/winden-tokens/blog" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Blog & Updates
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens/issues" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Report Issues
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Connect</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://github.com/krstivoja" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub
+            </a>
+          </li>
+          <li>
+            <a href="https://www.figma.com/@dplugins" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Profile
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 border-t border-slate-200 pt-8">
+      <p class="text-center text-sm text-slate-600">
+        © 2026 Winden Tokens. Open source and free forever.
+      </p>
+    </div>
+  </div>
+</footer>
+
+  </body>
+</html>

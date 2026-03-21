@@ -2,6 +2,7 @@
 title: "10x Faster: Major Performance Improvements for Bulk Editing"
 date: 2024-03-05
 version: 1.1.5
+excerpt: "Major performance update makes bulk editing up to 10x faster for large design systems. Updating 500 tokens now takes ~2 seconds instead of ~10 seconds with optimized variable updates, smarter re-rendering, and faster JSON imports."
 ---
 
 We've just shipped a major performance update that makes bulk editing **up to 10x faster** for large design systems! 🚀

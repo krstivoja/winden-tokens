@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Winden Tokens and Theming</title>
+    <meta name="description" content="Professional Design Token Management for Figma" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .prose { max-width: 65ch; }
+      .prose p { margin: 1em 0; }
+      .prose ul { margin: 1em 0; padding-left: 1.5em; }
+      .prose li { margin: 0.5em 0; }
+    </style>
+  </head>
+  <body class="bg-white antialiased">
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/winden-tokens/" class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </a>
+      </div>
+      <nav class="hidden items-center gap-8 md:flex">
+        <a href="/winden-tokens/#features" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Features</a>
+        <a href="/winden-tokens/blog" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">Blog</a>
+        <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-indigo-600 transition">GitHub</a>
+        <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+          Get Plugin
+        </a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+
+    <main>
+      <article class="max-w-4xl mx-auto px-6 py-16">
+  <header class="mb-8 border-b border-slate-200 pb-8">
+    <div class="flex items-center gap-4 mb-4">
+      <time class="text-sm text-slate-500">March 20, 2026</time>
+      
+    </div>
+    <h1 class="text-4xl font-bold text-slate-900">Winden Tokens and Theming</h1>
+  </header>
+
+  
+  <!-- YouTube Video Player (Lazy Load) -->
+  
+  <div class="mb-12">
+    <div class="youtube-lazy-load aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-lg relative cursor-pointer group" data-youtube-id="RseXDep1fSk">
+      <!-- Thumbnail -->
+      <img
+        src="https://img.youtube.com/vi/RseXDep1fSk/maxresdefault.jpg"
+        alt="Winden Tokens and Theming"
+        class="absolute inset-0 w-full h-full object-cover"
+        loading="lazy"
+      />
+      <!-- Play Button Overlay -->
+      <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
+          <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Lazy load YouTube iframe on click
+    document.querySelectorAll('.youtube-lazy-load').forEach(function(element) {
+      element.addEventListener('click', function() {
+        const youtubeId = this.getAttribute('data-youtube-id');
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('class', 'absolute inset-0 w-full h-full');
+        iframe.setAttribute('src', 'https://www.youtube.com/embed/' + youtubeId + '?autoplay=1');
+        iframe.setAttribute('title', 'Winden Tokens and Theming');
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        iframe.setAttribute('allowfullscreen', '');
+        this.innerHTML = '';
+        this.appendChild(iframe);
+      });
+    });
+  </script>
+  
+
+  <div class="prose prose-slate max-w-none">
+    <h2 id="overview">Overview</h2>
+
+<p>Learn how to create and manage themes using Winden Tokens. This tutorial covers multi-mode variables, theme switching, and building flexible design systems that support light mode, dark mode, and custom themes.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Theme Creation</strong>: Building theme systems with Winden Tokens</li>
+  <li><strong>Multi-Mode Variables</strong>: Working with Figma’s variable modes for theming</li>
+  <li><strong>Theme Management</strong>: Organizing and maintaining multiple themes</li>
+  <li><strong>Token Architecture</strong>: Structuring tokens for theme flexibility</li>
+  <li><strong>Best Practices</strong>: Professional approaches to theme implementation</li>
+</ul>
+
+<h2 id="key-theming-topics">Key Theming Topics</h2>
+
+<p>This video explores essential theming concepts:</p>
+
+<ul>
+  <li>Setting up theme collections and modes</li>
+  <li>Creating semantic token layers</li>
+  <li>Implementing light and dark themes</li>
+  <li>Building custom brand themes</li>
+  <li>Managing theme-specific token values</li>
+  <li>Testing and validating themes across components</li>
+</ul>
+
+<h2 id="why-theming-matters">Why Theming Matters</h2>
+
+<p>Theming is crucial for modern design systems:</p>
+
+<ul>
+  <li><strong>User Preferences</strong>: Support light/dark mode preferences</li>
+  <li><strong>Brand Flexibility</strong>: Easy brand customization and white-labeling</li>
+  <li><strong>Accessibility</strong>: Create high-contrast and accessible themes</li>
+  <li><strong>Consistency</strong>: Maintain design consistency across themes</li>
+  <li><strong>Efficiency</strong>: Change themes globally without redesigning</li>
+</ul>
+
+<h2 id="theme-architecture-best-practices">Theme Architecture Best Practices</h2>
+
+<p>Structure your tokens for maximum flexibility:</p>
+
+<ol>
+  <li><strong>Primitive Tokens</strong>: Base values (colors, sizes)</li>
+  <li><strong>Semantic Tokens</strong>: Purpose-based tokens (background, text, border)</li>
+  <li><strong>Component Tokens</strong>: Component-specific overrides</li>
+  <li><strong>Theme Modes</strong>: Light, dark, and custom themes</li>
+</ol>
+
+<h2 id="getting-started-with-theming">Getting Started with Theming</h2>
+
+<p>Prerequisites for this tutorial:</p>
+
+<ul>
+  <li>Winden Tokens installed in Figma</li>
+  <li>Understanding of basic variable concepts</li>
+  <li>Familiarity with design token patterns</li>
+</ul>
+
+<p>If you need to install Winden Tokens:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong> in Figma</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file from the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a></li>
+  <li>Or build from source using <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="common-theming-patterns">Common Theming Patterns</h2>
+
+<h3 id="lightdark-theme-pattern">Light/Dark Theme Pattern</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Primitive Collection:
+- gray-50, gray-100, ... gray-900
+- brand-primary, brand-secondary
+
+Semantic Collection (Light/Dark modes):
+- background: gray-50 (light) / gray-900 (dark)
+- text: gray-900 (light) / gray-50 (dark)
+- primary: brand-primary (both)
+</code></pre></div></div>
+
+<h3 id="multi-brand-pattern">Multi-Brand Pattern</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Brand Collection (Brand A/Brand B modes):
+- primary: blue-600 (A) / red-600 (B)
+- secondary: blue-400 (A) / red-400 (B)
+</code></pre></div></div>
+
+<h2 id="implementation-steps">Implementation Steps</h2>
+
+<p>Follow this workflow for theme implementation:</p>
+
+<ol>
+  <li><strong>Plan Your Theme Strategy</strong>: Define required themes and token structure</li>
+  <li><strong>Create Primitive Tokens</strong>: Establish base color and size values</li>
+  <li><strong>Build Semantic Layer</strong>: Create purpose-based tokens with modes</li>
+  <li><strong>Apply to Components</strong>: Use semantic tokens in your components</li>
+  <li><strong>Test Themes</strong>: Validate all themes across your design system</li>
+  <li><strong>Document</strong>: Create theme documentation for your team</li>
+</ol>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-advanced-features">Advanced Features Tutorial</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">Winden Tokens Introduction</a></li>
+  <li><a href="/winden-tokens/">Complete Documentation</a></li>
+  <li><a href="/winden-tokens/releases/">Latest Release Notes</a></li>
+</ul>
+
+<h2 id="theming-tips--tricks">Theming Tips &amp; Tricks</h2>
+
+<ul>
+  <li><strong>Use Aliases</strong>: Reference primitive tokens in semantic tokens</li>
+  <li><strong>Test Early</strong>: Check themes as you build components</li>
+  <li><strong>Name Consistently</strong>: Use clear, purpose-based names</li>
+  <li><strong>Document Modes</strong>: Clearly label each theme mode</li>
+  <li><strong>Version Control</strong>: Track theme changes carefully</li>
+</ul>
+
+<h2 id="real-world-applications">Real-World Applications</h2>
+
+<p>Theming is valuable for:</p>
+
+<ul>
+  <li>Multi-brand product families</li>
+  <li>White-label applications</li>
+  <li>Accessibility compliance (high-contrast themes)</li>
+  <li>User preference support (light/dark mode)</li>
+  <li>Seasonal or event-based themes</li>
+</ul>
+
+<h2 id="continue-learning">Continue Learning</h2>
+
+<p>Explore more theming topics:</p>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-march-update">Plugin Update</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-advanced-features">Advanced Features</a></li>
+  <li><a href="/winden-tokens/tutorials/">All Tutorials</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you have questions about theming:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check out our <a href="/winden-tokens/">comprehensive documentation</a></li>
+</ul>
+
+<hr />
+
+<p><em>Master theming and create flexible, scalable design systems with Winden Tokens!</em></p>
+
+  </div>
+
+  <footer class="mt-16 pt-8 border-t border-slate-200">
+    <a href="/winden-tokens/blog" class="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium">
+      ← Back to all updates
+    </a>
+  </footer>
+</article>
+
+    </main>
+
+    <footer class="border-t border-slate-200 bg-slate-50 py-12">
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="grid gap-12 md:grid-cols-3">
+      <div>
+        <div class="flex items-center gap-3">
+          <img src="/winden-tokens/assets/icon.png" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
+          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">
+          Professional design token management for Figma
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Resources</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Community
+            </a>
+          </li>
+          <li>
+            <a href="/winden-tokens/blog" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Blog & Updates
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/krstivoja/winden-tokens/issues" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Report Issues
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Connect</h3>
+        <ul class="mt-4 space-y-3">
+          <li>
+            <a href="https://github.com/krstivoja" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              GitHub
+            </a>
+          </li>
+          <li>
+            <a href="https://www.figma.com/@dplugins" target="_blank" class="text-sm text-slate-600 hover:text-indigo-600 transition">
+              Figma Profile
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-12 border-t border-slate-200 pt-8">
+      <p class="text-center text-sm text-slate-600">
+        © 2026 Winden Tokens. Open source and free forever.
+      </p>
+    </div>
+  </div>
+</footer>
+
+  </body>
+</html>

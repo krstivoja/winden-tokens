@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/winden-tokens/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/winden-tokens/" rel="alternate" type="text/html" /><updated>2026-03-21T19:47:35+01:00</updated><id>http://localhost:4000/winden-tokens/feed.xml</id><title type="html">Winden Tokens</title><subtitle>Professional Design Token Management for Figma</subtitle><entry><title type="html">Version 1.1.0 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released/" rel="alternate" type="text/html" title="Version 1.1.0 Released" /><published>2026-03-21T00:00:00+01:00</published><updated>2026-03-21T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released/"><![CDATA[<p>Release version <strong>1.1.0</strong> is now available!</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/winden-tokens/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/winden-tokens/" rel="alternate" type="text/html" /><updated>2026-03-21T20:29:10+01:00</updated><id>http://localhost:4000/winden-tokens/feed.xml</id><title type="html">Winden Tokens</title><subtitle>Professional Design Token Management for Figma</subtitle><entry><title type="html">Version 1.1.0 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released/" rel="alternate" type="text/html" title="Version 1.1.0 Released" /><published>2026-03-21T00:00:00+01:00</published><updated>2026-03-21T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-1.1.0-released/"><![CDATA[<p>Release version <strong>1.1.0</strong> is now available!</p>
 
 <h3 id="-uistyle-changes">💄 UI/Style Changes</h3>
 
@@ -41,7 +41,165 @@
 
 <hr />
 
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v1.1.0" /><summary type="html"><![CDATA[Release version 1.1.0 is now available!]]></summary></entry><entry><title type="html">Version 1.0.0 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released/" rel="alternate" type="text/html" title="Version 1.0.0 Released" /><published>2026-03-19T00:00:00+01:00</published><updated>2026-03-19T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released/"><![CDATA[<p>Release version <strong>1.0.0</strong> is now available!</p>
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v1.1.0" /><summary type="html"><![CDATA[Release version 1.1.0 is now available!]]></summary></entry><entry><title type="html">Winden Tokens and Theming</title><link href="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-theming/" rel="alternate" type="text/html" title="Winden Tokens and Theming" /><published>2026-03-20T00:00:00+01:00</published><updated>2026-03-20T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-theming</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-theming/"><![CDATA[<h2 id="overview">Overview</h2>
+
+<p>Learn how to create and manage themes using Winden Tokens. This tutorial covers multi-mode variables, theme switching, and building flexible design systems that support light mode, dark mode, and custom themes.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Theme Creation</strong>: Building theme systems with Winden Tokens</li>
+  <li><strong>Multi-Mode Variables</strong>: Working with Figma’s variable modes for theming</li>
+  <li><strong>Theme Management</strong>: Organizing and maintaining multiple themes</li>
+  <li><strong>Token Architecture</strong>: Structuring tokens for theme flexibility</li>
+  <li><strong>Best Practices</strong>: Professional approaches to theme implementation</li>
+</ul>
+
+<h2 id="key-theming-topics">Key Theming Topics</h2>
+
+<p>This video explores essential theming concepts:</p>
+
+<ul>
+  <li>Setting up theme collections and modes</li>
+  <li>Creating semantic token layers</li>
+  <li>Implementing light and dark themes</li>
+  <li>Building custom brand themes</li>
+  <li>Managing theme-specific token values</li>
+  <li>Testing and validating themes across components</li>
+</ul>
+
+<h2 id="why-theming-matters">Why Theming Matters</h2>
+
+<p>Theming is crucial for modern design systems:</p>
+
+<ul>
+  <li><strong>User Preferences</strong>: Support light/dark mode preferences</li>
+  <li><strong>Brand Flexibility</strong>: Easy brand customization and white-labeling</li>
+  <li><strong>Accessibility</strong>: Create high-contrast and accessible themes</li>
+  <li><strong>Consistency</strong>: Maintain design consistency across themes</li>
+  <li><strong>Efficiency</strong>: Change themes globally without redesigning</li>
+</ul>
+
+<h2 id="theme-architecture-best-practices">Theme Architecture Best Practices</h2>
+
+<p>Structure your tokens for maximum flexibility:</p>
+
+<ol>
+  <li><strong>Primitive Tokens</strong>: Base values (colors, sizes)</li>
+  <li><strong>Semantic Tokens</strong>: Purpose-based tokens (background, text, border)</li>
+  <li><strong>Component Tokens</strong>: Component-specific overrides</li>
+  <li><strong>Theme Modes</strong>: Light, dark, and custom themes</li>
+</ol>
+
+<h2 id="getting-started-with-theming">Getting Started with Theming</h2>
+
+<p>Prerequisites for this tutorial:</p>
+
+<ul>
+  <li>Winden Tokens installed in Figma</li>
+  <li>Understanding of basic variable concepts</li>
+  <li>Familiarity with design token patterns</li>
+</ul>
+
+<p>If you need to install Winden Tokens:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong> in Figma</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file from the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a></li>
+  <li>Or build from source using <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="common-theming-patterns">Common Theming Patterns</h2>
+
+<h3 id="lightdark-theme-pattern">Light/Dark Theme Pattern</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Primitive Collection:
+- gray-50, gray-100, ... gray-900
+- brand-primary, brand-secondary
+
+Semantic Collection (Light/Dark modes):
+- background: gray-50 (light) / gray-900 (dark)
+- text: gray-900 (light) / gray-50 (dark)
+- primary: brand-primary (both)
+</code></pre></div></div>
+
+<h3 id="multi-brand-pattern">Multi-Brand Pattern</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Brand Collection (Brand A/Brand B modes):
+- primary: blue-600 (A) / red-600 (B)
+- secondary: blue-400 (A) / red-400 (B)
+</code></pre></div></div>
+
+<h2 id="implementation-steps">Implementation Steps</h2>
+
+<p>Follow this workflow for theme implementation:</p>
+
+<ol>
+  <li><strong>Plan Your Theme Strategy</strong>: Define required themes and token structure</li>
+  <li><strong>Create Primitive Tokens</strong>: Establish base color and size values</li>
+  <li><strong>Build Semantic Layer</strong>: Create purpose-based tokens with modes</li>
+  <li><strong>Apply to Components</strong>: Use semantic tokens in your components</li>
+  <li><strong>Test Themes</strong>: Validate all themes across your design system</li>
+  <li><strong>Document</strong>: Create theme documentation for your team</li>
+</ol>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-advanced-features">Advanced Features Tutorial</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">Winden Tokens Introduction</a></li>
+  <li><a href="/winden-tokens/">Complete Documentation</a></li>
+  <li><a href="/winden-tokens/releases/">Latest Release Notes</a></li>
+</ul>
+
+<h2 id="theming-tips--tricks">Theming Tips &amp; Tricks</h2>
+
+<ul>
+  <li><strong>Use Aliases</strong>: Reference primitive tokens in semantic tokens</li>
+  <li><strong>Test Early</strong>: Check themes as you build components</li>
+  <li><strong>Name Consistently</strong>: Use clear, purpose-based names</li>
+  <li><strong>Document Modes</strong>: Clearly label each theme mode</li>
+  <li><strong>Version Control</strong>: Track theme changes carefully</li>
+</ul>
+
+<h2 id="real-world-applications">Real-World Applications</h2>
+
+<p>Theming is valuable for:</p>
+
+<ul>
+  <li>Multi-brand product families</li>
+  <li>White-label applications</li>
+  <li>Accessibility compliance (high-contrast themes)</li>
+  <li>User preference support (light/dark mode)</li>
+  <li>Seasonal or event-based themes</li>
+</ul>
+
+<h2 id="continue-learning">Continue Learning</h2>
+
+<p>Explore more theming topics:</p>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-march-update">Plugin Update</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-advanced-features">Advanced Features</a></li>
+  <li><a href="/winden-tokens/tutorials/">All Tutorials</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you have questions about theming:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check out our <a href="/winden-tokens/">comprehensive documentation</a></li>
+</ul>
+
+<hr />
+
+<p><em>Master theming and create flexible, scalable design systems with Winden Tokens!</em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="tutorials" /><category term="tutorial" /><category term="video" /><category term="figma-plugin" /><category term="theming" /><category term="design-tokens" /><summary type="html"><![CDATA[Overview]]></summary></entry><entry><title type="html">Version 1.0.0 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released/" rel="alternate" type="text/html" title="Version 1.0.0 Released" /><published>2026-03-19T00:00:00+01:00</published><updated>2026-03-19T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-1.0.0-released/"><![CDATA[<p>Release version <strong>1.0.0</strong> is now available!</p>
 
 <h3 id="-new-features">✨ New Features</h3>
 
@@ -97,7 +255,297 @@
 
 <hr />
 
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v1.0.0" /><summary type="html"><![CDATA[Release version 1.0.0 is now available!]]></summary></entry><entry><title type="html">Version 0.0.9 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released/" rel="alternate" type="text/html" title="Version 0.0.9 Released" /><published>2026-01-30T00:00:00+01:00</published><updated>2026-01-30T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released/"><![CDATA[<p>Release version <strong>0.0.9</strong> is now available!</p>
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v1.0.0" /><summary type="html"><![CDATA[Release version 1.0.0 is now available!]]></summary></entry><entry><title type="html">Winden Tokens Advanced Features</title><link href="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-advanced-features/" rel="alternate" type="text/html" title="Winden Tokens Advanced Features" /><published>2026-03-16T00:00:00+01:00</published><updated>2026-03-16T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-advanced-features</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-advanced-features/"><![CDATA[<h2 id="overview">Overview</h2>
+
+<p>Dive deeper into Winden Tokens with this advanced tutorial. Explore powerful features and advanced techniques that will take your design token management to the next level.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Advanced Features</strong>: Powerful capabilities for experienced users</li>
+  <li><strong>Complex Workflows</strong>: Handling sophisticated design system scenarios</li>
+  <li><strong>Optimization Techniques</strong>: Making the most of Winden Tokens’ capabilities</li>
+  <li><strong>Advanced Organization</strong>: Structuring large-scale design systems</li>
+  <li><strong>Power User Tips</strong>: Expert-level shortcuts and techniques</li>
+</ul>
+
+<h2 id="advanced-topics-covered">Advanced Topics Covered</h2>
+
+<p>This video explores advanced aspects including:</p>
+
+<ul>
+  <li>Complex variable relationships and dependencies</li>
+  <li>Advanced collection management strategies</li>
+  <li>Scaling design tokens for large projects</li>
+  <li>Integration with development workflows</li>
+  <li>Advanced export and import techniques</li>
+</ul>
+
+<h2 id="who-this-tutorial-is-for">Who This Tutorial Is For</h2>
+
+<p>This tutorial is ideal for:</p>
+
+<ul>
+  <li>Experienced Winden Tokens users</li>
+  <li>Design system architects</li>
+  <li>Teams managing complex design systems</li>
+  <li>Power users looking to optimize their workflow</li>
+  <li>Contributors and plugin developers</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+
+<p>Before watching this tutorial:</p>
+
+<ul>
+  <li>Have Winden Tokens installed and running</li>
+  <li>Familiarity with basic token management</li>
+  <li>Understanding of design system concepts</li>
+  <li>Experience with Figma variables</li>
+</ul>
+
+<h2 id="level-up-your-skills">Level Up Your Skills</h2>
+
+<p>This tutorial builds on foundational knowledge:</p>
+
+<ol>
+  <li>Watch the <a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">introduction tutorial</a> first</li>
+  <li>Practice basic workflows from the <a href="/winden-tokens/tutorials/winden-tokens-tutorial">earlier tutorial</a></li>
+  <li>Then dive into these advanced techniques</li>
+</ol>
+
+<h2 id="getting-started">Getting Started</h2>
+
+<p>If you need to install Winden Tokens:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong> in Figma</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file from the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a></li>
+  <li>Or build from source using <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<p>After mastering these advanced features:</p>
+
+<ol>
+  <li>Assess your current design system complexity</li>
+  <li>Identify areas where advanced features can help</li>
+  <li>Implement techniques gradually in your workflow</li>
+  <li>Document your team’s advanced workflows</li>
+  <li>Train team members on new capabilities</li>
+</ol>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-tutorial">Basic Tutorial</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-theming">Theming Tutorial</a></li>
+  <li><a href="/winden-tokens/tutorials/how-to-install-developers-version">Installation Guide</a></li>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+  <li><a href="/winden-tokens/">Complete Documentation</a></li>
+</ul>
+
+<h2 id="best-practices-for-advanced-usage">Best Practices for Advanced Usage</h2>
+
+<p>When working with advanced features:</p>
+
+<ul>
+  <li><strong>Plan Ahead</strong>: Structure your token architecture before scaling</li>
+  <li><strong>Document Everything</strong>: Keep detailed records of complex relationships</li>
+  <li><strong>Test Thoroughly</strong>: Validate changes across your design system</li>
+  <li><strong>Version Control</strong>: Track changes to complex token structures</li>
+  <li><strong>Team Communication</strong>: Ensure everyone understands advanced patterns</li>
+</ul>
+
+<h2 id="continue-learning">Continue Learning</h2>
+
+<p>Explore more advanced topics:</p>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-theming">Theming and Multi-Mode Variables</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-march-update">Plugin Updates</a></li>
+  <li><a href="/winden-tokens/tutorials/">All Tutorials</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you have questions about advanced features:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check out our <a href="/winden-tokens/">comprehensive documentation</a></li>
+</ul>
+
+<hr />
+
+<p><em>Ready for more? Check out our <a href="/winden-tokens/tutorials/winden-tokens-theming">theming tutorial</a> to learn about multi-mode variables!</em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="tutorials" /><category term="tutorial" /><category term="video" /><category term="figma-plugin" /><category term="advanced" /><summary type="html"><![CDATA[Overview]]></summary></entry><entry><title type="html">Winden Tokens Tutorial</title><link href="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-tutorial/" rel="alternate" type="text/html" title="Winden Tokens Tutorial" /><published>2026-03-14T00:00:00+01:00</published><updated>2026-03-14T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-tutorial</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-tutorial/"><![CDATA[<h2 id="overview">Overview</h2>
+
+<p>This tutorial demonstrates essential workflows and features in Winden Tokens. Learn how to effectively manage design tokens and streamline your design system workflow in Figma.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Core Workflows</strong>: Essential processes for working with design tokens</li>
+  <li><strong>Feature Deep Dive</strong>: In-depth look at key plugin capabilities</li>
+  <li><strong>Practical Examples</strong>: Real-world scenarios and use cases</li>
+  <li><strong>Productivity Tips</strong>: Shortcuts and techniques for faster token management</li>
+  <li><strong>Best Practices</strong>: Recommended approaches for design system organization</li>
+</ul>
+
+<h2 id="key-topics-covered">Key Topics Covered</h2>
+
+<p>This video covers important aspects of Winden Tokens including:</p>
+
+<ul>
+  <li>Variable creation and management workflows</li>
+  <li>Collection organization strategies</li>
+  <li>Token naming conventions</li>
+  <li>Bulk operations and efficiency techniques</li>
+  <li>Integration with your existing design system</li>
+</ul>
+
+<h2 id="who-this-tutorial-is-for">Who This Tutorial Is For</h2>
+
+<p>This tutorial is perfect for:</p>
+
+<ul>
+  <li>Designers working with design systems</li>
+  <li>Teams managing shared design tokens</li>
+  <li>Anyone looking to improve their Figma workflow</li>
+  <li>Design system maintainers and contributors</li>
+</ul>
+
+<h2 id="getting-started">Getting Started</h2>
+
+<p>If you haven’t installed Winden Tokens yet:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong> in Figma</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file from the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a></li>
+  <li>Or build from source using <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="apply-what-youve-learned">Apply What You’ve Learned</h2>
+
+<p>After watching this tutorial:</p>
+
+<ol>
+  <li>Try implementing the workflows in your own projects</li>
+  <li>Experiment with the features demonstrated</li>
+  <li>Adapt the techniques to your team’s needs</li>
+  <li>Share your learnings with your design team</li>
+</ol>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/how-to-install-developers-version">Installation Guide</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction">Winden Tokens Introduction</a></li>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+  <li><a href="/winden-tokens/">Complete Documentation</a></li>
+  <li><a href="/winden-tokens/releases/">Latest Release Notes</a></li>
+</ul>
+
+<h2 id="continue-learning">Continue Learning</h2>
+
+<p>Check out more tutorials in the series:</p>
+
+<ul>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-march-update">Plugin Update</a></li>
+  <li><a href="/winden-tokens/tutorials/winden-tokens-theming">Theming Tutorial</a></li>
+  <li><a href="/winden-tokens/tutorials/">All Tutorials</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you have any questions about the topics covered in this tutorial:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check out our <a href="/winden-tokens/">comprehensive documentation</a></li>
+</ul>
+
+<hr />
+
+<p><em>Keep learning! More tutorials are available in our <a href="/winden-tokens/tutorials/">tutorial series</a>.</em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="tutorials" /><category term="tutorial" /><category term="video" /><category term="figma-plugin" /><category term="workflow" /><summary type="html"><![CDATA[Overview]]></summary></entry><entry><title type="html">Winden Tokens Figma Plugin Update</title><link href="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-march-update/" rel="alternate" type="text/html" title="Winden Tokens Figma Plugin Update" /><published>2026-03-10T00:00:00+01:00</published><updated>2026-03-10T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-march-update</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/tutorials/winden-tokens-march-update/"><![CDATA[<h2 id="overview">Overview</h2>
+
+<p>This tutorial provides a comprehensive walkthrough of the latest improvements and new features added to Winden Tokens. Whether you’re a new user or have been using the plugin for a while, this update video will help you understand what’s new and how to take advantage of the latest capabilities.</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>In this tutorial, you’ll discover:</p>
+
+<ul>
+  <li><strong>Latest Features</strong>: New capabilities added in recent releases</li>
+  <li><strong>UI Improvements</strong>: Enhanced user interface and user experience updates</li>
+  <li><strong>Workflow Enhancements</strong>: Improved workflows for design token management</li>
+  <li><strong>Performance Updates</strong>: Optimizations that make the plugin faster and more efficient</li>
+  <li><strong>Best Practices</strong>: Tips for using the new features effectively in your design system</li>
+</ul>
+
+<h2 id="key-highlights">Key Highlights</h2>
+
+<p>Some of the major updates covered in this video include:</p>
+
+<ul>
+  <li>Enhanced variable management capabilities</li>
+  <li>Improved collection organization</li>
+  <li>Better token visualization</li>
+  <li>New bulk editing features</li>
+  <li>Performance improvements for large design systems</li>
+</ul>
+
+<h2 id="getting-started">Getting Started</h2>
+
+<p>If you haven’t installed Winden Tokens yet:</p>
+
+<ol>
+  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong> in Figma</li>
+  <li>Select the <code class="language-plaintext highlighter-rouge">manifest.json</code> file from the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a></li>
+  <li>Or build from source using <code class="language-plaintext highlighter-rouge">npm run build</code></li>
+</ol>
+
+<h2 id="staying-up-to-date">Staying Up to Date</h2>
+
+<p>To keep up with the latest updates:</p>
+
+<ul>
+  <li>Check the <a href="/winden-tokens/releases/">Release Notes</a> regularly</li>
+  <li>Subscribe to our YouTube channel for video tutorials</li>
+  <li>Follow the <a href="https://github.com/yourusername/winden-tokens">GitHub repository</a> for code updates</li>
+  <li>Join the community discussions</li>
+</ul>
+
+<h2 id="related-resources">Related Resources</h2>
+
+<ul>
+  <li><a href="/winden-tokens/">Documentation</a></li>
+  <li><a href="/winden-tokens/tutorials/">More Tutorials</a></li>
+  <li><a href="/winden-tokens/releases/2026-03-21-version-1.1.0-released">Version 1.1.0 Release Notes</a></li>
+  <li><a href="/winden-tokens/releases/2026-03-19-version-1.0.0-released">Version 1.0.0 Release Notes</a></li>
+  <li><a href="/winden-tokens/tutorials/design-tokens-best-practices">Design Tokens Best Practices</a></li>
+</ul>
+
+<h2 id="have-questions">Have Questions?</h2>
+
+<p>If you have any questions about the topics covered in this tutorial, feel free to:</p>
+
+<ul>
+  <li><a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></li>
+  <li>Watch more tutorials in our <a href="/winden-tokens/tutorials/">tutorial series</a></li>
+  <li>Check out our <a href="/winden-tokens/">comprehensive documentation</a></li>
+</ul>
+
+<hr />
+
+<p><em>Want to see more tutorials? Subscribe to our YouTube channel and enable notifications for the latest updates!</em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="tutorials" /><category term="tutorial" /><category term="video" /><category term="figma-plugin" /><category term="update" /><summary type="html"><![CDATA[Overview]]></summary></entry><entry><title type="html">Version 0.0.9 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released/" rel="alternate" type="text/html" title="Version 0.0.9 Released" /><published>2026-01-30T00:00:00+01:00</published><updated>2026-01-30T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.9-released/"><![CDATA[<p>Release version <strong>0.0.9</strong> is now available!</p>
 
 <h3 id="-other-changes">🔄 Other Changes</h3>
 
@@ -152,99 +600,7 @@
 
 <hr />
 
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.8" /><summary type="html"><![CDATA[Release version 0.0.8 is now available!]]></summary></entry><entry><title type="html">Version 0.0.5 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.5-released/" rel="alternate" type="text/html" title="Version 0.0.5 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.5-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.5-released/"><![CDATA[<p>Release version <strong>0.0.5</strong> is now available!</p>
-
-<h3 id="-new-features">✨ New Features</h3>
-
-<ul>
-  <li>Update GroupedGraph styles and add dots background (<code class="language-plaintext highlighter-rouge">7f9c56d</code>)</li>
-  <li>Add relationships view and variable cleanup logic (<code class="language-plaintext highlighter-rouge">d8ddeee</code>)</li>
-</ul>
-
-<h3 id="-other-changes">🔄 Other Changes</h3>
-
-<ul>
-  <li>Update React and scheduler minified bundles (<code class="language-plaintext highlighter-rouge">96849e6</code>)</li>
-</ul>
-
-<h2 id="installation">Installation</h2>
-
-<p>To update to this version in Figma:</p>
-
-<ol>
-  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong></li>
-  <li>Select the updated <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
-  <li>Or pull the latest code and run <code class="language-plaintext highlighter-rouge">npm run build</code></li>
-</ol>
-
-<h2 id="getting-started">Getting Started</h2>
-
-<p>If you’re new to Winden Tokens, check out our <a href="/winden-tokens/">documentation</a> and <a href="/winden-tokens/tutorials/">tutorials</a>.</p>
-
-<hr />
-
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.5" /><summary type="html"><![CDATA[Release version 0.0.5 is now available!]]></summary></entry><entry><title type="html">Version 0.0.6 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released/" rel="alternate" type="text/html" title="Version 0.0.6 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released/"><![CDATA[<p>Release version <strong>0.0.6</strong> is now available!</p>
-
-<h3 id="-other-changes">🔄 Other Changes</h3>
-
-<ul>
-  <li>0.0.6 (<code class="language-plaintext highlighter-rouge">29ae3fc</code>)</li>
-</ul>
-
-<h2 id="installation">Installation</h2>
-
-<p>To update to this version in Figma:</p>
-
-<ol>
-  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong></li>
-  <li>Select the updated <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
-  <li>Or pull the latest code and run <code class="language-plaintext highlighter-rouge">npm run build</code></li>
-</ol>
-
-<h2 id="getting-started">Getting Started</h2>
-
-<p>If you’re new to Winden Tokens, check out our <a href="/winden-tokens/">documentation</a> and <a href="/winden-tokens/tutorials/">tutorials</a>.</p>
-
-<hr />
-
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.6" /><summary type="html"><![CDATA[Release version 0.0.6 is now available!]]></summary></entry><entry><title type="html">Version 0.0.7 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.7-released/" rel="alternate" type="text/html" title="Version 0.0.7 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.7-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.7-released/"><![CDATA[<p>Release version <strong>0.0.7</strong> is now available!</p>
-
-<h3 id="-bug-fixes">🐛 Bug Fixes</h3>
-
-<ul>
-  <li>bug fix nodes (<code class="language-plaintext highlighter-rouge">099a9b1</code>)</li>
-</ul>
-
-<h3 id="-code-refactoring">🔨 Code Refactoring</h3>
-
-<ul>
-  <li>Refactor React symbol names and update context usage (<code class="language-plaintext highlighter-rouge">f990ed2</code>)</li>
-  <li>clean up (<code class="language-plaintext highlighter-rouge">ea2389a</code>)</li>
-</ul>
-
-<h3 id="-other-changes">🔄 Other Changes</h3>
-
-<ul>
-  <li>Update README.md (<code class="language-plaintext highlighter-rouge">d412f7c</code>)</li>
-</ul>
-
-<h2 id="installation">Installation</h2>
-
-<p>To update to this version in Figma:</p>
-
-<ol>
-  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong></li>
-  <li>Select the updated <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
-  <li>Or pull the latest code and run <code class="language-plaintext highlighter-rouge">npm run build</code></li>
-</ol>
-
-<h2 id="getting-started">Getting Started</h2>
-
-<p>If you’re new to Winden Tokens, check out our <a href="/winden-tokens/">documentation</a> and <a href="/winden-tokens/tutorials/">tutorials</a>.</p>
-
-<hr />
-
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.7" /><summary type="html"><![CDATA[Release version 0.0.7 is now available!]]></summary></entry><entry><title type="html">Version 0.0.4 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released/" rel="alternate" type="text/html" title="Version 0.0.4 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released/"><![CDATA[<p>Release version <strong>0.0.4</strong> is now available!</p>
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.8" /><summary type="html"><![CDATA[Release version 0.0.8 is now available!]]></summary></entry><entry><title type="html">Version 0.0.4 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released/" rel="alternate" type="text/html" title="Version 0.0.4 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.4-released/"><![CDATA[<p>Release version <strong>0.0.4</strong> is now available!</p>
 
 <h3 id="-new-features">✨ New Features</h3>
 
@@ -282,12 +638,12 @@
 
 <hr />
 
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.4" /><summary type="html"><![CDATA[Release version 0.0.4 is now available!]]></summary></entry><entry><title type="html">Version 0.0.3 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.3-released/" rel="alternate" type="text/html" title="Version 0.0.3 Released" /><published>2026-01-28T00:00:00+01:00</published><updated>2026-01-28T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.3-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.3-released/"><![CDATA[<p>Release version <strong>0.0.3</strong> is now available!</p>
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.4" /><summary type="html"><![CDATA[Release version 0.0.4 is now available!]]></summary></entry><entry><title type="html">Version 0.0.6 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released/" rel="alternate" type="text/html" title="Version 0.0.6 Released" /><published>2026-01-29T00:00:00+01:00</published><updated>2026-01-29T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.6-released/"><![CDATA[<p>Release version <strong>0.0.6</strong> is now available!</p>
 
 <h3 id="-other-changes">🔄 Other Changes</h3>
 
 <ul>
-  <li>Update manifest.json (<code class="language-plaintext highlighter-rouge">e10a2ac</code>)</li>
+  <li>0.0.6 (<code class="language-plaintext highlighter-rouge">29ae3fc</code>)</li>
 </ul>
 
 <h2 id="installation">Installation</h2>
@@ -306,52 +662,4 @@
 
 <hr />
 
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.3" /><summary type="html"><![CDATA[Release version 0.0.3 is now available!]]></summary></entry><entry><title type="html">Version 0.0.1 Released</title><link href="http://localhost:4000/winden-tokens/blog/releases/version-0.0.1-released/" rel="alternate" type="text/html" title="Version 0.0.1 Released" /><published>2026-01-27T00:00:00+01:00</published><updated>2026-01-27T00:00:00+01:00</updated><id>http://localhost:4000/winden-tokens/blog/releases/version-0.0.1-released</id><content type="html" xml:base="http://localhost:4000/winden-tokens/blog/releases/version-0.0.1-released/"><![CDATA[<p>Release version <strong>0.0.1</strong> is now available!</p>
-
-<h3 id="-new-features">✨ New Features</h3>
-
-<ul>
-  <li>Add bulk edit modal for group variables (<code class="language-plaintext highlighter-rouge">11fee41</code>)</li>
-  <li>Add search and filter to tokens table UI (<code class="language-plaintext highlighter-rouge">545e903</code>)</li>
-  <li>Add support for variable references in value parsing (<code class="language-plaintext highlighter-rouge">13233a4</code>)</li>
-  <li>Add initial Figma plugin for variable management (<code class="language-plaintext highlighter-rouge">57dbf94</code>)</li>
-</ul>
-
-<h3 id="-bug-fixes">🐛 Bug Fixes</h3>
-
-<ul>
-  <li>Fix steps modal base value and step selection logic (<code class="language-plaintext highlighter-rouge">8314bf3</code>)</li>
-</ul>
-
-<h3 id="-code-refactoring">🔨 Code Refactoring</h3>
-
-<ul>
-  <li>Refactor UI variable rendering and update polling (<code class="language-plaintext highlighter-rouge">ff52461</code>)</li>
-  <li>Refactor shades modal to support curve editing (<code class="language-plaintext highlighter-rouge">3c06167</code>)</li>
-</ul>
-
-<h3 id="-other-changes">🔄 Other Changes</h3>
-
-<ul>
-  <li>action (<code class="language-plaintext highlighter-rouge">6e5636f</code>)</li>
-  <li>Update README.md (<code class="language-plaintext highlighter-rouge">a44dbc5</code>)</li>
-  <li>Initial commit: Figma tokens manager plugin (<code class="language-plaintext highlighter-rouge">c120ceb</code>)</li>
-</ul>
-
-<h2 id="installation">Installation</h2>
-
-<p>To update to this version in Figma:</p>
-
-<ol>
-  <li>Go to <strong>Plugins &gt; Development &gt; Import plugin from manifest</strong></li>
-  <li>Select the updated <code class="language-plaintext highlighter-rouge">manifest.json</code> file</li>
-  <li>Or pull the latest code and run <code class="language-plaintext highlighter-rouge">npm run build</code></li>
-</ol>
-
-<h2 id="getting-started">Getting Started</h2>
-
-<p>If you’re new to Winden Tokens, check out our <a href="/winden-tokens/">documentation</a> and <a href="/winden-tokens/tutorials/">tutorials</a>.</p>
-
-<hr />
-
-<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.1" /><summary type="html"><![CDATA[Release version 0.0.1 is now available!]]></summary></entry></feed>
+<p><em>Have feedback or questions? <a href="https://github.com/yourusername/winden-tokens/issues">Open an issue on GitHub</a></em></p>]]></content><author><name>Winden Tokens Team</name></author><category term="releases" /><category term="release" /><category term="v0.0.6" /><summary type="html"><![CDATA[Release version 0.0.6 is now available!]]></summary></entry></feed>
