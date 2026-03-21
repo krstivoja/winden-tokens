@@ -2,7 +2,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-overlay);
   display: none;
   align-items: center;
   justify-content: center;
@@ -16,7 +16,7 @@
 .modal {
   background: var(--bg);
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xl);
   width: 360px;
   max-height: 90vh;
   overflow: auto;
@@ -27,6 +27,17 @@
 
   &.modal-steps {
     width: 560px;
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
   }
 }
 
@@ -140,10 +151,10 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(45deg, #ddd 25%, transparent 25%),
-                linear-gradient(-45deg, #ddd 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, #ddd 75%),
-                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background: linear-gradient(45deg, var(--checker-dark) 25%, transparent 25%),
+                linear-gradient(-45deg, var(--checker-dark) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, var(--checker-dark) 75%),
+                linear-gradient(-45deg, transparent 75%, var(--checker-dark) 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
   }
@@ -181,14 +192,14 @@
     width: 16px;
     height: 16px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    color: #111;
+    background: var(--badge-surface);
+    color: var(--text);
     font-size: 10px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 0 1px var(--border-soft);
   }
 }
 
@@ -249,7 +260,7 @@
   &.active {
     background: var(--accent);
     border-color: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
   }
 }
 
@@ -288,7 +299,7 @@
 .curve-property-item.active .curve-property-reset {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .curve-svg {
@@ -312,7 +323,7 @@
 }
 
 .curve-node-base {
-  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.18));
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.24));
 }
 
 .curve-handle:hover {
@@ -391,6 +402,42 @@ rect.handle-active {
   max-height: 280px;
   overflow-y: auto;
   background: var(--bg);
+}
+
+.steps-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.steps-list-section {
+  flex: 1;
+  min-height: 0;
+}
+
+.steps-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-right: 8px;
+  gap: 8px;
+}
+
+.steps-table-header-grid {
+  display: grid;
+  grid-template-columns: 16px 24px minmax(0, 1fr) 180px 48px;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.steps-list-section .steps-editable-table {
+  height: 100%;
+  max-height: none;
 }
 
 .steps-editable-row {
@@ -638,10 +685,10 @@ rect.handle-active {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(45deg, #ddd 25%, transparent 25%),
-                linear-gradient(-45deg, #ddd 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, #ddd 75%),
-                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background: linear-gradient(45deg, var(--checker-dark) 25%, transparent 25%),
+                linear-gradient(-45deg, var(--checker-dark) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, var(--checker-dark) 75%),
+                linear-gradient(-45deg, transparent 75%, var(--checker-dark) 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
   }
@@ -667,6 +714,8 @@ rect.handle-active {
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text);
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;
   line-height: 1.6;
@@ -725,13 +774,13 @@ rect.handle-active {
     border-radius: 3px;
 
     &.new {
-      background: #e6f9f0;
+      background: var(--success-bg);
       color: var(--success);
     }
 
     &.modified {
-      background: #fff8e6;
-      color: #b86e00;
+      background: var(--warning-bg);
+      color: var(--warning);
     }
   }
 }

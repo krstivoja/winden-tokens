@@ -3,10 +3,10 @@
 .color-value-menu,
 .contrast-picker {
   position: absolute;
-  background: white;
+  background: var(--bg-menu);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   padding: 4px;
   z-index: 100;
   display: block;
@@ -30,19 +30,19 @@
     }
 
     &[data-type="COLOR"] svg {
-      color: #c41e3a;
+      color: var(--type-color);
     }
 
     &[data-type="FLOAT"] svg {
-      color: #3a5bc4;
+      color: var(--type-float);
     }
 
     &[data-type="STRING"] svg {
-      color: #2e8b57;
+      color: var(--type-string);
     }
 
     &[data-type="BOOLEAN"] svg {
-      color: #c47a1e;
+      color: var(--type-boolean);
     }
 
     &:hover {

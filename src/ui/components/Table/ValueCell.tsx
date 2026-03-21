@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
+import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
 
 interface ValueCellProps {
   variable: VariableData;
@@ -11,23 +12,21 @@ interface ValueCellProps {
 }
 
 export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
-  const { variables, selectedModeId } = useAppContext();
+  const { collections, variables, selectedModeId } = useAppContext();
 
-  // Get the value for the selected mode, fallback to first mode value
-  const currentValue = (selectedModeId && variable.valuesByMode[selectedModeId])
-    ? variable.valuesByMode[selectedModeId]
-    : variable.value;
+  const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
 
   const [inputValue, setInputValue] = useState(currentValue);
 
   const handleValueChange = useCallback((newValue: string) => {
+    const modeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
     post({
       type: 'update-variable-value',
       id: variable.id,
       value: newValue,
-      modeId: selectedModeId
+      modeId,
     });
-  }, [variable.id, selectedModeId]);
+  }, [collections, variable.collectionId, variable.id, selectedModeId]);
 
   const handleBlur = useCallback(() => {
     if (inputValue !== currentValue) {
@@ -49,10 +48,7 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
       const refName = refMatch[1];
       const refVariable = variables.find(rv => rv.name === refName);
       if (refVariable && refVariable.resolvedType === 'COLOR') {
-        // Get the referenced variable's value for the selected mode
-        displayColor = (selectedModeId && refVariable.valuesByMode[selectedModeId])
-          ? refVariable.valuesByMode[selectedModeId]
-          : refVariable.value;
+        displayColor = getVariableValueForMode(collections, refVariable, selectedModeId);
       } else {
         displayColor = '#888888';
       }

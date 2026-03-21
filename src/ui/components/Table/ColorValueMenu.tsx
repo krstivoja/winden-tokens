@@ -6,6 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { ShadesIcon, TypeIcons } from '../Icons';
 import { hexToRgb } from '../../utils/color';
+import { resolveModeIdForCollection } from '../../utils/modes';
 
 interface ColorValueMenuProps {
   position: { top: number; left: number };
@@ -16,14 +17,18 @@ interface ColorValueMenuProps {
 
 export function ColorValueMenu({ position, variableId, currentValue, onClose }: ColorValueMenuProps) {
   const { openColorPicker, openColorReference } = useModalContext();
-  const { selectedModeId } = useAppContext();
+  const { collections, variables, selectedModeId } = useAppContext();
+  const variable = variables.find(candidate => candidate.id === variableId);
+  const modeId = variable
+    ? resolveModeIdForCollection(collections, variable.collectionId, selectedModeId)
+    : selectedModeId;
 
   const handlePickColor = () => {
     onClose();
     openColorPicker({
       initialColor: currentValue,
       onConfirm: (hex) => {
-        post({ type: 'update-variable-value', id: variableId, value: hexToRgb(hex), modeId: selectedModeId });
+        post({ type: 'update-variable-value', id: variableId, value: hexToRgb(hex), modeId });
       },
     });
   };
@@ -34,7 +39,7 @@ export function ColorValueMenu({ position, variableId, currentValue, onClose }: 
       currentVariableId: variableId,
       currentValue,
       onSelect: (refName) => {
-        post({ type: 'update-variable-value', id: variableId, value: `{${refName}}`, modeId: selectedModeId });
+        post({ type: 'update-variable-value', id: variableId, value: `{${refName}}`, modeId });
       },
     });
   };

@@ -1,13 +1,248 @@
 // Design tokens / CSS variables
 :root {
+  color-scheme: light dark;
+  --font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  // Core surfaces
+  --bg: var(--figma-color-bg, #ffffff);
+  --bg-alt: var(--figma-color-bg-secondary, #f7f7f7);
+  --bg-hover: var(--figma-color-bg-hover, #f0f0f0);
+  --bg-selected: var(--figma-color-bg-selected, #e8f4ff);
+  --bg-input: var(--figma-color-bg, #ffffff);
+  --bg-menu: var(--figma-color-bg, #ffffff);
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-danger-hover: rgba(224, 62, 62, 0.12);
+
+  // Borders
+  --border: var(--figma-color-border, #e0e0e0);
+  --border-strong: var(--figma-color-border-strong, #4a4a4a);
+  --border-soft: rgba(0, 0, 0, 0.12);
+  --border-warning: #d9a441;
+  --border-warning-strong: #c18400;
+
+  // Text
+  --text: var(--figma-color-text, #1e1e1e);
+  --text-secondary: var(--figma-color-text-secondary, #666666);
+  --text-dim: var(--figma-color-text-tertiary, #666666);
+  --text-muted: #999999;
+  --text-brand: var(--figma-color-text-brand, #18a0fb);
+  --text-danger: var(--figma-color-text-danger, #e03e3e);
+  --text-on-accent: #ffffff;
+  --text-on-danger: #ffffff;
+  --text-on-success: #0c5b38;
+  --text-on-warning: #8a5a00;
+
+  // Actions
+  --accent: var(--figma-color-bg-brand, #18a0fb);
+  --accent-hover: var(--figma-color-bg-brand-hover, #0d8de5);
+  --danger: var(--figma-color-bg-danger, #e03e3e);
+  --danger-hover: var(--figma-color-bg-danger-hover, #c43030);
+  --success: #1bc47d;
+  --warning: #b86e00;
+
+  // Soft status surfaces
+  --success-bg: #e6f9f0;
+  --danger-bg: #ffe5e5;
+  --danger-bg-soft: #fff5f5;
+  --warning-bg: #fff8e6;
+  --warning-bg-strong: #fff2cc;
+
+  // Shadows
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  // Data type colors
+  --type-color: #e24a67;
+  --type-color-bg: rgba(226, 74, 103, 0.16);
+  --type-float: #4f7cff;
+  --type-float-bg: rgba(79, 124, 255, 0.16);
+  --type-string: #2fb67a;
+  --type-string-bg: rgba(47, 182, 122, 0.16);
+  --type-boolean: #d9982f;
+  --type-boolean-bg: rgba(217, 152, 47, 0.18);
+
+  // Checkerboard helpers
+  --checker-light: #f3f3f3;
+  --checker-dark: #d8d8d8;
+
+  // Graph/canvas
+  --canvas-bg: var(--bg);
+  --canvas-dot: var(--border-soft);
+  --graph-card-bg: var(--bg-alt);
+  --graph-card-shader-bg: var(--warning-bg);
+  --graph-card-header-bg: var(--bg-alt);
+  --graph-card-header-shader-bg: var(--warning-bg);
+  --graph-card-body-bg: var(--bg);
+  --graph-card-border: var(--border-strong);
+  --graph-row-hover: var(--bg-hover);
+  --graph-row-shader: var(--warning-bg);
+  --graph-row-shader-hover: var(--warning-bg-strong);
+  --graph-handle-idle: var(--border-strong);
+  --graph-swatch-border: var(--border);
+  --graph-badge-shader-bg: var(--warning-bg-strong);
+  --graph-badge-shader-text: var(--text-on-warning);
+  --graph-badge-palette-bg: var(--bg-selected);
+  --graph-badge-palette-text: var(--text-brand);
+  --graph-edge-reference: var(--accent);
+  --graph-edge-generated: var(--warning);
+  --graph-edge-delete: var(--danger);
+  --badge-surface: rgba(255, 255, 255, 0.92);
+}
+
+:root[data-theme-mode='light'] {
   --bg: #ffffff;
-  --bg-alt: #f9f9f9;
+  --bg-alt: #f7f7f7;
   --bg-hover: #f0f0f0;
   --bg-selected: #e8f4ff;
+  --bg-input: #ffffff;
+  --bg-menu: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-danger-hover: rgba(224, 62, 62, 0.12);
+
   --border: #e0e0e0;
+  --border-strong: #4a4a4a;
+  --border-soft: rgba(0, 0, 0, 0.12);
+  --border-warning: #d9a441;
+  --border-warning-strong: #c18400;
+
   --text: #1e1e1e;
-  --text-dim: #666;
+  --text-secondary: #666666;
+  --text-dim: #666666;
+  --text-muted: #999999;
+  --text-brand: #18a0fb;
+  --text-danger: #e03e3e;
+
   --accent: #18a0fb;
+  --accent-hover: #0d8de5;
   --danger: #e03e3e;
+  --danger-hover: #c43030;
   --success: #1bc47d;
+  --warning: #b86e00;
+
+  --success-bg: #e6f9f0;
+  --danger-bg: #ffe5e5;
+  --danger-bg-soft: #fff5f5;
+  --warning-bg: #fff8e6;
+  --warning-bg-strong: #fff2cc;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  --type-color: #c41e3a;
+  --type-color-bg: rgba(196, 30, 58, 0.12);
+  --type-float: #3a5bc4;
+  --type-float-bg: rgba(58, 91, 196, 0.12);
+  --type-string: #2e8b57;
+  --type-string-bg: rgba(46, 139, 87, 0.12);
+  --type-boolean: #c47a1e;
+  --type-boolean-bg: rgba(196, 122, 30, 0.14);
+
+  --checker-light: #f3f3f3;
+  --checker-dark: #d8d8d8;
+
+  --canvas-bg: #ffffff;
+  --canvas-dot: rgba(0, 0, 0, 0.2);
+  --graph-card-bg: #f0f0f0;
+  --graph-card-shader-bg: #fff4df;
+  --graph-card-header-bg: #f0f0f0;
+  --graph-card-header-shader-bg: #fff4df;
+  --graph-card-body-bg: #ffffff;
+  --graph-card-border: #4a4a4a;
+  --graph-row-hover: rgba(0, 0, 0, 0.03);
+  --graph-row-shader: rgba(255, 228, 184, 0.28);
+  --graph-row-shader-hover: rgba(255, 228, 184, 0.5);
+  --graph-handle-idle: #4a4a4a;
+  --graph-swatch-border: #d4d4d4;
+  --graph-badge-shader-bg: #ffe4b8;
+  --graph-badge-shader-text: #8a5a00;
+  --graph-badge-palette-bg: #dceaff;
+  --graph-badge-palette-text: #2457a5;
+  --graph-edge-reference: #1877f2;
+  --graph-edge-generated: #b86e00;
+  --graph-edge-delete: #e53935;
+  --badge-surface: rgba(255, 255, 255, 0.92);
+}
+
+:root[data-theme-mode='dark'] {
+  --bg: #2c2c2c;
+  --bg-alt: #333333;
+  --bg-hover: #3a3a3a;
+  --bg-selected: #4f628e;
+  --bg-input: #353535;
+  --bg-menu: #2c2c2c;
+  --bg-overlay: rgba(0, 0, 0, 0.62);
+  --bg-danger-hover: rgba(255, 118, 118, 0.14);
+
+  --border: #454545;
+  --border-strong: #6a6a6a;
+  --border-soft: rgba(255, 255, 255, 0.15);
+  --border-warning: #a07a1f;
+  --border-warning-strong: #c7961b;
+
+  --text: #ffffff;
+  --text-secondary: #c7c7c7;
+  --text-dim: #ababab;
+  --text-muted: #969696;
+  --text-brand: #b8cdfd;
+  --text-danger: #ff8b8b;
+  --text-on-accent: #08121d;
+  --text-on-danger: #210909;
+  --text-on-success: #0c1d14;
+  --text-on-warning: #2b1b00;
+
+  --accent: #7aa2ff;
+  --accent-hover: #96b6ff;
+  --danger: #ff7676;
+  --danger-hover: #ff8b8b;
+  --success: #65d79e;
+  --warning: #e1aa36;
+
+  --success-bg: rgba(44, 108, 77, 0.36);
+  --danger-bg: rgba(126, 40, 40, 0.32);
+  --danger-bg-soft: rgba(126, 40, 40, 0.22);
+  --warning-bg: rgba(120, 87, 26, 0.3);
+  --warning-bg-strong: rgba(120, 87, 26, 0.42);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  --type-color: #ff5f7a;
+  --type-color-bg: rgba(255, 95, 122, 0.16);
+  --type-float: #7f9dff;
+  --type-float-bg: rgba(127, 157, 255, 0.16);
+  --type-string: #55c58b;
+  --type-string-bg: rgba(85, 197, 139, 0.16);
+  --type-boolean: #f0c167;
+  --type-boolean-bg: rgba(240, 193, 103, 0.18);
+
+  --checker-light: #464646;
+  --checker-dark: #373737;
+
+  --canvas-bg: #262626;
+  --canvas-dot: rgba(255, 255, 255, 0.09);
+  --graph-card-bg: #333333;
+  --graph-card-shader-bg: #40382a;
+  --graph-card-header-bg: #3a3a3a;
+  --graph-card-header-shader-bg: #4b402f;
+  --graph-card-body-bg: #2f2f2f;
+  --graph-card-border: #6a6a6a;
+  --graph-row-hover: #3a3a3a;
+  --graph-row-shader: rgba(181, 128, 38, 0.16);
+  --graph-row-shader-hover: rgba(181, 128, 38, 0.26);
+  --graph-handle-idle: #8d8d8d;
+  --graph-swatch-border: #5d5d5d;
+  --graph-badge-shader-bg: #68542b;
+  --graph-badge-shader-text: #ffe1a3;
+  --graph-badge-palette-bg: #46597f;
+  --graph-badge-palette-text: #dfe8ff;
+  --graph-edge-reference: #6ea0ff;
+  --graph-edge-generated: #d29a2c;
+  --graph-edge-delete: #ff7d7d;
+  --badge-surface: rgba(44, 44, 44, 0.92);
 }

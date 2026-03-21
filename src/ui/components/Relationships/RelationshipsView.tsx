@@ -3,15 +3,13 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { GroupedGraph } from './GroupedGraph';
-import { CollectionFilters } from '../Toolbar/CollectionFilters';
-import { ModeSelector } from '../Toolbar/ModeSelector';
 
 interface RelationshipsViewProps {
   variableType: 'COLOR' | 'FLOAT';
 }
 
 export function RelationshipsView({ variableType }: RelationshipsViewProps) {
-  const { variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
+  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
 
   // Count stats - filter by selected collections
   const filteredVars = variables.filter(
@@ -26,13 +24,8 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
 
   return (
     <div className="relationships-view">
-      {/* Collection filter toolbar */}
-      <div className="relationships-toolbar">
-        <CollectionFilters />
-        <ModeSelector />
-      </div>
-
       <GroupedGraph
+        collections={collections}
         variables={variables}
         selectedCollectionIds={selectedCollectionIds}
         variableType={variableType}

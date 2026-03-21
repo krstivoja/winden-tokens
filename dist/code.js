@@ -3,6 +3,8 @@
 figma.showUI(__html__, { width: 750, height: 500, themeColors: true });
 // Track variable state for change detection
 let lastDataHash = '';
+const RELAUNCH_COMMAND = 'open';
+const RELAUNCH_DESCRIPTION = 'Manage variables and design tokens';
 const STEP_RATIO_PRESET_VALUES = [
     { value: '1.125', ratio: 1.125 },
     { value: '1.2', ratio: 1.2 },
@@ -22,6 +24,15 @@ const SHADE_GENERATOR_CONFIG_KEY = 'shadeGeneratorConfig';
 const STEP_GENERATOR_CONFIG_KEY = 'stepGeneratorConfig';
 const DEFAULT_SHADE_LIGHT_VALUE = 5;
 const DEFAULT_SHADE_DARK_VALUE = 90;
+const HISTORY_LIMIT = 20;
+let undoHistory = [];
+let redoHistory = [];
+let currentHistoryHash = '';
+function setSidebarRelaunchData() {
+    const relaunchData = { [RELAUNCH_COMMAND]: RELAUNCH_DESCRIPTION };
+    figma.root.setRelaunchData(relaunchData);
+    figma.currentPage.setRelaunchData(relaunchData);
+}
 // Get stored variable order
 function getVariableOrder() {
     const orderJson = figma.root.getPluginData('variableOrder');
@@ -30,6 +41,378 @@ function getVariableOrder() {
 // Set stored variable order
 function setVariableOrder(order) {
     figma.root.setPluginData('variableOrder', JSON.stringify(order));
+}
+function getHistoryVariableKey(collectionIndexById, variable) {
+    const storedIndex = collectionIndexById.get(variable.collectionId);
+    const collectionIndex = storedIndex !== undefined ? storedIndex : -1;
+    return `${collectionIndex}::${variable.resolvedType}::${variable.name}`;
+}
+function buildHistoryHash(snapshot) {
+    const collectionIndexById = new Map();
+    snapshot.collections.forEach((collection, index) => {
+        collectionIndexById.set(collection.id, index);
+    });
+    const variableKeyById = new Map();
+    snapshot.variables.forEach(variable => {
+        variableKeyById.set(variable.id, getHistoryVariableKey(collectionIndexById, variable));
+    });
+    const normalizeShadeConfigForHash = (config) => {
+        if (!config)
+            return null;
+        return {
+            version: config.version,
+            sourceName: config.sourceName,
+            sourceValue: config.sourceValue,
+            shadeCount: config.shadeCount,
+            baseIndex: config.baseIndex,
+            lightValue: config.lightValue,
+            darkValue: config.darkValue,
+            lightnessCurve: config.lightnessCurve,
+            saturationCurve: config.saturationCurve,
+            hueCurve: config.hueCurve,
+            generatedShades: config.generatedShades.map(shade => ({
+                name: shade.name,
+                value: shade.value,
+            })),
+        };
+    };
+    const normalizeStepEntriesForHash = (steps) => steps.map(step => ({
+        name: step.name,
+        ratio: step.ratio,
+        isBase: step.isBase,
+    }));
+    const normalizeGeneratedStepsForHash = (steps) => steps.map(step => ({
+        name: step.name,
+        ratio: step.ratio,
+    }));
+    const normalizeStepConfigForHash = (collectionId, config) => {
+        if (!config)
+            return null;
+        const collection = snapshot.collections.find(candidate => candidate.id === collectionId) || null;
+        const orderedModes = collection ? collection.modes : [];
+        const modes = orderedModes
+            .map(mode => {
+            const modeConfig = config.modes ? config.modes[mode.id] : null;
+            if (!modeConfig)
+                return null;
+            return {
+                name: mode.name,
+                steps: normalizeStepEntriesForHash(modeConfig.steps),
+                generatedSteps: normalizeGeneratedStepsForHash(modeConfig.generatedSteps),
+                modalState: modeConfig.modalState,
+            };
+        })
+            .filter((mode) => mode !== null);
+        return {
+            version: config.version,
+            sourceName: config.sourceName,
+            baseStepName: config.baseStepName,
+            steps: normalizeStepEntriesForHash(config.steps || []),
+            generatedSteps: normalizeGeneratedStepsForHash(config.generatedSteps),
+            modalState: config.modalState,
+            modes,
+        };
+    };
+    const normalizedVariables = snapshot.variables.map(variable => {
+        const collection = snapshot.collections.find(candidate => candidate.id === variable.collectionId) || null;
+        const orderedModes = collection ? collection.modes : [];
+        const valuesByMode = orderedModes
+            .filter(mode => Object.prototype.hasOwnProperty.call(variable.valuesByMode, mode.id))
+            .map(mode => ({
+            name: mode.name,
+            value: variable.valuesByMode[mode.id],
+        }));
+        return {
+            key: getHistoryVariableKey(collectionIndexById, variable),
+            valuesByMode,
+            shadeConfig: normalizeShadeConfigForHash(variable.shadeConfig),
+            stepConfig: normalizeStepConfigForHash(variable.collectionId, variable.stepConfig),
+        };
+    });
+    return JSON.stringify({
+        collections: snapshot.collections.map(collection => ({
+            name: collection.name,
+            hiddenFromPublishing: collection.hiddenFromPublishing,
+            modes: collection.modes.map(mode => mode.name),
+        })),
+        variables: normalizedVariables,
+        variableOrder: snapshot.variableOrder
+            .map(id => variableKeyById.get(id) || null)
+            .filter((value) => value !== null),
+    });
+}
+function cloneStoredShadeConfig(config) {
+    if (!config)
+        return null;
+    return JSON.parse(JSON.stringify(config));
+}
+function cloneStoredStepConfig(config) {
+    if (!config)
+        return null;
+    return JSON.parse(JSON.stringify(config));
+}
+async function captureHistorySnapshot() {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const variables = await figma.variables.getLocalVariablesAsync();
+    const variablesById = new Map(variables.map(variable => [variable.id, variable]));
+    const collectionSnapshots = collections.map(collection => ({
+        id: collection.id,
+        name: collection.name,
+        hiddenFromPublishing: collection.hiddenFromPublishing,
+        modes: collection.modes.map(mode => ({
+            id: mode.modeId,
+            name: mode.name,
+        })),
+    }));
+    const variableSnapshots = [];
+    for (const collection of collections) {
+        for (const variableId of collection.variableIds) {
+            const variable = variablesById.get(variableId);
+            if (!variable)
+                continue;
+            const valuesByMode = {};
+            for (const modeId of Object.keys(variable.valuesByMode)) {
+                valuesByMode[modeId] = await formatValue(variable.valuesByMode[modeId], variable.resolvedType);
+            }
+            variableSnapshots.push({
+                id: variable.id,
+                collectionId: collection.id,
+                name: variable.name,
+                resolvedType: variable.resolvedType,
+                valuesByMode,
+                shadeConfig: cloneStoredShadeConfig(readShadeGeneratorConfig(variable)),
+                stepConfig: cloneStoredStepConfig(readStepGeneratorConfig(variable)),
+            });
+        }
+    }
+    const snapshotBase = {
+        collections: collectionSnapshots,
+        variables: variableSnapshots,
+        variableOrder: getVariableOrder().filter(variableId => variablesById.has(variableId)),
+    };
+    return {
+        collections: snapshotBase.collections,
+        variables: snapshotBase.variables,
+        variableOrder: snapshotBase.variableOrder,
+        hash: buildHistoryHash(snapshotBase),
+    };
+}
+function remapShadeConfigForRestore(config, variableIdMap) {
+    const remapped = cloneStoredShadeConfig(config);
+    if (!remapped) {
+        return config;
+    }
+    const sourceVariable = variableIdMap.get(config.sourceVariableId);
+    remapped.sourceVariableId = sourceVariable ? sourceVariable.id : remapped.sourceVariableId;
+    remapped.generatedShades = remapped.generatedShades.map(shade => ({
+        id: (() => {
+            const shadeVariable = variableIdMap.get(shade.id);
+            return shadeVariable ? shadeVariable.id : shade.id;
+        })(),
+        name: shade.name,
+        value: shade.value,
+    }));
+    remapped.updatedAt = new Date().toISOString();
+    return remapped;
+}
+function remapStoredStepEntriesForRestore(steps, variableIdMap) {
+    if (!steps)
+        return steps;
+    return steps.map(step => ({
+        id: typeof step.id === 'string'
+            ? (() => {
+                const mappedVariable = variableIdMap.get(step.id);
+                return mappedVariable ? mappedVariable.id : null;
+            })()
+            : null,
+        name: step.name,
+        ratio: step.ratio,
+        isBase: step.isBase,
+    }));
+}
+function remapStoredGeneratedStepsForRestore(steps, variableIdMap) {
+    return steps.map(step => ({
+        id: (() => {
+            const mappedVariable = variableIdMap.get(step.id);
+            return mappedVariable ? mappedVariable.id : step.id;
+        })(),
+        name: step.name,
+        ratio: step.ratio,
+    }));
+}
+function remapStepConfigForRestore(config, variableIdMap, modeIdMap) {
+    const remapped = cloneStoredStepConfig(config);
+    if (!remapped) {
+        return config;
+    }
+    const sourceVariable = variableIdMap.get(config.sourceVariableId);
+    remapped.sourceVariableId = sourceVariable ? sourceVariable.id : remapped.sourceVariableId;
+    remapped.generatedSteps = remapStoredGeneratedStepsForRestore(remapped.generatedSteps, variableIdMap);
+    remapped.steps = remapStoredStepEntriesForRestore(remapped.steps, variableIdMap);
+    if (remapped.modes) {
+        const nextModes = {};
+        for (const [oldModeId, modeConfig] of Object.entries(remapped.modes)) {
+            const newModeId = modeIdMap.get(oldModeId) || oldModeId;
+            nextModes[newModeId] = {
+                steps: remapStoredStepEntriesForRestore(modeConfig.steps, variableIdMap) || [],
+                generatedSteps: remapStoredGeneratedStepsForRestore(modeConfig.generatedSteps, variableIdMap),
+                modalState: modeConfig.modalState,
+            };
+        }
+        remapped.modes = nextModes;
+    }
+    remapped.updatedAt = new Date().toISOString();
+    return remapped;
+}
+async function restoreHistorySnapshot(snapshot) {
+    const existingCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    for (const collection of existingCollections) {
+        collection.remove();
+    }
+    const collectionSnapshotById = new Map(snapshot.collections.map(collection => [collection.id, collection]));
+    const collectionMap = new Map();
+    const modeIdMap = new Map();
+    for (const collectionSnapshot of snapshot.collections) {
+        const collection = figma.variables.createVariableCollection(collectionSnapshot.name);
+        const defaultMode = collectionSnapshot.modes.length > 0 ? collectionSnapshot.modes[0] : null;
+        const extraModes = collectionSnapshot.modes.slice(1);
+        if (defaultMode) {
+            collection.renameMode(collection.defaultModeId, defaultMode.name);
+            modeIdMap.set(defaultMode.id, collection.defaultModeId);
+        }
+        for (const mode of extraModes) {
+            const newModeId = collection.addMode(mode.name);
+            modeIdMap.set(mode.id, newModeId);
+        }
+        collection.hiddenFromPublishing = collectionSnapshot.hiddenFromPublishing;
+        collectionMap.set(collectionSnapshot.id, collection);
+    }
+    const variableMap = new Map();
+    for (const variableSnapshot of snapshot.variables) {
+        const collection = collectionMap.get(variableSnapshot.collectionId);
+        const collectionSnapshot = collectionSnapshotById.get(variableSnapshot.collectionId);
+        if (!collection || !collectionSnapshot)
+            continue;
+        const variable = figma.variables.createVariable(variableSnapshot.name, collection, variableSnapshot.resolvedType);
+        const defaultModeId = collectionSnapshot.modes[0]
+            ? modeIdMap.get(collectionSnapshot.modes[0].id) || collection.defaultModeId
+            : collection.defaultModeId;
+        variable.setValueForMode(defaultModeId, getDefaultValue(variableSnapshot.resolvedType));
+        variableMap.set(variableSnapshot.id, variable);
+    }
+    for (const variableSnapshot of snapshot.variables) {
+        const variable = variableMap.get(variableSnapshot.id);
+        if (!variable)
+            continue;
+        for (const [oldModeId, value] of Object.entries(variableSnapshot.valuesByMode)) {
+            const newModeId = modeIdMap.get(oldModeId);
+            if (!newModeId)
+                continue;
+            const parsedValue = await parseValue(value, variable.resolvedType);
+            variable.setValueForMode(newModeId, parsedValue);
+        }
+    }
+    for (const variableSnapshot of snapshot.variables) {
+        const variable = variableMap.get(variableSnapshot.id);
+        if (!variable)
+            continue;
+        if (variableSnapshot.shadeConfig) {
+            variable.setPluginData(SHADE_GENERATOR_CONFIG_KEY, JSON.stringify(remapShadeConfigForRestore(variableSnapshot.shadeConfig, variableMap)));
+        }
+        else {
+            clearShadeGeneratorConfig(variable);
+        }
+        if (variableSnapshot.stepConfig) {
+            variable.setPluginData(STEP_GENERATOR_CONFIG_KEY, JSON.stringify(remapStepConfigForRestore(variableSnapshot.stepConfig, variableMap, modeIdMap)));
+        }
+        else {
+            clearStepGeneratorConfig(variable);
+        }
+    }
+    setVariableOrder(snapshot.variableOrder
+        .map(oldVariableId => {
+        const mappedVariable = variableMap.get(oldVariableId);
+        return mappedVariable ? mappedVariable.id : null;
+    })
+        .filter((id) => id !== null));
+    setSidebarRelaunchData();
+    await fetchData();
+}
+function trimHistoryStack(stack) {
+    if (stack.length <= HISTORY_LIMIT) {
+        return stack;
+    }
+    return stack.slice(stack.length - HISTORY_LIMIT);
+}
+function postHistoryState() {
+    figma.ui.postMessage({
+        type: 'history-state',
+        canUndo: undoHistory.length > 0,
+        canRedo: redoHistory.length > 0,
+        undoCount: undoHistory.length,
+        redoCount: redoHistory.length,
+    });
+}
+async function resetHistory() {
+    undoHistory = [];
+    redoHistory = [];
+    currentHistoryHash = (await captureHistorySnapshot()).hash;
+    postHistoryState();
+}
+async function runMutationWithHistory(action) {
+    const beforeSnapshot = await captureHistorySnapshot();
+    await action();
+    const afterSnapshot = await captureHistorySnapshot();
+    currentHistoryHash = afterSnapshot.hash;
+    if (afterSnapshot.hash !== beforeSnapshot.hash) {
+        undoHistory = trimHistoryStack(undoHistory.concat([beforeSnapshot]));
+        redoHistory = [];
+    }
+    postHistoryState();
+}
+async function undoHistoryStep() {
+    if (undoHistory.length === 0) {
+        postHistoryState();
+        return;
+    }
+    const currentSnapshot = await captureHistorySnapshot();
+    if (currentSnapshot.hash !== currentHistoryHash) {
+        await resetHistory();
+        figma.ui.postMessage({
+            type: 'history-error',
+            error: 'Undo history was cleared because the file changed outside the plugin.',
+        });
+        return;
+    }
+    const previousSnapshot = undoHistory[undoHistory.length - 1];
+    undoHistory = undoHistory.slice(0, -1);
+    redoHistory = trimHistoryStack(redoHistory.concat([currentSnapshot]));
+    await restoreHistorySnapshot(previousSnapshot);
+    currentHistoryHash = previousSnapshot.hash;
+    postHistoryState();
+    figma.ui.postMessage({ type: 'history-applied', direction: 'undo' });
+}
+async function redoHistoryStep() {
+    if (redoHistory.length === 0) {
+        postHistoryState();
+        return;
+    }
+    const currentSnapshot = await captureHistorySnapshot();
+    if (currentSnapshot.hash !== currentHistoryHash) {
+        await resetHistory();
+        figma.ui.postMessage({
+            type: 'history-error',
+            error: 'Redo history was cleared because the file changed outside the plugin.',
+        });
+        return;
+    }
+    const nextSnapshot = redoHistory[redoHistory.length - 1];
+    redoHistory = redoHistory.slice(0, -1);
+    undoHistory = trimHistoryStack(undoHistory.concat([currentSnapshot]));
+    await restoreHistorySnapshot(nextSnapshot);
+    currentHistoryHash = nextSnapshot.hash;
+    postHistoryState();
+    figma.ui.postMessage({ type: 'history-applied', direction: 'redo' });
 }
 function isShadeVariableName(name) {
     return /^(.+)\/(\d+)$/.test(name);
@@ -342,7 +725,8 @@ function reorderLegacyStoredSteps(baseStepName, steps) {
     }
     const allNumeric = Array.from(stepsByShortName.keys()).every(stepName => /^-?\d+(\.\d+)?$/.test(stepName));
     if (allNumeric) {
-        return [...steps].sort((a, b) => Number.parseFloat(getStepShortName(a.name)) - Number.parseFloat(getStepShortName(b.name))).map(step => ({
+        const sortedSteps = steps.slice().sort((a, b) => Number.parseFloat(getStepShortName(a.name)) - Number.parseFloat(getStepShortName(b.name)));
+        return sortedSteps.map(step => ({
             id: step.id,
             name: step.name,
             ratio: step.ratio,
@@ -372,15 +756,18 @@ function normalizeStoredStepEntries(baseStepName, generatedSteps, rawSteps) {
             return normalizedSteps;
         }
     }
-    return reorderLegacyStoredSteps(baseStepName, [
+    const legacySteps = [
         { id: null, name: baseStepName, ratio: 1, isBase: true },
-        ...generatedSteps.map(step => ({
+    ];
+    for (const step of generatedSteps) {
+        legacySteps.push({
             id: step.id,
             name: step.name,
             ratio: step.ratio,
             isBase: false,
-        })),
-    ]);
+        });
+    }
+    return reorderLegacyStoredSteps(baseStepName, legacySteps);
 }
 function normalizeStoredStepModalState(value, baseStepName, steps) {
     if (value &&
@@ -659,7 +1046,7 @@ function clearStepGeneratorConfig(variable) {
 }
 function sortVariableData(variableData) {
     const order = getVariableOrder();
-    const sorted = [...variableData];
+    const sorted = variableData.slice();
     if (order.length > 0) {
         sorted.sort((a, b) => {
             const indexA = order.indexOf(a.id);
@@ -693,7 +1080,10 @@ function sortVariableData(variableData) {
         if (baseName) {
             if (!processedGroups.has(baseName)) {
                 processedGroups.add(baseName);
-                result.push(...groupMap.get(baseName));
+                const group = groupMap.get(baseName) || [];
+                for (const groupedVariable of group) {
+                    result.push(groupedVariable);
+                }
             }
         }
         else {
@@ -731,10 +1121,18 @@ function buildShadeGroups(variables, formattedValueMap) {
             return !!baseName && baseNames.has(baseName);
         });
         actualShadeVars.sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
-        const deleteIds = Array.from(new Set([
-            ...trackedShades.map(shade => shade.id),
-            ...actualShadeVars.map(shade => shade.id),
-        ].filter(id => !!variableMap.get(id))));
+        const deleteIdSet = new Set();
+        for (const shade of trackedShades) {
+            if (variableMap.get(shade.id)) {
+                deleteIdSet.add(shade.id);
+            }
+        }
+        for (const shade of actualShadeVars) {
+            if (variableMap.get(shade.id)) {
+                deleteIdSet.add(shade.id);
+            }
+        }
+        const deleteIds = Array.from(deleteIdSet);
         const dirtyReasons = new Set();
         const currentSourceValue = formattedValueMap.get(variable.id) || '';
         if (currentSourceValue !== config.sourceValue) {
@@ -814,10 +1212,15 @@ function getManagedShadeVariables(sourceVariable, config, variables) {
     return actualShadeVars;
 }
 function collectManagedShadeDeleteIds(sourceVariable, config, variables) {
-    return Array.from(new Set([
-        ...(config.generatedShades || []).map(shade => shade.id),
-        ...getManagedShadeVariables(sourceVariable, config, variables).map(shade => shade.id),
-    ]));
+    const deleteIds = new Set();
+    for (const shade of config.generatedShades || []) {
+        deleteIds.add(shade.id);
+    }
+    const managedVariables = getManagedShadeVariables(sourceVariable, config, variables);
+    for (const shade of managedVariables) {
+        deleteIds.add(shade.id);
+    }
+    return Array.from(deleteIds);
 }
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -1054,6 +1457,36 @@ async function resolveSourceVariableNumber(variable, modeId, visited = new Set()
     }
     return null;
 }
+async function resolveModeIdForVariable(variable, requestedModeId) {
+    const availableModeIds = Object.keys(variable.valuesByMode);
+    if (availableModeIds.length === 0) {
+        return null;
+    }
+    if (requestedModeId && availableModeIds.includes(requestedModeId)) {
+        return requestedModeId;
+    }
+    if (requestedModeId) {
+        const collections = await figma.variables.getLocalVariableCollectionsAsync();
+        let requestedModeName = null;
+        for (const collection of collections) {
+            const mode = collection.modes.find(candidate => candidate.modeId === requestedModeId);
+            if (mode) {
+                requestedModeName = mode.name;
+                break;
+            }
+        }
+        if (requestedModeName) {
+            const targetCollection = collections.find(collection => collection.id === variable.variableCollectionId);
+            const matchingMode = targetCollection
+                ? targetCollection.modes.find(mode => mode.name === requestedModeName)
+                : null;
+            if (matchingMode && availableModeIds.includes(matchingMode.modeId)) {
+                return matchingMode.modeId;
+            }
+        }
+    }
+    return availableModeIds[0];
+}
 async function buildUiState() {
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
     const variables = await figma.variables.getLocalVariablesAsync();
@@ -1287,6 +1720,132 @@ async function updateVariableName(id, newName) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+function buildGroupVariableName(currentName, currentGroupName, nextGroupName) {
+    if (currentName === currentGroupName) {
+        return nextGroupName;
+    }
+    const prefix = `${currentGroupName}/`;
+    if (currentName.indexOf(prefix) === 0) {
+        return `${nextGroupName}/${currentName.slice(prefix.length)}`;
+    }
+    return currentName;
+}
+function buildTemporaryGroupVariableName(variable, index) {
+    const sanitizedId = variable.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `__tmp_group_${Date.now()}_${index}_${sanitizedId}`;
+}
+function doesGroupNameExist(variables, collectionId, groupName, ignoredIds) {
+    const prefix = `${groupName}/`;
+    return variables.some(variable => {
+        if (variable.variableCollectionId !== collectionId)
+            return false;
+        if (ignoredIds && ignoredIds.has(variable.id))
+            return false;
+        return variable.name === groupName || variable.name.indexOf(prefix) === 0;
+    });
+}
+function buildDuplicateGroupName(variables, collectionId, groupName) {
+    let candidate = `${groupName} copy`;
+    let index = 2;
+    while (doesGroupNameExist(variables, collectionId, candidate)) {
+        candidate = `${groupName} copy ${index}`;
+        index++;
+    }
+    return candidate;
+}
+async function renameGroup(variableIds, currentGroupName, nextGroupName) {
+    try {
+        const normalizedGroupName = nextGroupName.trim();
+        if (!normalizedGroupName || normalizedGroupName === currentGroupName) {
+            await fetchData();
+            figma.ui.postMessage({ type: 'update-success' });
+            return;
+        }
+        const groupVariables = [];
+        for (const variableId of variableIds) {
+            const variable = await figma.variables.getVariableByIdAsync(variableId);
+            if (variable) {
+                groupVariables.push({ variable, originalName: variable.name });
+            }
+        }
+        if (groupVariables.length === 0) {
+            throw new Error('Group variables not found');
+        }
+        const collectionId = groupVariables[0].variable.variableCollectionId;
+        const allVariables = await figma.variables.getLocalVariablesAsync();
+        const ignoredIds = new Set(groupVariables.map(entry => entry.variable.id));
+        if (doesGroupNameExist(allVariables, collectionId, normalizedGroupName, ignoredIds)) {
+            throw new Error(`Group already exists: ${normalizedGroupName}`);
+        }
+        groupVariables.forEach((entry, index) => {
+            entry.variable.name = buildTemporaryGroupVariableName(entry.variable, index);
+        });
+        groupVariables.forEach(entry => {
+            entry.variable.name = buildGroupVariableName(entry.originalName, currentGroupName, normalizedGroupName);
+        });
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
+async function duplicateGroup(variableIds, groupName) {
+    try {
+        const sourceVariables = [];
+        for (const variableId of variableIds) {
+            const variable = await figma.variables.getVariableByIdAsync(variableId);
+            if (variable) {
+                sourceVariables.push(variable);
+            }
+        }
+        if (sourceVariables.length === 0) {
+            throw new Error('Group variables not found');
+        }
+        const collectionId = sourceVariables[0].variableCollectionId;
+        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+        if (!collection) {
+            throw new Error('Collection not found');
+        }
+        const allVariables = await figma.variables.getLocalVariablesAsync();
+        const nextGroupName = buildDuplicateGroupName(allVariables, collectionId, groupName);
+        const duplicatedVariables = new Map();
+        sourceVariables
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(variable => {
+            const duplicatedVariable = figma.variables.createVariable(buildGroupVariableName(variable.name, groupName, nextGroupName), collection, variable.resolvedType);
+            duplicatedVariables.set(variable.id, duplicatedVariable);
+        });
+        sourceVariables.forEach(variable => {
+            const duplicatedVariable = duplicatedVariables.get(variable.id);
+            if (!duplicatedVariable)
+                return;
+            Object.keys(variable.valuesByMode).forEach(modeId => {
+                const sourceValue = variable.valuesByMode[modeId];
+                let nextValue = sourceValue;
+                if (sourceValue &&
+                    typeof sourceValue === 'object' &&
+                    'type' in sourceValue &&
+                    sourceValue.type === 'VARIABLE_ALIAS') {
+                    const aliasTarget = duplicatedVariables.get(sourceValue.id);
+                    if (aliasTarget) {
+                        nextValue = {
+                            type: 'VARIABLE_ALIAS',
+                            id: aliasTarget.id,
+                        };
+                    }
+                }
+                duplicatedVariable.setValueForMode(modeId, nextValue);
+            });
+        });
+        await fetchData();
+        figma.ui.postMessage({ type: 'update-success' });
+    }
+    catch (error) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+    }
+}
 // Move variable to different collection
 async function moveVariableToCollection(variableId, targetCollectionId) {
     try {
@@ -1381,8 +1940,10 @@ async function updateVariableValue(id, newValue, modeId) {
     try {
         const variable = await figma.variables.getVariableByIdAsync(id);
         if (variable) {
-            // Use provided modeId or fallback to first mode
-            const targetModeId = modeId || Object.keys(variable.valuesByMode)[0];
+            const targetModeId = await resolveModeIdForVariable(variable, modeId);
+            if (!targetModeId) {
+                throw new Error(`No mode available for variable: ${variable.name}`);
+            }
             const parsedValue = await parseValue(newValue, variable.resolvedType);
             variable.setValueForMode(targetModeId, parsedValue);
             if (variable.resolvedType === 'FLOAT') {
@@ -1819,7 +2380,7 @@ async function applyShadeUpdate(collection, modeId, deleteIds, shades, sourceVar
         }
     }
     existingVars.sort((a, b) => extractShadeNumber(a.variable.name) - extractShadeNumber(b.variable.name));
-    const sortedShades = [...shades].sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+    const sortedShades = shades.slice().sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
     const finalShadeVariables = [];
     const reusedCount = Math.min(existingVars.length, sortedShades.length);
     for (let i = 0; i < reusedCount; i++) {
@@ -2385,6 +2946,7 @@ async function checkForChanges() {
     const syncedManagedSteps = await syncManagedStepSources();
     if (syncedManagedShades || syncedManagedSteps) {
         await fetchData();
+        await resetHistory();
         return;
     }
     const { hash: currentHash } = await buildUiState();
@@ -2392,10 +2954,17 @@ async function checkForChanges() {
         figma.ui.postMessage({ type: 'changes-detected' });
     }
 }
-// Start polling
-setInterval(checkForChanges, 2000);
+setSidebarRelaunchData();
+figma.on('currentpagechange', () => {
+    setSidebarRelaunchData();
+});
+// Start polling - check every 5 seconds to reduce overhead
+setInterval(checkForChanges, 5000);
 // Initial fetch
-fetchData();
+void (async () => {
+    await fetchData();
+    await resetHistory();
+})();
 // Message handler
 figma.ui.onmessage = async (msg) => {
     switch (msg.type) {
@@ -2403,79 +2972,97 @@ figma.ui.onmessage = async (msg) => {
             console.log('[Plugin] Refresh received');
             setVariableOrder([]); // Clear custom order on refresh to match Figma's order
             await fetchData();
+            await resetHistory();
             console.log('[Plugin] Refresh complete');
             break;
         case 'create-collection':
-            await createCollection(msg.name);
+            await runMutationWithHistory(() => createCollection(msg.name));
             break;
         case 'create-variable':
-            await createVariable(msg.collectionId, msg.name, msg.varType, msg.value);
+            await runMutationWithHistory(() => createVariable(msg.collectionId, msg.name, msg.varType, msg.value));
             break;
         case 'update-variable-name':
-            await updateVariableName(msg.id, msg.name);
+            await runMutationWithHistory(() => updateVariableName(msg.id, msg.name));
             break;
         case 'move-variable-to-collection':
-            await moveVariableToCollection(msg.variableId, msg.targetCollectionId);
+            await runMutationWithHistory(() => moveVariableToCollection(msg.variableId, msg.targetCollectionId));
             break;
         case 'move-group-to-collection':
-            await moveGroupToCollection(msg.variableIds, msg.targetCollectionId);
+            await runMutationWithHistory(() => moveGroupToCollection(msg.variableIds, msg.targetCollectionId));
             break;
         case 'update-variable-value':
-            await updateVariableValue(msg.id, msg.value, msg.modeId);
+            await runMutationWithHistory(() => updateVariableValue(msg.id, msg.value, msg.modeId));
             break;
         case 'delete-variable':
-            await deleteVariable(msg.id);
+            await runMutationWithHistory(() => deleteVariable(msg.id));
             break;
         case 'delete-all-variables':
-            await deleteAllVariables();
+            await runMutationWithHistory(() => deleteAllVariables());
             break;
         case 'import-preset':
-            await importPreset(msg.preset);
+            await runMutationWithHistory(() => importPreset(msg.preset));
             break;
         case 'delete-group':
-            await deleteGroup(msg.ids);
+            await runMutationWithHistory(() => deleteGroup(msg.ids));
+            break;
+        case 'rename-group':
+            await runMutationWithHistory(() => renameGroup(msg.variableIds, msg.groupName, msg.newGroupName));
             break;
         case 'duplicate-variable':
-            await duplicateVariable(msg.id);
+            await runMutationWithHistory(() => duplicateVariable(msg.id));
+            break;
+        case 'duplicate-group':
+            await runMutationWithHistory(() => duplicateGroup(msg.variableIds, msg.groupName));
             break;
         case 'bulk-update-group':
-            await bulkUpdateGroup(msg.collectionId, msg.groupName, msg.updates);
+            await runMutationWithHistory(() => bulkUpdateGroup(msg.collectionId, msg.groupName, msg.updates));
             break;
         case 'update-from-json':
-            await updateFromJson(msg.data);
+            await runMutationWithHistory(() => updateFromJson(msg.data));
             break;
         case 'create-shades':
-            await createShades(msg.collectionId, msg.shades);
+            await runMutationWithHistory(() => createShades(msg.collectionId, msg.shades));
             break;
         case 'update-shades':
-            await updateShades(msg.collectionId, msg.deleteIds, msg.shades, msg.source, msg.config);
+            await runMutationWithHistory(() => updateShades(msg.collectionId, msg.deleteIds, msg.shades, msg.source, msg.config));
             break;
         case 'remove-shades':
-            await removeShades(msg.collectionId, msg.deleteIds, msg.source);
+            await runMutationWithHistory(() => removeShades(msg.collectionId, msg.deleteIds, msg.source));
             break;
         case 'create-steps':
-            await createSteps(msg.collectionId, msg.steps, msg.modeId, msg.modalState);
+            await runMutationWithHistory(() => createSteps(msg.collectionId, msg.steps, msg.modeId, msg.modalState));
             break;
         case 'update-steps':
-            await updateSteps(msg.collectionId, msg.deleteIds, msg.steps, msg.modeId, msg.modalState);
+            await runMutationWithHistory(() => updateSteps(msg.collectionId, msg.deleteIds, msg.steps, msg.modeId, msg.modalState));
             break;
         case 'remove-steps':
-            if (msg.sourceVariableId) {
-                await removeManagedSteps(msg.sourceVariableId);
-            }
-            else {
-                await removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber, msg.modeId);
-            }
+            await runMutationWithHistory(() => {
+                if (msg.sourceVariableId) {
+                    return removeManagedSteps(msg.sourceVariableId);
+                }
+                return removeSteps(msg.collectionId, msg.deleteIds, msg.newNumber, msg.modeId);
+            });
             break;
         case 'get-step-modal-state':
             await getStepModalState(msg.sourceVariableId, msg.modeId);
             break;
         case 'reorder-variable':
-            await reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore);
+            await runMutationWithHistory(() => reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore));
             break;
         case 'reset-order':
-            setVariableOrder([]);
-            await fetchData();
+            await runMutationWithHistory(async () => {
+                setVariableOrder([]);
+                await fetchData();
+            });
+            break;
+        case 'undo':
+            await undoHistoryStep();
+            break;
+        case 'redo':
+            await redoHistoryStep();
+            break;
+        case 'get-history-state':
+            postHistoryState();
             break;
         case 'get-client-storage':
             try {

@@ -61,7 +61,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVariables(newVariables);
     setShadeGroups(newShadeGroups);
     setSelectedCollectionId(prev => {
-      if (!prev && newCollections.length) {
+      if (newCollections.length === 0) {
+        return null;
+      }
+      if (!prev || !newCollections.some(collection => collection.id === prev)) {
         return newCollections[0].id;
       }
       return prev;
@@ -70,7 +73,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSelectedCollectionIds(new Set(newCollections.map(c => c.id)));
     // Initialize selectedModeId with first mode of first collection
     setSelectedModeIdState(prev => {
-      if (!prev && newCollections.length > 0 && newCollections[0].modes.length > 0) {
+      const availableModes = newCollections.flatMap(collection => collection.modes);
+      if (availableModes.length === 0) {
+        return null;
+      }
+      if (!prev || !availableModes.some(mode => mode.modeId === prev)) {
         return newCollections[0].modes[0].modeId;
       }
       return prev;

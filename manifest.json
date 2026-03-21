@@ -9,6 +9,12 @@
   "editorType": [
     "figma"
   ],
+  "relaunchButtons": [
+    {
+      "command": "open",
+      "name": "Open Winden Tokens"
+    }
+  ],
   "ui": "dist/index.html",
   "networkAccess": {
     "allowedDomains": [

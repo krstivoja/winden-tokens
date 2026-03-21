@@ -107,6 +107,7 @@ export function StepsModal() {
   const { variables, selectedCollectionId, selectedModeId } = useAppContext();
   const isOpen = !!modals.stepsModal;
   const preSelectedGroup = modals.stepsModal?.groupName || '';
+  const targetCollectionId = modals.stepsModal?.collectionId || selectedCollectionId;
 
   const [sourceNumberId, setSourceNumberId] = useState('');
   const [groupName, setGroupName] = useState('');
@@ -121,8 +122,8 @@ export function StepsModal() {
   const skipNextPreviewSyncRef = useRef(false);
 
   const numberVariables = useMemo(() =>
-    variables.filter(v => v.collectionId === selectedCollectionId && v.resolvedType === 'FLOAT'),
-    [variables, selectedCollectionId]
+    variables.filter(v => v.collectionId === targetCollectionId && v.resolvedType === 'FLOAT'),
+    [variables, targetCollectionId]
   );
 
   const numberVarsByName = useMemo(
@@ -421,7 +422,7 @@ export function StepsModal() {
 
     post({
       type: existingGroup ? 'update-steps' : 'create-steps',
-      collectionId: selectedCollectionId,
+      collectionId: targetCollectionId,
       deleteIds,
       steps,
       modeId: selectedModeId,
@@ -470,8 +471,14 @@ export function StepsModal() {
             </div>
           )}
 
-          {sourceNumberId && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {sourceNumberId && !selectedNumberGroup && (
+            <div className="empty-state">
+              This number group is not available in the selected collection.
+            </div>
+          )}
+
+          {sourceNumberId && selectedNumberGroup && (
+            <div className="steps-modal-content">
               <div className="form-group">
                 <label>Base Reference</label>
                 <input
@@ -520,9 +527,9 @@ export function StepsModal() {
                 </select>
               </div>
 
-              <div className="form-group">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingRight: 8 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '16px 24px minmax(0, 1fr) 180px 48px', alignItems: 'center', gap: '8px', flex: 1 }}>
+              <div className="form-group steps-list-section">
+                <div className="steps-table-header">
+                  <div className="steps-table-header-grid">
                     <div />
                     <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'center' }}>Base</label>
                     <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500 }}>Label</label>
@@ -629,7 +636,7 @@ export function StepsModal() {
           <button
             className="btn btn-primary"
             onClick={handleGenerate}
-            disabled={!sourceNumberId || !groupName}
+            disabled={!sourceNumberId || !groupName || !selectedNumberGroup || !targetCollectionId}
           >
             {existingGroup ? 'Update' : 'Generate'}
           </button>

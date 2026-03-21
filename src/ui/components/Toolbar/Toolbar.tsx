@@ -15,7 +15,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ status }: ToolbarProps) {
-  const { collections, selectedCollectionId, setSelectedCollectionId, setSearchQuery, getFilteredCount, searchQuery } = useAppContext();
+  const { setSearchQuery, getFilteredCount, searchQuery } = useAppContext();
   const { openInputModal } = useModalContext();
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [addMenuPosition, setAddMenuPosition] = useState({ top: 0, left: 0 });
@@ -36,10 +36,6 @@ export function Toolbar({ status }: ToolbarProps) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setAddMenuPosition({ top: rect.bottom + 4, left: rect.left });
     setShowAddMenu(true);
-  };
-
-  const handleCollectionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedCollectionId(e.target.value);
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,21 +66,6 @@ export function Toolbar({ status }: ToolbarProps) {
   return (
     <div className="toolbar">
       <div className="toolbar-group">
-        <CollectionFilters />
-        <button
-          id="add-collection-btn"
-          className="btn btn-icon"
-          title="New Collection"
-          onClick={handleAddCollection}
-        >
-          <span className="icon"><PlusIcon /></span>
-        </button>
-        <ModeSelector />
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
         <VariableTypeFilters />
         <button
           id="add-variable-btn"
@@ -98,6 +79,21 @@ export function Toolbar({ status }: ToolbarProps) {
       </div>
 
       <div className="spacer" />
+
+      <div className="toolbar-group">
+        <CollectionFilters />
+        <button
+          id="add-collection-btn"
+          className="btn btn-icon"
+          title="New Collection"
+          onClick={handleAddCollection}
+        >
+          <span className="icon"><PlusIcon /></span>
+        </button>
+        <ModeSelector />
+      </div>
+
+      <div className="toolbar-divider" />
 
       <div className="search-wrapper">
         <span className="search-icon"><SearchIcon /></span>
