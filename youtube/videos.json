@@ -1,0 +1,56 @@
+[
+  {
+    "date": "2026-01-28",
+    "url": "https://youtu.be/jv-OrR9AhR0",
+    "videoId": "jv-OrR9AhR0",
+    "title": "How to install developers version of the Figma Plugin",
+    "postFile": "docs/_posts/tutorials/2026-01-28-how-to-install-developers-version.md",
+    "postTitle": "How to Install Developer's Version of the Figma Plugin",
+    "tags": ["tutorial", "video", "installation", "getting-started", "development"]
+  },
+  {
+    "date": "2026-01-28",
+    "url": "https://youtu.be/QYAq2m1BZgs",
+    "videoId": "QYAq2m1BZgs",
+    "title": "Winden Tokens - Figma plugin for design system",
+    "postFile": "docs/_posts/tutorials/2026-01-28-winden-tokens-figma-plugin-introduction.md",
+    "postTitle": "Winden Tokens - Figma Plugin for Design System",
+    "tags": ["tutorial", "video", "figma-plugin", "getting-started", "design-system"]
+  },
+  {
+    "date": "2026-03-10",
+    "url": "https://youtu.be/DBpWtI3KMyY",
+    "videoId": "DBpWtI3KMyY",
+    "title": "Winden Tokens Figma plugin  - update March 10th, 2025",
+    "postFile": "docs/_posts/tutorials/2026-03-10-winden-tokens-march-update.md",
+    "postTitle": "Winden Tokens Figma Plugin Update",
+    "tags": ["tutorial", "video", "figma-plugin", "update"]
+  },
+  {
+    "date": "2026-03-14",
+    "url": "https://youtu.be/UVUpNJs8kmA",
+    "videoId": "UVUpNJs8kmA",
+    "title": "Winden Tokens 2026-03-14",
+    "postFile": "docs/_posts/tutorials/2026-03-14-winden-tokens-tutorial.md",
+    "postTitle": "Winden Tokens Tutorial",
+    "tags": ["tutorial", "video", "figma-plugin", "workflow"]
+  },
+  {
+    "date": "2026-03-16",
+    "url": "https://youtu.be/LZJfjSNlLQE",
+    "videoId": "LZJfjSNlLQE",
+    "title": "Winden Tokens 2026-03-16",
+    "postFile": "docs/_posts/tutorials/2026-03-16-winden-tokens-advanced-features.md",
+    "postTitle": "Winden Tokens Advanced Features",
+    "tags": ["tutorial", "video", "figma-plugin", "advanced"]
+  },
+  {
+    "date": "2026-03-20",
+    "url": "https://youtu.be/RseXDep1fSk",
+    "videoId": "RseXDep1fSk",
+    "title": "Winden Tokens and Theming 2026-03-20",
+    "postFile": "docs/_posts/tutorials/2026-03-20-winden-tokens-theming.md",
+    "postTitle": "Winden Tokens and Theming",
+    "tags": ["tutorial", "video", "figma-plugin", "theming", "design-tokens"]
+  }
+]
