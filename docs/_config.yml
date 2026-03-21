@@ -15,12 +15,37 @@ collections:
 
 # Defaults
 defaults:
+  # All posts get post layout
   - scope:
       path: ""
       type: "posts"
     values:
       layout: "post"
       author: "Winden Tokens Team"
+
+  # Releases category defaults
+  - scope:
+      path: "_posts/releases"
+      type: "posts"
+    values:
+      layout: "post"
+      categories: releases
+
+  # Features category defaults
+  - scope:
+      path: "_posts/features"
+      type: "posts"
+    values:
+      layout: "post"
+      categories: features
+
+  # Tutorials category defaults
+  - scope:
+      path: "_posts/tutorials"
+      type: "posts"
+    values:
+      layout: "post"
+      categories: tutorials
 
 # Exclude from processing
 exclude:

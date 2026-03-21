@@ -22,20 +22,20 @@ Create a new file in the appropriate category folder with the format:
 
 ```markdown
 ---
-layout: post
 title: "Your Title"
 date: YYYY-MM-DD
-categories: releases  # or features, tutorials
 version: X.Y.Z  # optional, for releases
 ---
 
 Your content here...
 ```
 
+**Note:** You don't need to specify `layout` or `categories` - they're automatically set based on the folder!
+
 **Examples:**
-- Release: `_posts/releases/2024-03-21-version-1-5-0.md`
-- Feature: `_posts/features/2024-03-21-dark-mode.md`
-- Tutorial: `_posts/tutorials/2024-03-21-color-palettes-guide.md`
+- Release: `_posts/releases/2024-03-21-version-1-5-0.md` → category: `releases`
+- Feature: `_posts/features/2024-03-21-dark-mode.md` → category: `features`
+- Tutorial: `_posts/tutorials/2024-03-21-color-palettes-guide.md` → category: `tutorials`
 
 ## Local Development
 

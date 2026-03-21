@@ -1,8 +1,6 @@
 ---
-layout: post
 title: "10x Faster: Major Performance Improvements for Bulk Editing"
 date: 2024-03-05
-categories: release performance
 version: 1.1.5
 ---
 

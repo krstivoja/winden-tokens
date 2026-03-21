@@ -1,7 +1,5 @@
 ---
-layout: post
 title: "5 Best Practices for Organizing Design Tokens at Scale"
-date: 2024-03-10
 categories: tutorial best-practices
 ---
 

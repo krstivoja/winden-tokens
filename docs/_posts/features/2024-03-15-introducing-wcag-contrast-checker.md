@@ -1,8 +1,6 @@
 ---
-layout: post
 title: "Introducing WCAG Contrast Checker - Accessible Design Made Easy"
 date: 2024-03-15
-categories: feature announcement
 version: 1.2.0
 ---
 

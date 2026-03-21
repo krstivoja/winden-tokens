@@ -1,8 +1,6 @@
 ---
-layout: post
 title: "Version 0.1.0 Released"
 date: 2024-02-01
-categories: release
 version: 0.1.0
 ---
 
