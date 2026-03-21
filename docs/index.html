@@ -660,66 +660,62 @@ layout: none
     <script>
       gsap.registerPlugin(ScrollTrigger);
 
-      // Initialize animations immediately - don't wait for load event
+      // Initialize animations using best practices from GSAP skills
       document.addEventListener('DOMContentLoaded', function() {
-        // Hero section animations with immediate start
         const heroSection = document.querySelector('section');
 
         if (heroSection) {
-          // Animate hero title
+          // Create a timeline for better control and sequencing
+          const tl = gsap.timeline({
+            defaults: {
+              ease: "power3.out",
+              clearProps: "all" // Clean up inline styles after animation
+            }
+          });
+
+          // Get elements
           const heroTitle = heroSection.querySelector("h1");
-          if (heroTitle) {
-            gsap.from(heroTitle, {
-              y: 30,
-              opacity: 0,
-              duration: 0.8,
-              ease: "power3.out",
-              clearProps: "all" // Clear inline styles after animation
-            });
-          }
-
-          // Animate description
           const heroDesc = heroSection.querySelector("p.text-xl");
-          if (heroDesc) {
-            gsap.from(heroDesc, {
-              y: 20,
-              opacity: 0,
-              duration: 0.8,
-              delay: 0.2,
-              ease: "power3.out",
-              clearProps: "all"
-            });
-          }
-
-          // Animate buttons
           const heroButtons = heroSection.querySelectorAll(".mt-10 a");
-          if (heroButtons.length > 0) {
-            gsap.from(heroButtons, {
-              y: 20,
-              opacity: 0,
-              duration: 0.6,
-              delay: 0.4,
-              stagger: 0.15,
-              ease: "power3.out",
-              clearProps: "all"
+          const heroImage = heroSection.querySelector("img[alt='Winden Tokens interface']");
+
+          // Use timeline to sequence animations (better than delays)
+          // Use autoAlpha instead of opacity for better performance
+          if (heroTitle) {
+            tl.from(heroTitle, {
+              y: 30,
+              autoAlpha: 0,
+              duration: 0.8
             });
           }
 
-          // Animate hero image
-          const heroImage = heroSection.querySelector("img[alt='Winden Tokens interface']");
+          if (heroDesc) {
+            tl.from(heroDesc, {
+              y: 20,
+              autoAlpha: 0,
+              duration: 0.8
+            }, "-=0.6"); // Overlap with previous animation
+          }
+
+          if (heroButtons.length > 0) {
+            tl.from(heroButtons, {
+              y: 20,
+              autoAlpha: 0,
+              duration: 0.6,
+              stagger: 0.15
+            }, "-=0.4");
+          }
+
           if (heroImage && heroImage.parentElement) {
-            gsap.from(heroImage.parentElement, {
+            tl.from(heroImage.parentElement, {
               y: 40,
-              opacity: 0,
-              duration: 1,
-              delay: 0.6,
-              ease: "power3.out",
-              clearProps: "all"
-            });
+              autoAlpha: 0,
+              duration: 1
+            }, "-=0.5");
           }
         }
 
-        // Animate feature cards on scroll
+        // Animate feature cards on scroll with ScrollTrigger
         const featureCards = document.querySelectorAll('.group.rounded-2xl');
         if (featureCards.length > 0) {
           gsap.from(featureCards, {
@@ -729,7 +725,7 @@ layout: none
               toggleActions: "play none none none"
             },
             y: 30,
-            opacity: 0,
+            autoAlpha: 0,
             duration: 0.6,
             stagger: 0.1,
             ease: "power2.out",
