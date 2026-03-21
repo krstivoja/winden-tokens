@@ -17,13 +17,16 @@ After building, load the plugin in Figma via Plugins > Development > Import plug
 
 ```
 /                      # Root - plugin source code
-├── docs/              # Project documentation (markdown files)
-├── site/              # Jekyll GitHub Pages website (published separately)
+├── documentation/     # Project documentation (markdown files)
+├── docs/              # GitHub Pages website (published from main branch)
 ├── dist/              # Build output for Figma plugin
 └── ...
 ```
 
-**Important:** The `site/` folder contains the Jekyll GitHub Pages website and should be kept separate from the plugin code. Do not mix plugin files with website files.
+**Important:**
+- The `docs/` folder contains the GitHub Pages website and is published automatically by GitHub
+- The `documentation/` folder contains project documentation (features, changelog, guides, etc.)
+- Do not mix plugin files with website files
 
 ## Architecture
 
@@ -60,14 +63,14 @@ Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as 
 
 ## Project Documentation
 
-All project documentation is organized in the [docs/](docs/) folder:
+All project documentation is organized in the [documentation/](documentation/) folder:
 
-- [Changelog.md](docs/Changelog.md) - Version history and release notes
-- [FEATURES.md](docs/FEATURES.md) - Complete feature documentation and usage guide
-- [RELEASE.md](docs/RELEASE.md) - Release process and versioning guidelines
-- [STORYBOOK_QUICK_START.md](docs/STORYBOOK_QUICK_START.md) - Quick guide to Storybook setup
-- [STORYBOOK_COMPONENTS.md](docs/STORYBOOK_COMPONENTS.md) - Component documentation for Storybook
-- [STORYBOOK_AUTOMATION.md](docs/STORYBOOK_AUTOMATION.md) - Storybook automation workflows
+- [Changelog.md](documentation/Changelog.md) - Version history and release notes
+- [FEATURES.md](documentation/FEATURES.md) - Complete feature documentation and usage guide
+- [RELEASE.md](documentation/RELEASE.md) - Release process and versioning guidelines
+- [STORYBOOK_QUICK_START.md](documentation/STORYBOOK_QUICK_START.md) - Quick guide to Storybook setup
+- [STORYBOOK_COMPONENTS.md](documentation/STORYBOOK_COMPONENTS.md) - Component documentation for Storybook
+- [STORYBOOK_AUTOMATION.md](documentation/STORYBOOK_AUTOMATION.md) - Storybook automation workflows
 
 **When working on this project, always review relevant documentation files to understand:**
 - Existing features and their implementation
