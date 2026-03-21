@@ -1,0 +1,27 @@
+---
+layout: default
+---
+
+<article class="max-w-4xl mx-auto px-6 py-16">
+  <header class="mb-8 border-b border-slate-200 pb-8">
+    <div class="flex items-center gap-4 mb-4">
+      <time class="text-sm text-slate-500">{{ page.date | date: "%B %d, %Y" }}</time>
+      {% if page.version %}
+      <span class="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded">
+        v{{ page.version }}
+      </span>
+      {% endif %}
+    </div>
+    <h1 class="text-4xl font-bold text-slate-900">{{ page.title }}</h1>
+  </header>
+
+  <div class="prose prose-slate max-w-none">
+    {{ content }}
+  </div>
+
+  <footer class="mt-16 pt-8 border-t border-slate-200">
+    <a href="{{ '/blog' | relative_url }}" class="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium">
+      ← Back to all updates
+    </a>
+  </footer>
+</article>

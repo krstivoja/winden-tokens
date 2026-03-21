@@ -1,0 +1,34 @@
+title: Winden Tokens
+description: Professional Design Token Management for Figma
+baseurl: "/winden-tokens"
+url: "https://krstivoja.github.io"
+
+# Build settings
+markdown: kramdown
+theme: minima
+
+# Collections
+collections:
+  posts:
+    output: true
+    permalink: /blog/:year/:month/:day/:title/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+      author: "Winden Tokens Team"
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - .sass-cache
+  - .jekyll-cache
+  - gemfiles
+  - README.md
