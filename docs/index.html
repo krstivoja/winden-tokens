@@ -653,5 +653,90 @@ layout: none
     </section>
 
     {% include footer.html %}
+
+    <!-- GSAP Animations -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script>
+      gsap.registerPlugin(ScrollTrigger);
+
+      // Initialize animations immediately - don't wait for load event
+      document.addEventListener('DOMContentLoaded', function() {
+        // Hero section animations with immediate start
+        const heroSection = document.querySelector('section');
+
+        if (heroSection) {
+          // Animate hero title
+          const heroTitle = heroSection.querySelector("h1");
+          if (heroTitle) {
+            gsap.from(heroTitle, {
+              y: 30,
+              opacity: 0,
+              duration: 0.8,
+              ease: "power3.out",
+              clearProps: "all" // Clear inline styles after animation
+            });
+          }
+
+          // Animate description
+          const heroDesc = heroSection.querySelector("p.text-xl");
+          if (heroDesc) {
+            gsap.from(heroDesc, {
+              y: 20,
+              opacity: 0,
+              duration: 0.8,
+              delay: 0.2,
+              ease: "power3.out",
+              clearProps: "all"
+            });
+          }
+
+          // Animate buttons
+          const heroButtons = heroSection.querySelectorAll(".mt-10 a");
+          if (heroButtons.length > 0) {
+            gsap.from(heroButtons, {
+              y: 20,
+              opacity: 0,
+              duration: 0.6,
+              delay: 0.4,
+              stagger: 0.15,
+              ease: "power3.out",
+              clearProps: "all"
+            });
+          }
+
+          // Animate hero image
+          const heroImage = heroSection.querySelector("img[alt='Winden Tokens interface']");
+          if (heroImage && heroImage.parentElement) {
+            gsap.from(heroImage.parentElement, {
+              y: 40,
+              opacity: 0,
+              duration: 1,
+              delay: 0.6,
+              ease: "power3.out",
+              clearProps: "all"
+            });
+          }
+        }
+
+        // Animate feature cards on scroll
+        const featureCards = document.querySelectorAll('.group.rounded-2xl');
+        if (featureCards.length > 0) {
+          gsap.from(featureCards, {
+            scrollTrigger: {
+              trigger: featureCards[0],
+              start: "top 80%",
+              toggleActions: "play none none none"
+            },
+            y: 30,
+            opacity: 0,
+            duration: 0.6,
+            stagger: 0.1,
+            ease: "power2.out",
+            clearProps: "all"
+          });
+        }
+      });
+    </script>
   </body>
 </html>
