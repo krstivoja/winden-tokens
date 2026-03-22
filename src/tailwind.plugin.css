@@ -1,0 +1,67 @@
+@theme {
+  /* Background colors */
+  --color-bg: var(--bg);
+  --color-bg-alt: var(--bg-alt);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-selected: var(--bg-selected);
+  --color-bg-input: var(--bg-input);
+  --color-bg-menu: var(--bg-menu);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-bg-danger-hover: var(--bg-danger-hover);
+
+  /* Border colors */
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-soft: var(--border-soft);
+  --color-border-warning: var(--border-warning);
+  --color-border-warning-strong: var(--border-warning-strong);
+
+  /* Text colors */
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted);
+  --color-text-brand: var(--text-brand);
+  --color-text-danger: var(--text-danger);
+  --color-text-on-accent: var(--text-on-accent);
+  --color-text-on-danger: var(--text-on-danger);
+  --color-text-on-success: var(--text-on-success);
+  --color-text-on-warning: var(--text-on-warning);
+
+  /* Action colors */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  /* Status surfaces */
+  --color-success-bg: var(--success-bg);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-bg-soft: var(--danger-bg-soft);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-bg-strong: var(--warning-bg-strong);
+
+  /* Graph/relationships colors */
+  --color-graph-card-bg: var(--graph-card-bg);
+  --color-graph-card-body-bg: var(--graph-card-body-bg);
+  --color-graph-card-shader-bg: var(--graph-card-shader-bg);
+  --color-graph-row-hover: var(--graph-row-hover);
+  --color-graph-row-shader: var(--graph-row-shader);
+  --color-graph-row-shader-hover: var(--graph-row-shader-hover);
+  --color-graph-card-border: var(--graph-card-border);
+  --color-graph-swatch-border: var(--graph-swatch-border);
+  --color-graph-badge-palette-bg: var(--graph-badge-palette-bg);
+  --color-graph-badge-palette-text: var(--graph-badge-palette-text);
+  --color-graph-badge-shader-bg: var(--graph-badge-shader-bg);
+  --color-graph-badge-shader-text: var(--graph-badge-shader-text);
+  --color-graph-edge-generated: var(--graph-edge-generated);
+  --color-graph-edge-delete: var(--graph-edge-delete);
+
+  /* Data type colors */
+  --color-type-color: var(--type-color);
+  --color-type-float: var(--type-float);
+  --color-type-string: var(--type-string);
+  --color-type-boolean: var(--type-boolean);
+}

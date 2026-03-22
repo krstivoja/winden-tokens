@@ -55,18 +55,18 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
     }
 
     return (
-      <div className="color-value-cell">
+      <div className="flex items-center gap-2 h-full pl-2.5">
         <div
-          className="color-swatch"
+          className="w-6 h-6 rounded border border-border cursor-pointer relative overflow-hidden before:content-[''] before:absolute before:inset-0 before:bg-[linear-gradient(45deg,var(--checker-dark)_25%,transparent_25%),linear-gradient(-45deg,var(--checker-dark)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--checker-dark)_75%),linear-gradient(-45deg,transparent_75%,var(--checker-dark)_75%)] before:[background-size:6px_6px] before:[background-position:0_0,0_3px,3px_-3px,-3px_0px]"
           onClick={(e) => onShowColorMenu(e, variable.id, currentValue)}
         >
           <div
-            className="color-swatch-inner"
+            className="absolute inset-0 z-[1]"
             style={{ background: displayColor }}
           />
         </div>
         <input
-          className="cell-input mono"
+          className="w-full h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
           onBlur={handleBlur}
@@ -77,16 +77,16 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
 
   if (variable.resolvedType === 'BOOLEAN') {
     return (
-      <div className="cell">
-        <div className="bool-toggle">
+      <div className="px-2.5 h-full flex items-center">
+        <div className="flex border border-border rounded overflow-hidden">
           <button
-            className={currentValue === 'true' ? 'active' : ''}
+            className={`px-3 py-1 border-none text-xs cursor-pointer border-r border-border ${currentValue === 'true' ? 'bg-accent text-text-on-accent' : 'bg-bg'}`}
             onClick={() => handleValueChange('true')}
           >
             True
           </button>
           <button
-            className={currentValue === 'false' ? 'active' : ''}
+            className={`px-3 py-1 border-none text-xs cursor-pointer ${currentValue === 'false' ? 'bg-accent text-text-on-accent' : 'bg-bg'}`}
             onClick={() => handleValueChange('false')}
           >
             False
@@ -97,9 +97,9 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
   }
 
   return (
-    <div className="value-cell">
+    <div className="flex items-center h-full pl-2.5">
       <input
-        className="cell-input mono"
+        className="w-full h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] flex-1 text-sm font-['SF_Mono',Monaco,monospace]"
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         onBlur={handleBlur}
