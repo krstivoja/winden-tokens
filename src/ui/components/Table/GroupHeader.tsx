@@ -27,7 +27,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   } = useAppContext();
   const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [showContrastPicker, setShowContrastPicker] = useState(false);
-  const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
 
   const groupIds = variables.map(v => v.id);
   const groupType = variables[0]?.resolvedType || 'STRING';
@@ -77,10 +76,8 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
 
   const handleContrastClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setContrastPickerPosition({ top: rect.bottom + 4, left: rect.left });
-    setShowContrastPicker(true);
-  }, []);
+    setShowContrastPicker(!showContrastPicker);
+  }, [showContrastPicker]);
 
   const handlePickContrastColor = useCallback(() => {
     setShowContrastPicker(false);
@@ -162,56 +159,58 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           </span>
         </div>
       </td>
-      <td></td>
+      <td>
+        <div className="flex items-center justify-end gap-2 h-full pr-2.5">
+          {groupType === 'COLOR' && (
+            <button
+              className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
+              onClick={handleShadesClick}
+              title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
+            >
+              <span className="icon">
+                {shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
+              </span>
+              {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
+            </button>
+          )}
+          {groupType === 'FLOAT' && (
+            <button
+              className="modifier-btn"
+              onClick={handleStepsClick}
+              title="Generate steps"
+            >
+              <span className="icon"><StepsIcon /></span>
+              Steps
+            </button>
+          )}
+        </div>
+      </td>
       <td>
         <GroupCollectionCell variables={variables} />
       </td>
       <td className="accessibility-cell">
         {groupType === 'COLOR' && (
-          <div
-            className="group-contrast-trigger"
-            onClick={handleContrastClick}
-            title="Set contrast color for this group"
-          >
-            {contrastColor && (
-              <span className="contrast-swatch" style={{ background: contrastColor }} />
+          <div className="relative">
+            <div
+              className="group-contrast-trigger"
+              onClick={handleContrastClick}
+              title="Set contrast color for this group"
+            >
+              {contrastColor && (
+                <span className="contrast-swatch" style={{ background: contrastColor }} />
+              )}
+              <span className="contrast-label">Contrast</span>
+              <span className="dropdown-arrow">▾</span>
+            </div>
+            {showContrastPicker && (
+              <ContrastPicker
+                contrastColor={contrastColor}
+                onPickColor={handlePickContrastColor}
+                onReferenceColor={handleReferenceContrastColor}
+                onClear={handleClearContrastColor}
+              />
             )}
-            <span className="contrast-label">Contrast</span>
-            <span className="dropdown-arrow">▾</span>
           </div>
-        )}
-        {showContrastPicker && (
-          <ContrastPicker
-            position={contrastPickerPosition}
-            contrastColor={contrastColor}
-            onPickColor={handlePickContrastColor}
-            onReferenceColor={handleReferenceContrastColor}
-            onClear={handleClearContrastColor}
-          />
-        )}
-      </td>
-      <td className="modifier-cell">
-        {groupType === 'COLOR' && (
-          <button
-            className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
-            onClick={handleShadesClick}
-            title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
-          >
-            <span className="icon">
-              {shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
-            </span>
-            {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
-          </button>
-        )}
-        {groupType === 'FLOAT' && (
-          <button
-            className="modifier-btn"
-            onClick={handleStepsClick}
-            title="Generate steps"
-          >
-            <span className="icon"><StepsIcon /></span>
-            Steps
-          </button>
         )}
       </td>
       <td>

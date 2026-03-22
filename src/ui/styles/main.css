@@ -853,7 +853,7 @@
   }
 
   .collection-cell-dropdown {
-    @apply absolute top-full left-2.5 mt-1 bg-bg border border-border rounded-md shadow-sm z-[1000] min-w-[160px];
+    @apply absolute top-full left-0 mt-1 bg-bg border border-border rounded-md shadow-sm z-[1000] min-w-[160px];
   }
 
   .collection-cell-dropdown .dropdown-list {
@@ -1053,9 +1053,12 @@
 
   /* Menus */
   .add-menu,
-  .color-value-menu,
-  .contrast-picker {
+  .color-value-menu {
     @apply absolute bg-bg-menu border border-border rounded-md shadow-md p-1 z-[100] block;
+  }
+
+  .contrast-picker {
+    @apply absolute top-full left-0 mt-1 bg-bg-menu border border-border rounded-md shadow-md p-1 z-[100] block min-w-[160px];
   }
 
   .add-menu button,

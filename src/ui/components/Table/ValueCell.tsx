@@ -9,9 +9,10 @@ import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils
 interface ValueCellProps {
   variable: VariableData;
   onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
+  modifierButton?: React.ReactNode;
 }
 
-export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
+export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCellProps) {
   const { collections, variables, selectedModeId } = useAppContext();
 
   const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
@@ -66,18 +67,19 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
           />
         </div>
         <input
-          className="w-full h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
+          className="flex-1 h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
           onBlur={handleBlur}
         />
+        {modifierButton}
       </div>
     );
   }
 
   if (variable.resolvedType === 'BOOLEAN') {
     return (
-      <div className="px-2.5 h-full flex items-center">
+      <div className="px-2.5 h-full flex items-center gap-2">
         <div className="flex border border-border rounded overflow-hidden">
           <button
             className={`px-3 py-1 border-none text-xs cursor-pointer border-r border-border ${currentValue === 'true' ? 'bg-accent text-text-on-accent' : 'bg-bg'}`}
@@ -92,18 +94,20 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
             False
           </button>
         </div>
+        {modifierButton}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center h-full pl-2.5">
+    <div className="flex items-center h-full pl-2.5 gap-2">
       <input
-        className="w-full h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] flex-1 text-sm font-['SF_Mono',Monaco,monospace]"
+        className="flex-1 h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         onBlur={handleBlur}
       />
+      {modifierButton}
     </div>
   );
 }

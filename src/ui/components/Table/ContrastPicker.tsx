@@ -1,10 +1,9 @@
 // Contrast color picker menu
 
 import React from 'react';
-import { ColorMenu } from './ColorMenu';
+import { ShadesIcon, TypeIcons } from '../Icons';
 
 interface ContrastPickerProps {
-  position: { top: number; left: number };
   contrastColor: string | null;
   onPickColor: () => void;
   onReferenceColor: () => void;
@@ -12,21 +11,27 @@ interface ContrastPickerProps {
 }
 
 export function ContrastPicker({
-  position,
   contrastColor,
   onPickColor,
   onReferenceColor,
   onClear,
 }: ContrastPickerProps) {
   return (
-    <ColorMenu
-      id="contrast-picker"
-      position={position}
-      onPickColor={onPickColor}
-      onReferenceColor={onReferenceColor}
-      onClear={onClear}
-      currentColor={contrastColor}
-      className="contrast-picker"
-    />
+    <div className="contrast-picker">
+      {contrastColor && (
+        <button onClick={onClear}>
+          <span className="contrast-item-swatch" style={{ background: contrastColor }} />
+          <span>Clear</span>
+        </button>
+      )}
+      <button onClick={onPickColor}>
+        <span className="icon"><ShadesIcon /></span>
+        <span>Pick Color</span>
+      </button>
+      <button onClick={onReferenceColor}>
+        <span className="icon">{TypeIcons.COLOR}</span>
+        <span>Reference Color</span>
+      </button>
+    </div>
   );
 }
