@@ -5,7 +5,7 @@ import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
-import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
+import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon, ChevronDownIcon } from '../Icons';
 import { ValueCell } from './ValueCell';
 import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
@@ -202,7 +202,7 @@ export const TableRow = memo(function TableRow({
               <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
                 {contrastResult.aaa ? '✓' : '✗'}AAA
               </span>
-              <span className="dropdown-arrow">▾</span>
+              <span className="dropdown-arrow"><ChevronDownIcon /></span>
             </div>
             {showContrastPicker && (
               <ContrastPicker
@@ -224,7 +224,7 @@ export const TableRow = memo(function TableRow({
                 <span className="contrast-swatch" style={{ background: contrastColor }} />
               )}
               <span className="contrast-label">Contrast</span>
-              <span className="dropdown-arrow">▾</span>
+              <span className="dropdown-arrow"><ChevronDownIcon /></span>
             </div>
             {showContrastPicker && (
               <ContrastPicker

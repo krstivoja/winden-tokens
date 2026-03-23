@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { ChevronDownIcon } from '../Icons';
 
 export function CollectionFilters() {
   const { collections, selectedCollectionIds, toggleCollection, toggleAllCollections } = useAppContext();
@@ -35,7 +36,7 @@ export function CollectionFilters() {
         aria-haspopup="menu"
       >
         <span>Collections ({selectedCount}/{totalCount})</span>
-        <span className="dropdown-arrow" aria-hidden="true">▾</span>
+        <span className="dropdown-arrow" aria-hidden="true"><ChevronDownIcon /></span>
       </button>
 
       {isOpen && (

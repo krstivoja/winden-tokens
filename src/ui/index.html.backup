@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokens Manager</title>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Mock data for browser preview (only loads if not in Figma) -->
+  <script>
+    if (!window.parent || window.parent === window) {
+      // We're in browser, not Figma - inject mock data
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          const mockMessage = {
+            pluginMessage: {
+              type: 'data-loaded',
+            collections: [
+              {
+                id: 'VariableCollectionId:5:2',
+                name: 'colors',
+                modes: [{ modeId: '5:0', name: 'Mode 1' }]
+              }
+            ],
+            variables: [
+              // Spacing scale (base: spacing/lg = 16)
+              {
+                id: 'VariableID:23:18',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/xs',
+                resolvedType: 'FLOAT',
+                value: '4',
+                valuesByMode: { '5:0': '4' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:19',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/sm',
+                resolvedType: 'FLOAT',
+                value: '6',
+                valuesByMode: { '5:0': '6' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:20',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/md',
+                resolvedType: 'FLOAT',
+                value: '8',
+                valuesByMode: { '5:0': '8' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:21',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/lg',
+                resolvedType: 'FLOAT',
+                value: '16',
+                valuesByMode: { '5:0': '16' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:22',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/xl',
+                resolvedType: 'FLOAT',
+                value: '32',
+                valuesByMode: { '5:0': '32' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:23',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/2xl',
+                resolvedType: 'FLOAT',
+                value: '64',
+                valuesByMode: { '5:0': '64' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:23:24',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'spacing/3xl',
+                resolvedType: 'FLOAT',
+                value: '128',
+                valuesByMode: { '5:0': '128' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              // Accent shades (base: accent/50)
+              {
+                id: 'VariableID:99:377',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/50',
+                resolvedType: 'COLOR',
+                value: '#D5E1AE',
+                valuesByMode: { '5:0': '#D5E1AE' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:378',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/100',
+                resolvedType: 'COLOR',
+                value: '#8CC047',
+                valuesByMode: { '5:0': '#8CC047' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:379',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/200',
+                resolvedType: 'COLOR',
+                value: '#4EA902',
+                valuesByMode: { '5:0': '#4EA902' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:380',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/300',
+                resolvedType: 'COLOR',
+                value: '#358600',
+                valuesByMode: { '5:0': '#358600' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:381',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/400',
+                resolvedType: 'COLOR',
+                value: '#276A00',
+                valuesByMode: { '5:0': '#276A00' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:382',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/500',
+                resolvedType: 'COLOR',
+                value: '#1E5300',
+                valuesByMode: { '5:0': '#1E5300' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:383',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/600',
+                resolvedType: 'COLOR',
+                value: '#184000',
+                valuesByMode: { '5:0': '#184000' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:384',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/700',
+                resolvedType: 'COLOR',
+                value: '#133100',
+                valuesByMode: { '5:0': '#133100' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:385',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/800',
+                resolvedType: 'COLOR',
+                value: '#0F2300',
+                valuesByMode: { '5:0': '#0F2300' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:386',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/900',
+                resolvedType: 'COLOR',
+                value: '#0A1600',
+                valuesByMode: { '5:0': '#0A1600' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:387',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'accent/950',
+                resolvedType: 'COLOR',
+                value: '#050801',
+                valuesByMode: { '5:0': '#050801' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              // Action shades (base: action/500)
+              {
+                id: 'VariableID:99:394',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/50',
+                resolvedType: 'COLOR',
+                value: '#FFE8FC',
+                valuesByMode: { '5:0': '#FFE8FC' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:395',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/100',
+                resolvedType: 'COLOR',
+                value: '#FFBFF7',
+                valuesByMode: { '5:0': '#FFBFF7' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:396',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/200',
+                resolvedType: 'COLOR',
+                value: '#FF93F1',
+                valuesByMode: { '5:0': '#FF93F1' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:397',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/300',
+                resolvedType: 'COLOR',
+                value: '#FF66EC',
+                valuesByMode: { '5:0': '#FF66EC' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:398',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/400',
+                resolvedType: 'COLOR',
+                value: '#FF3AE6',
+                valuesByMode: { '5:0': '#FF3AE6' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:399',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/500',
+                resolvedType: 'COLOR',
+                value: '#EF1AD4',
+                valuesByMode: { '5:0': '#EF1AD4' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:400',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/600',
+                resolvedType: 'COLOR',
+                value: '#C015AA',
+                valuesByMode: { '5:0': '#C015AA' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:401',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/700',
+                resolvedType: 'COLOR',
+                value: '#931082',
+                valuesByMode: { '5:0': '#931082' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:402',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/800',
+                resolvedType: 'COLOR',
+                value: '#6B0C5E',
+                valuesByMode: { '5:0': '#6B0C5E' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:403',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/900',
+                resolvedType: 'COLOR',
+                value: '#490840',
+                valuesByMode: { '5:0': '#490840' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:99:404',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'action/950',
+                resolvedType: 'COLOR',
+                value: '#33062D',
+                valuesByMode: { '5:0': '#33062D' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              // Color references (aliases)
+              {
+                id: 'VariableID:98:295',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'card/text',
+                resolvedType: 'COLOR',
+                value: '{accent/50}',
+                valuesByMode: { '5:0': '{accent/50}' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:98:296',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'card/bg',
+                resolvedType: 'COLOR',
+                value: '{accent/100}',
+                valuesByMode: { '5:0': '{accent/100}' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:98:297',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'card/action',
+                resolvedType: 'COLOR',
+                value: '{action/400}',
+                valuesByMode: { '5:0': '{action/400}' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              // Standalone colors
+              {
+                id: 'VariableID:109:13',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'red',
+                resolvedType: 'COLOR',
+                value: '#EB1010',
+                valuesByMode: { '5:0': '#EB1010' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'VariableID:118:13',
+                collectionId: 'VariableCollectionId:5:2',
+                name: 'red copy',
+                resolvedType: 'COLOR',
+                value: '#EB1010',
+                valuesByMode: { '5:0': '#EB1010' },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+                collectionName: 'Shades',
+                resolvedType: 'COLOR',
+                value: '#EB1010',
+                valuesByMode: {
+                  'mode-1': '#EB1010',
+                  'mode-2': '#FF2020'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-2',
+                name: 'red copy',
+                collectionId: 'collection-1',
+                collectionName: 'Shades',
+                resolvedType: 'COLOR',
+                value: '#EB1010',
+                valuesByMode: {
+                  'mode-1': '#EB1010',
+                  'mode-2': '#FF2020'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-3',
+                name: 'accent',
+                collectionId: 'collection-1',
+                collectionName: 'Shades',
+                resolvedType: 'COLOR',
+                value: '#D5E1AE',
+                valuesByMode: {
+                  'mode-1': '#D5E1AE',
+                  'mode-2': '#E1EEBD'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-4',
+                name: '50',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'COLOR',
+                value: '#D5E1AE',
+                valuesByMode: {
+                  'mode-3': '#D5E1AE'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-5',
+                name: '100',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'COLOR',
+                value: '#8CC047',
+                valuesByMode: {
+                  'mode-3': '#8CC047'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-6',
+                name: '200',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'COLOR',
+                value: '#4EA902',
+                valuesByMode: {
+                  'mode-3': '#4EA902'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-7',
+                name: 'spacing',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'FLOAT',
+                value: '16',
+                valuesByMode: {
+                  'mode-3': '16'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-8',
+                name: 'label',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'STRING',
+                value: 'Hello World',
+                valuesByMode: {
+                  'mode-3': 'Hello World'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              },
+              {
+                id: 'var-9',
+                name: 'enabled',
+                collectionId: 'collection-2',
+                collectionName: 'Colors',
+                resolvedType: 'BOOLEAN',
+                value: 'true',
+                valuesByMode: {
+                  'mode-3': 'true'
+                },
+                scopes: [],
+                hiddenFromPublishing: false,
+                description: '',
+                codeSyntax: {}
+              }
+            ],
+            shadeGroups: [
+              {
+                sourceVariableId: 'var-3',
+                sourceVariableName: 'accent',
+                collectionId: 'collection-1',
+                deleteIds: [],
+                status: 'clean',
+                dirtyReasons: [],
+                config: {
+                  version: 1,
+                  sourceVariableId: 'var-3',
+                  sourceName: 'accent',
+                  sourceValue: '#D5E1AE',
+                  shadeCount: 11,
+                  baseIndex: 5,
+                  lightValue: 98,
+                  darkValue: 10,
+                  lightnessCurve: {
+                    startValue: 98,
+                    leftHandle1: { t: 0, value: 98 },
+                    leftHandle2: { t: 0.4, value: 70 },
+                    rightHandle1: { t: 0.6, value: 30 },
+                    rightHandle2: { t: 1, value: 10 },
+                    endValue: 10
+                  },
+                  saturationCurve: {
+                    startValue: 50,
+                    leftHandle1: { t: 0, value: 50 },
+                    leftHandle2: { t: 0.5, value: 50 },
+                    rightHandle1: { t: 0.5, value: 50 },
+                    rightHandle2: { t: 1, value: 50 },
+                    endValue: 50
+                  },
+                  hueCurve: {
+                    startValue: 0,
+                    leftHandle1: { t: 0, value: 0 },
+                    leftHandle2: { t: 0.5, value: 0 },
+                    rightHandle1: { t: 0.5, value: 0 },
+                    rightHandle2: { t: 1, value: 0 },
+                    endValue: 0
+                  },
+                  generatedShades: [
+                    { id: 'shade-50', name: 'accent/50', value: '#F5F9EC' },
+                    { id: 'shade-100', name: 'accent/100', value: '#EBF3D9' },
+                    { id: 'shade-200', name: 'accent/200', value: '#E1EEC6' },
+                    { id: 'shade-300', name: 'accent/300', value: '#D7E8B3' },
+                    { id: 'shade-400', name: 'accent/400', value: '#CDE2A0' },
+                    { id: 'shade-500', name: 'accent/500', value: '#D5E1AE' },
+                    { id: 'shade-600', name: 'accent/600', value: '#AAB88B' },
+                    { id: 'shade-700', name: 'accent/700', value: '#808F68' },
+                    { id: 'shade-800', name: 'accent/800', value: '#556645' },
+                    { id: 'shade-900', name: 'accent/900', value: '#2B3D23' },
+                    { id: 'shade-950', name: 'accent/950', value: '#151E11' }
+                  ],
+                  updatedAt: new Date().toISOString()
+                }
+              }
+            ],
+            stepGroups: [
+              {
+                sourceVariableId: 'var-7',
+                sourceVariableName: 'spacing',
+                collectionId: 'collection-2',
+                deleteIds: [],
+                status: 'clean',
+                dirtyReasons: [],
+                config: {
+                  baseValue: 16,
+                  ratio: 1.5,
+                  baseStep: 'spacing/400',
+                  steps: [
+                    { name: 'spacing/50', value: 2 },
+                    { name: 'spacing/100', value: 4 },
+                    { name: 'spacing/200', value: 6 },
+                    { name: 'spacing/300', value: 10 },
+                    { name: 'spacing/400', value: 16 },
+                    { name: 'spacing/500', value: 24 },
+                    { name: 'spacing/600', value: 36 },
+                    { name: 'spacing/700', value: 54 },
+                    { name: 'spacing/800', value: 81 }
+                  ]
+                }
+              }
+            ]
+            }
+          };
+
+          window.postMessage(mockMessage, '*');
+          console.log('[Mock] Injected sample data:', mockMessage);
+        }, 100);
+      });
+    }
+  </script>
+
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

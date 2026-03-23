@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { VariableData } from '../../types';
+import { ChevronDownIcon } from '../Icons';
 
 interface CollectionCellProps {
   variable: VariableData;
@@ -58,7 +59,7 @@ export function CollectionCell({ variable }: CollectionCellProps) {
         title="Move to collection"
       >
         <span className="collection-label">{buttonLabel}</span>
-        <span className="dropdown-arrow">▾</span>
+        <span className="dropdown-arrow"><ChevronDownIcon /></span>
       </div>
 
       {isOpen && (

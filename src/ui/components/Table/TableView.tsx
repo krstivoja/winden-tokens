@@ -6,7 +6,7 @@ import { VariableData } from '../../types';
 import { TableRow } from './TableRow';
 import { GroupHeader } from './GroupHeader';
 import { ColorValueMenu } from './ColorValueMenu';
-import { ExpandIcon, CollapseIcon } from '../Icons';
+import { ExpandAllIcon, CollapseAllIcon } from '../Icons';
 
 export function TableView() {
   const {
@@ -95,22 +95,11 @@ export function TableView() {
           <button
             type="button"
             className="table-header-action"
-            onClick={handleExpandAllGroups}
-            disabled={!canExpandAllGroups}
-            title="Expand all groups"
-            aria-label="Expand all groups"
+            onClick={canExpandAllGroups ? handleExpandAllGroups : handleCollapseAllGroups}
+            title={canExpandAllGroups ? "Expand all groups" : "Collapse all groups"}
+            aria-label={canExpandAllGroups ? "Expand all groups" : "Collapse all groups"}
           >
-            <ExpandIcon />
-          </button>
-          <button
-            type="button"
-            className="table-header-action"
-            onClick={handleCollapseAllGroups}
-            disabled={!canCollapseAllGroups}
-            title="Collapse all groups"
-            aria-label="Collapse all groups"
-          >
-            <CollapseIcon />
+            {canExpandAllGroups ? <ExpandAllIcon /> : <CollapseAllIcon />}
           </button>
         </div>
       )}

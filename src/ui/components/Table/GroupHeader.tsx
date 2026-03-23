@@ -5,7 +5,7 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ExpandIcon, CollapseIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
+import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon, ChevronDownIcon } from '../Icons';
 import { IconButton } from '../common/IconButton';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
@@ -153,7 +153,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
             </span>
           </span>
           <IconButton
-            icon={isCollapsed ? <ExpandIcon /> : <CollapseIcon />}
+            icon={isCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}
             onClick={handleToggle}
             aria-label={isCollapsed ? "Expand group" : "Collapse group"}
           />
@@ -200,7 +200,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
                 <span className="contrast-swatch" style={{ background: contrastColor }} />
               )}
               <span className="contrast-label">Contrast</span>
-              <span className="dropdown-arrow">▾</span>
+              <span className="dropdown-arrow"><ChevronDownIcon /></span>
             </div>
             {showContrastPicker && (
               <ContrastPicker

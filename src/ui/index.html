@@ -7,6 +7,28 @@
 </head>
 <body>
   <div id="root"></div>
+
+  <!-- Mock data for browser preview (only loads if not in Figma) -->
+  <script>
+    if (!window.parent || window.parent === window) {
+      // We're in browser, not Figma - inject mock data directly
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          const mockData = {"collections":[{"id":"VariableCollectionId:5:2","name":"colors","modes":[{"modeId":"5:0","name":"Mode 1"}]}],"variables":[{"id":"VariableID:23:21","collectionId":"VariableCollectionId:5:2","name":"spacing/lg","resolvedType":"FLOAT","value":"16","valuesByMode":{"5:0":"16"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:99:377","collectionId":"VariableCollectionId:5:2","name":"accent/50","resolvedType":"COLOR","value":"#D5E1AE","valuesByMode":{"5:0":"#D5E1AE"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:99:378","collectionId":"VariableCollectionId:5:2","name":"accent/100","resolvedType":"COLOR","value":"#8CC047","valuesByMode":{"5:0":"#8CC047"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:99:379","collectionId":"VariableCollectionId:5:2","name":"accent/200","resolvedType":"COLOR","value":"#4EA902","valuesByMode":{"5:0":"#4EA902"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:99:399","collectionId":"VariableCollectionId:5:2","name":"action/500","resolvedType":"COLOR","value":"#EF1AD4","valuesByMode":{"5:0":"#EF1AD4"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:98:295","collectionId":"VariableCollectionId:5:2","name":"card/text","resolvedType":"COLOR","value":"{accent/50}","valuesByMode":{"5:0":"{accent/50}"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}},{"id":"VariableID:109:13","collectionId":"VariableCollectionId:5:2","name":"red","resolvedType":"COLOR","value":"#EB1010","valuesByMode":{"5:0":"#EB1010"},"scopes":[],"hiddenFromPublishing":false,"description":"","codeSyntax":{}}],"shadeGroups":[{"sourceVariableId":"VariableID:99:377","sourceVariableName":"accent/50","collectionId":"VariableCollectionId:5:2","deleteIds":[],"status":"clean","dirtyReasons":[],"config":{"version":1,"sourceVariableId":"VariableID:99:377","sourceName":"accent/50","sourceValue":"#D5E1AE","shadeCount":3,"baseIndex":0,"lightValue":98,"darkValue":10,"lightnessCurve":{"startValue":98,"leftHandle1":{"t":0,"value":98},"leftHandle2":{"t":0.4,"value":70},"rightHandle1":{"t":0.6,"value":30},"rightHandle2":{"t":1,"value":10},"endValue":10},"saturationCurve":{"startValue":50,"leftHandle1":{"t":0,"value":50},"leftHandle2":{"t":0.5,"value":50},"rightHandle1":{"t":0.5,"value":50},"rightHandle2":{"t":1,"value":50},"endValue":50},"hueCurve":{"startValue":0,"leftHandle1":{"t":0,"value":0},"leftHandle2":{"t":0.5,"value":0},"rightHandle1":{"t":0.5,"value":0},"rightHandle2":{"t":1,"value":0},"endValue":0},"generatedShades":[{"id":"VariableID:99:377","name":"accent/50","value":"#D5E1AE"},{"id":"VariableID:99:378","name":"accent/100","value":"#8CC047"},{"id":"VariableID:99:379","name":"accent/200","value":"#4EA902"}],"updatedAt":"2024-01-01T00:00:00.000Z"}}],"stepGroups":[{"sourceVariableId":"VariableID:23:21","sourceVariableName":"spacing/lg","collectionId":"VariableCollectionId:5:2","deleteIds":[],"status":"clean","dirtyReasons":[],"config":{"baseValue":16,"ratio":2,"baseStep":"spacing/lg","steps":[{"name":"spacing/xs","value":4},{"name":"spacing/sm","value":8},{"name":"spacing/lg","value":16},{"name":"spacing/xl","value":32}]}}]};
+
+          const mockMessage = {
+            pluginMessage: {
+              type: 'data-loaded',
+              ...mockData
+            }
+          };
+          window.postMessage(mockMessage, '*');
+          console.log('[Mock] Injected sample data:', mockData);
+        }, 100);
+      });
+    }
+  </script>
+
   <script type="module" src="./main.tsx"></script>
 </body>
 </html>

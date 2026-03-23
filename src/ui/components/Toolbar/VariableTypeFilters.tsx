@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { TypeIcon } from '../Icons';
+import { TypeIcon, ChevronDownIcon } from '../Icons';
 
 const VARIABLE_TYPES = [
   { type: 'COLOR', label: 'Color' },
@@ -39,7 +39,7 @@ export function VariableTypeFilters() {
         aria-haspopup="menu"
       >
         <span>Types ({selectedCount}/{totalCount})</span>
-        <span className="dropdown-arrow" aria-hidden="true">▾</span>
+        <span className="dropdown-arrow" aria-hidden="true"><ChevronDownIcon /></span>
       </button>
 
       {isOpen && (
