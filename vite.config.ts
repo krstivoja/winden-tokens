@@ -4,9 +4,18 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile()],
+export default defineConfig(({ command }) => ({
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Only use singleFile plugin in build mode, not dev
+    ...(command === 'build' ? [viteSingleFile()] : [])
+  ],
   root: path.resolve(__dirname, 'src/ui'),
+  server: {
+    port: 5173,
+    open: true,
+  },
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: false,
@@ -23,4 +32,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src')
     }
   }
-});
+}));

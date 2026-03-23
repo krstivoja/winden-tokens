@@ -3,11 +3,22 @@
 import React from 'react';
 import { RefreshIcon, ExpandIcon, CollapseIcon, UndoIcon, RedoIcon } from '../Icons';
 import { IconButton } from '../common/IconButton';
+import { TabButton } from './TabButton';
 import { post } from '../../hooks/usePluginMessages';
 
+const TABS = [
+  { id: 'table' as const, label: 'Table' },
+  { id: 'node-colors' as const, label: 'Node Colors' },
+  { id: 'node-numbers' as const, label: 'Node Numbers' },
+  { id: 'json' as const, label: 'JSON' },
+  { id: 'settings' as const, label: 'Settings' },
+] as const;
+
+export type TabId = typeof TABS[number]['id'];
+
 interface TabBarProps {
-  activeTab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
-  onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings') => void;
+  activeTab: TabId;
+  onTabChange: (tab: TabId) => void;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -55,68 +66,53 @@ export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps
   };
 
   return (
-    <div className="tabs">
-      <button
-        className={`tab ${activeTab === 'table' ? 'active' : ''}`}
-        onClick={() => onTabChange('table')}
-      >
-        Table
-      </button>
-      <button
-        className={`tab ${activeTab === 'node-colors' ? 'active' : ''}`}
-        onClick={() => onTabChange('node-colors')}
-      >
-        Node Colors
-      </button>
-      <button
-        className={`tab ${activeTab === 'node-numbers' ? 'active' : ''}`}
-        onClick={() => onTabChange('node-numbers')}
-      >
-        Node Numbers
-      </button>
-      <button
-        className={`tab ${activeTab === 'json' ? 'active' : ''}`}
-        onClick={() => onTabChange('json')}
-      >
-        JSON
-      </button>
-      <button
-        className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-        onClick={() => onTabChange('settings')}
-      >
-        Settings
-      </button>
-      <div className="spacer" />
-      <IconButton
-        id="undo-btn"
-        icon={<UndoIcon />}
-        onClick={handleUndo}
-        disabled={!canUndo}
-        title="Undo (Ctrl/Cmd+Z)"
-        aria-label="Undo"
-      />
-      <IconButton
-        id="redo-btn"
-        icon={<RedoIcon />}
-        onClick={handleRedo}
-        disabled={!canRedo}
-        title="Redo (Ctrl/Cmd+Shift+Z)"
-        aria-label="Redo"
-      />
-      <IconButton
-        id="refresh-btn"
-        icon={<RefreshIcon />}
-        onClick={handleRefresh}
-        title="Refresh"
-        aria-label="Refresh"
-      />
-      <IconButton
-        id="expand-btn"
-        icon={isExpanded ? <CollapseIcon /> : <ExpandIcon />}
-        onClick={handleToggleExpand}
-        title={isExpanded ? 'Collapse' : 'Expand'}
-        aria-label={isExpanded ? 'Collapse' : 'Expand'}
-      />
+    <div className="tabs flex items-center justify-between">
+      <div>
+        {TABS.map((tab) => (
+          <TabButton
+            key={tab.id}
+            label={tab.label}
+            isActive={activeTab === tab.id}
+            onClick={() => onTabChange(tab.id)}
+          />
+        ))}
+
+      </div>
+
+      <div className="flex">
+
+
+        <IconButton
+          id="undo-btn"
+          icon={<UndoIcon />}
+          onClick={handleUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/Cmd+Z)"
+          aria-label="Undo"
+        />
+        <IconButton
+          id="redo-btn"
+          icon={<RedoIcon />}
+          onClick={handleRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl/Cmd+Shift+Z)"
+          aria-label="Redo"
+        />
+        <IconButton
+          id="refresh-btn"
+          icon={<RefreshIcon />}
+          onClick={handleRefresh}
+          title="Refresh"
+          aria-label="Refresh"
+        />
+        <IconButton
+          id="expand-btn"
+          icon={isExpanded ? <CollapseIcon /> : <ExpandIcon />}
+          onClick={handleToggleExpand}
+          title={isExpanded ? 'Collapse' : 'Expand'}
+          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+        />
+      </div>
     </div>
   );
 }

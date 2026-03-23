@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { TabBar } from '../components/Tabs/TabBar';
+import { TabBar, type TabId } from '../components/Tabs/TabBar';
 import { useState } from 'react';
 
 const meta = {
@@ -16,7 +16,7 @@ type Story = StoryObj<typeof meta>;
 
 // Interactive wrapper for tabs
 function InteractiveTabBar(props: React.ComponentProps<typeof TabBar>) {
-  const [activeTab, setActiveTab] = useState<'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings'>(props.activeTab);
+  const [activeTab, setActiveTab] = useState<TabId>(props.activeTab);
 
   return (
     <TabBar

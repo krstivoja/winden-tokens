@@ -193,7 +193,8 @@ This document defines the complete technology stack used in the Winden Tokens Fi
 ```json
 {
   "scripts": {
-    "dev": "concurrently \"vite build --watch\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "dev": "concurrently \"vite\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "dev:build": "concurrently \"vite build --watch\" \"tsc --watch --project tsconfig.plugin.json\"",
     "build": "vite build && tsc --project tsconfig.plugin.json",
     "build:ui": "vite build",
     "build:plugin": "tsc --project tsconfig.plugin.json",
@@ -201,12 +202,29 @@ This document defines the complete technology stack used in the Winden Tokens Fi
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "storybook": "npm run generate-stories && storybook dev -p 6006",
-    "build-storybook": "npm run generate-stories && storybook build",
-    "verify": "npm run build && npm test && npm run build-storybook"
+    "verify": "npm run build && npm test"
   }
 }
 ```
+
+### Development Modes
+
+**`npm run dev`** - Hot reload development (Recommended)
+- Starts Vite dev server with HMR at `http://localhost:5173`
+- Watches plugin TypeScript files
+- **Auto-reloads browser** when you change Tailwind classes or components
+- Best for UI development
+
+**`npm run dev:build`** - Build watch mode (For testing production build)
+- Builds to `dist/` on file changes
+- Watches plugin TypeScript files
+- Requires manual browser reload
+- Use when you need to test the actual bundled output
+
+**`npm run build`** - Production build
+- Bundles UI to single `dist/index.html`
+- Compiles plugin to `dist/code.js`
+- Use for final Figma plugin testing
 
 ## File Structure Conventions
 

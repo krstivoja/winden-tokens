@@ -2,16 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build Commands
+## Development Commands
 
 ```bash
-npm run build      # Compile TypeScript to JavaScript
-npm run watch      # Watch mode - recompile on changes
-npm run lint       # Run ESLint
-npm run lint:fix   # Run ESLint with auto-fix
+npm run dev        # Hot reload dev server (http://localhost:5173) - AUTO RELOAD
+npm run dev:build  # Build watch mode - requires manual reload
+npm run build      # Production build
+npm run test       # Run tests
+npm run test:watch # Run tests in watch mode
 ```
 
-After building, load the plugin in Figma via Plugins > Development > Import plugin from manifest.
+### Hot Reload Development (Recommended)
+
+**For rapid UI development with auto-reload:**
+1. Run `npm run dev`
+2. Open `http://localhost:5173` in your browser
+3. Edit Tailwind classes or components - browser auto-reloads
+4. Changes appear instantly (no manual refresh needed)
+
+**For Figma plugin testing:**
+1. Run `npm run build` to create `dist/index.html`
+2. Load plugin in Figma: Plugins > Development > Import plugin from manifest
 
 ## Project Structure
 
@@ -65,6 +76,49 @@ Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as 
 ## UI Conventions
 
 - Any control that opens a dropdown menu should use the ChevronDownIcon component for visual consistency.
+
+## Component Extraction Rule (DRY Principle)
+
+**CRITICAL: If you repeat JSX/markup more than 2 times, you MUST extract it into a component or subcomponent.**
+
+### When to Extract
+
+- ✅ **3+ identical/similar elements** - Extract immediately into a reusable component
+- ✅ **2 identical elements with variation** - Consider extraction if complexity > 1 line
+- ✅ **Similar patterns across files** - Extract to shared component
+
+### Examples of What Should Be Extracted
+
+**Bad (Repetition):**
+```tsx
+<button className={`tab ${activeTab === 'table' ? 'active' : ''}`}>Table</button>
+<button className={`tab ${activeTab === 'json' ? 'active' : ''}`}>JSON</button>
+<button className={`tab ${activeTab === 'settings' ? 'active' : ''}`}>Settings</button>
+```
+
+**Good (Extracted):**
+```tsx
+<TabButton label="Table" isActive={activeTab === 'table'} onClick={() => onTabChange('table')} />
+<TabButton label="JSON" isActive={activeTab === 'json'} onClick={() => onTabChange('json')} />
+<TabButton label="Settings" isActive={activeTab === 'settings'} onClick={() => onTabChange('settings')} />
+```
+
+### Benefits
+1. **Maintainability** - Change styling once, affects all instances
+2. **Consistency** - Ensures uniform behavior across repetitions
+3. **Readability** - Clearer intent with semantic component names
+4. **Testing** - Test component once instead of multiple instances
+
+**Remember: Every time you write similar markup 3+ times, stop and extract a component first.**
+
+## Styling Approach
+
+**Use Tailwind CSS v4 utility classes exclusively. No custom CSS files or classes.**
+
+- All styling is done with Tailwind utility classes in components
+- Dynamic values (colors from Figma, positions) use inline styles
+- No @apply, no custom CSS, no stylesheets
+- See [STYLING.md](specs/STYLING.md) for complete guidelines
 
 ## AI Specifications
 

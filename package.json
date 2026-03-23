@@ -4,7 +4,8 @@
   "description": "Figma Plugin for managing design tokens",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite build --watch\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "dev": "concurrently \"vite\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "dev:build": "concurrently \"vite build --watch\" \"tsc --watch --project tsconfig.plugin.json\"",
     "build": "vite build && tsc --project tsconfig.plugin.json",
     "build:ui": "vite build",
     "build:plugin": "tsc --project tsconfig.plugin.json",

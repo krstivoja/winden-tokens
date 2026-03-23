@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
-import { TabBar } from './components/Tabs/TabBar';
+import { TabBar, type TabId } from './components/Tabs/TabBar';
 import { Toolbar } from './components/Toolbar/Toolbar';
 import { TableView } from './components/Table/TableView';
 import { JsonEditor } from './components/Tabs/JsonEditor';
@@ -17,7 +17,7 @@ import { ResizeHandles } from './components/ResizeHandles';
 import { RelationshipsView } from './components/Relationships/RelationshipsView';
 import { SettingsView } from './components/Tabs/SettingsView';
 
-export type ActiveTab = 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
+export type ActiveTab = TabId;
 export type ThemeMode = 'figma' | 'light' | 'dark';
 
 const THEME_MODE_STORAGE_KEY = 'winden-theme-mode';

@@ -352,8 +352,13 @@ interface DropdownProps {
 **Location:** `src/ui/components/Tabs/`
 
 1. **TabBar.tsx** - Tab navigation
-2. **JsonEditor.tsx** - JSON import/export view
-3. **SettingsView.tsx** - Settings panel
+   - Uses array-based loop to render tab buttons
+   - Integrates with TabButton component
+2. **TabButton.tsx** - Individual tab button component
+   - Props: `label`, `isActive`, `onClick`
+   - Used by TabBar in a `.map()` loop
+3. **JsonEditor.tsx** - JSON import/export view
+4. **SettingsView.tsx** - Settings panel
 
 #### Relationships
 
