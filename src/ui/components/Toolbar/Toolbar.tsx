@@ -86,7 +86,6 @@ export function Toolbar({ status }: ToolbarProps) {
         <CollectionFilters />
         <IconButton
           id="add-collection-btn"
-          variant="default"
           icon={<PlusIcon />}
           onClick={handleAddCollection}
           title="New Collection"

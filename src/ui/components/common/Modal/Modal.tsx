@@ -1,7 +1,7 @@
 // Reusable Modal component
 
 import React, { useEffect } from 'react';
-import { IconButton } from '../IconButton';
+import { IconButton } from '../IconButton/IconButton';
 import { Icon } from '../../icons/Icon';
 
 export interface ModalProps {

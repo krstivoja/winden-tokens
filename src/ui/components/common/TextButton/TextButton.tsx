@@ -1,7 +1,8 @@
 // TextButton - Simple text-only button component
+// Default variant: 'ghost' - transparent with hover effects
 // Usage:
 //   <TextButton>Click me</TextButton>
-//   <TextButton variant="primary">Primary</TextButton>
+//   <TextButton variant="primary">Save</TextButton>
 //   <TextButton variant="danger">Delete</TextButton>
 
 import React, { forwardRef } from 'react';
@@ -15,7 +16,7 @@ export interface TextButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
 }
 
 export const TextButton = forwardRef<HTMLButtonElement, TextButtonProps>(function TextButton({
-  variant = 'secondary',
+  variant = 'ghost',
   size = 'md',
   fullWidth = false,
   loading = false,

@@ -1,7 +1,9 @@
 // IconButton - Icon-only button component
+// Default variant: 'ghost' - transparent with hover effects
 // Usage:
 //   <IconButton icon={<TrashIcon />} aria-label="Delete" />
-//   <IconButton icon={<EditIcon />} aria-label="Edit" variant="ghost" />
+//   <IconButton icon={<EditIcon />} aria-label="Edit" variant="default" />
+//   <IconButton icon={<TrashIcon />} aria-label="Delete" variant="danger" />
 
 import React, { forwardRef } from 'react';
 
@@ -14,7 +16,7 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({
   icon,
-  variant = 'default',
+  variant = 'ghost',
   size = 'md',
   className = '',
   disabled,

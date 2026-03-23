@@ -6,7 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon, ChevronDownIcon } from '../Icons';
-import { IconButton } from '../common/IconButton';
+import { IconButton } from '../common/IconButton/IconButton';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';

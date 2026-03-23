@@ -280,15 +280,33 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Props:**
 - `icon: React.ReactNode`
-- `title?: string`
+- `variant?: 'default' | 'danger' | 'ghost'` (default: `'ghost'`)
+- `size?: 'sm' | 'md' | 'lg'` (default: `'md'`)
+- `aria-label: string` (required for accessibility)
 - Standard button props
 
 **Supports:** forwardRef
 
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
+
 **Usage:**
 ```tsx
-<IconButton icon={<TrashIcon />} title="Delete" onClick={handleDelete} />
+// Ghost (default) - transparent with hover
+<IconButton icon={<EditIcon />} aria-label="Edit" />
+
+// Danger variant - for destructive actions
+<IconButton
+  icon={<TrashIcon />}
+  variant="danger"
+  aria-label="Delete"
+  onClick={handleDelete}
+/>
+
+// Default variant - solid background
+<IconButton icon={<SettingsIcon />} variant="default" aria-label="Settings" />
 ```
+
+**Note:** `aria-label` is required for accessibility since icon-only buttons have no visible text.
 
 ---
 
@@ -299,14 +317,28 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Props:**
 - `icon: React.ReactNode`
+- `iconPosition?: 'left' | 'right'` (default: `'left'`)
+- `variant?: 'primary' | 'secondary' | 'danger' | 'ghost'` (default: `'ghost'`)
+- `size?: 'sm' | 'md' | 'lg'` (default: `'md'`)
+- `fullWidth?: boolean`
+- `loading?: boolean`
 - `children: React.ReactNode`
 - Standard button props
 
+**Supports:** forwardRef
+
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
+
 **Usage:**
 ```tsx
-<IconTextButton icon={<PlusIcon />} onClick={handleAdd}>
-  Add Variable
-</IconTextButton>
+// Ghost (default) - transparent with hover
+<IconTextButton icon={<PlusIcon />}>Add Variable</IconTextButton>
+
+// Primary variant - for main actions
+<IconTextButton icon={<SaveIcon />} variant="primary">Save</IconTextButton>
+
+// Icon on right
+<IconTextButton icon={<ArrowIcon />} iconPosition="right">Next</IconTextButton>
 ```
 
 ---
@@ -314,14 +346,30 @@ Dependency graph in `src/ui/components/Relationships/`
 ### TextButton
 **File:** `common/TextButton/TextButton.tsx`
 
-**Purpose:** Text-only button (minimal styling)
+**Purpose:** Text-only button
 
 **Props:**
+- `variant?: 'primary' | 'secondary' | 'danger' | 'ghost'` (default: `'ghost'`)
+- `size?: 'sm' | 'md' | 'lg'` (default: `'md'`)
+- `fullWidth?: boolean`
+- `loading?: boolean`
+- `children: React.ReactNode`
 - Standard button props
+
+**Supports:** forwardRef
+
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
 
 **Usage:**
 ```tsx
+// Ghost (default) - transparent with hover
 <TextButton onClick={handleCancel}>Cancel</TextButton>
+
+// Primary variant - for main actions
+<TextButton variant="primary" onClick={handleSave}>Save</TextButton>
+
+// Danger variant - for destructive actions
+<TextButton variant="danger" onClick={handleDelete}>Delete</TextButton>
 ```
 
 ---

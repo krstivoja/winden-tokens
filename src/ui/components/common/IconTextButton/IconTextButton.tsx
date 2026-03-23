@@ -1,7 +1,9 @@
 // IconTextButton - Button with text and icon (left or right)
+// Default variant: 'ghost' - transparent with hover effects
 // Usage:
 //   <IconTextButton icon={<PlusIcon />}>Add Item</IconTextButton>
 //   <IconTextButton icon={<ArrowIcon />} iconPosition="right">Next</IconTextButton>
+//   <IconTextButton icon={<SaveIcon />} variant="primary">Save</IconTextButton>
 
 import React, { forwardRef } from 'react';
 
@@ -18,7 +20,7 @@ export interface IconTextButtonProps extends React.ButtonHTMLAttributes<HTMLButt
 export const IconTextButton = forwardRef<HTMLButtonElement, IconTextButtonProps>(function IconTextButton({
   icon,
   iconPosition = 'left',
-  variant = 'secondary',
+  variant = 'ghost',
   size = 'md',
   fullWidth = false,
   loading = false,

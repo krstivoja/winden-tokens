@@ -17,8 +17,8 @@ export type { TextButtonProps } from '../TextButton';
 export { IconTextButton } from '../IconTextButton';
 export type { IconTextButtonProps } from '../IconTextButton';
 
-export { IconButton } from '../IconButton';
-export type { IconButtonProps } from '../IconButton';
+export { IconButton } from '../IconButton/IconButton';
+export type { IconButtonProps } from '../IconButton/IconButton';
 
 // Default export for convenience (text-only button is the most common)
 export { TextButton as Button } from '../TextButton';
