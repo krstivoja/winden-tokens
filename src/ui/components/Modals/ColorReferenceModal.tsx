@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { CloseIcon } from '../Icons';
+import { Input } from '../common/Input';
 
 export function ColorReferenceModal() {
   const { modals, closeColorReference } = useModalContext();
@@ -99,7 +100,7 @@ export function ColorReferenceModal() {
         <div className="modal-body">
           <div className="form-group">
             <label>Select a color variable</label>
-            <input
+            <Input
               ref={searchRef}
               type="text"
               className="form-input"

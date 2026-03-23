@@ -6,6 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { ShadeCurveHandles, VariableData } from '../../types';
 import { CloseIcon, RefreshIcon } from '../Icons';
+import { Input } from '../common/Input';
 import {
   rgbObjToHex,
   parseColorToRgb,
@@ -849,7 +850,7 @@ export function ShadesModal() {
                     >
                       <div className="color-fill" style={{ background: baseColor }} />
                     </div>
-                    <input
+                    <Input
                       type="text"
                       className="form-input mono"
                       value={baseColor}
@@ -860,7 +861,7 @@ export function ShadesModal() {
                 </div>
                 <div className="form-group">
                   <label>Shades</label>
-                  <input
+                  <Input
                     type="number"
                     className="form-input"
                     value={shadeCount}

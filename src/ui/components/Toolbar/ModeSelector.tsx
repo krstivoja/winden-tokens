@@ -1,12 +1,11 @@
 // Mode selector dropdown
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 
 export function ModeSelector() {
   const { collections, selectedCollectionIds, selectedModeId, setSelectedModeId } = useAppContext();
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Get available modes from selected collections
   const availableModes = React.useMemo(() => {
@@ -48,17 +47,6 @@ export function ModeSelector() {
     }
   }, [availableModes, selectedModeId, setSelectedModeId]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const selectedMode = availableModes.find(m => m.modeId === selectedModeId);
   const buttonLabel = selectedMode ? selectedMode.name : 'Mode';
 
@@ -68,34 +56,20 @@ export function ModeSelector() {
   }
 
   return (
-    <div className="mode-selector" ref={dropdownRef}>
-      <button
-        className="mode-selector-btn"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {buttonLabel} ▾
-      </button>
-
-      {isOpen && (
-        <div className="mode-selector-dropdown">
-          <div className="dropdown-list">
-            {availableModes.map(mode => (
-              <label key={mode.modeId} className="dropdown-item">
-                <input
-                  type="radio"
-                  name="mode"
-                  checked={selectedModeId === mode.modeId}
-                  onChange={() => {
-                    setSelectedModeId(mode.modeId);
-                    setIsOpen(false);
-                  }}
-                />
-                <span>{mode.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    <OptionsDropdown label={buttonLabel}>
+      <div className="dropdown-list">
+        {availableModes.map(mode => (
+          <label key={mode.modeId} className="dropdown-item">
+            <input
+              type="radio"
+              name="mode"
+              checked={selectedModeId === mode.modeId}
+              onChange={() => setSelectedModeId(mode.modeId)}
+            />
+            <span>{mode.name}</span>
+          </label>
+        ))}
+      </div>
+    </OptionsDropdown>
   );
 }

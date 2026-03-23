@@ -5,6 +5,7 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
+import { Input } from '../common/Input';
 import type { VariableData } from '../../types';
 
 const RATIO_PRESETS = [
@@ -481,7 +482,7 @@ export function StepsModal() {
             <div className="steps-modal-content">
               <div className="form-group">
                 <label>Base Reference</label>
-                <input
+                <Input
                   type="text"
                   className="form-input"
                   value={baseReferenceDisplay}
@@ -501,7 +502,7 @@ export function StepsModal() {
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
-                  <input
+                  <Input
                     type="number"
                     className="form-input"
                     value={customRatio}
@@ -574,14 +575,14 @@ export function StepsModal() {
                         onChange={() => handleBaseStepChange(step.name)}
                         className="base-radio"
                       />
-                      <input
+                      <Input
                         type="text"
                         className="step-label-input"
                         value={step.name}
                         onChange={e => handleStepNameChange(index, e.target.value)}
                       />
                       {step.name === baseStep ? (
-                        <input
+                        <Input
                           type="text"
                           className="step-value-input"
                           value={baseReferenceDisplay}
@@ -589,7 +590,7 @@ export function StepsModal() {
                           title={`Resolved value: ${baseValue}`}
                         />
                       ) : (
-                        <input
+                        <Input
                           type="number"
                           className="step-value-input"
                           value={step.value}

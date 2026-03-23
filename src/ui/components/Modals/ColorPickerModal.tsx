@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useModalContext } from './ModalContext';
 import { CloseIcon } from '../Icons';
+import { Input } from '../common/Input';
 import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb, rgbToHsl, hslToRgb, RGB } from '../../utils/color';
 
 type ColorMode = 'HEX' | 'RGB' | 'HSL';
@@ -207,7 +208,7 @@ export function ColorPickerModal() {
 
             <div className="color-picker-inputs">
               {colorMode === 'HEX' && (
-                <input
+                <Input
                   type="text"
                   className="form-input hex-input"
                   placeholder="#000000"
@@ -219,7 +220,7 @@ export function ColorPickerModal() {
               {colorMode === 'RGB' && (
                 <div className="color-input-row">
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"
@@ -230,7 +231,7 @@ export function ColorPickerModal() {
                     <label>R</label>
                   </div>
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"
@@ -241,7 +242,7 @@ export function ColorPickerModal() {
                     <label>G</label>
                   </div>
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"
@@ -257,7 +258,7 @@ export function ColorPickerModal() {
               {colorMode === 'HSL' && (
                 <div className="color-input-row">
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"
@@ -268,7 +269,7 @@ export function ColorPickerModal() {
                     <label>H</label>
                   </div>
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"
@@ -279,7 +280,7 @@ export function ColorPickerModal() {
                     <label>S</label>
                   </div>
                   <div className="color-input-group">
-                    <input
+                    <Input
                       type="number"
                       className="form-input"
                       min="0"

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useModalContext } from './ModalContext';
 import { CloseIcon } from '../Icons';
+import { Input } from '../common/Input';
 
 export function InputModal() {
   const { modals, closeInputModal } = useModalContext();
@@ -52,7 +53,7 @@ export function InputModal() {
         <div className="modal-body">
           <div className="form-group">
             <label>{config.label}</label>
-            <input
+            <Input
               ref={inputRef}
               type="text"
               className="form-input"
