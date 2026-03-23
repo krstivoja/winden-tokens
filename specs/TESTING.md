@@ -1,82 +1,80 @@
-# Testing Guide for Winden Tokens Plugin
+# Testing Guide
 
-This guide explains how to test components and verify changes in the Winden Tokens Figma plugin.
+**How we test components and functions**
 
-## Quick Start
+---
 
+## Testing Stack
+
+### Vitest 1.0
+**Purpose:** Test runner
+
+**Why:** Fast, Vite-native, Jest-compatible
+
+**Commands:**
 ```bash
-# Install testing dependencies (first time only)
-npm install --save-dev vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom
-
-# Run tests
-npm test
-
-# Run tests in watch mode (auto-reload on changes)
-npm test -- --watch
-
-# Run tests with coverage
-npm test -- --coverage
-
-# Run Storybook (visual testing)
-npm run storybook
+npm test              # Run once
+npm run test:watch    # Watch mode
+npm run test:coverage # Coverage report
+npm run test:ui       # Visual UI
 ```
 
-## Testing Approaches
+---
 
-### 1. Visual Testing with Storybook (Recommended for UI Components)
+### React Testing Library 14.1
+**Purpose:** Component testing
 
-**Best for:** Verifying visual appearance, interactions, and states
+**Why:** Test user behavior, not implementation
 
-```bash
-# Start Storybook development server
-npm run storybook
+**Philosophy:** Test what users see and do
 
-# Build static Storybook for deployment
-npm run build-storybook
+---
+
+### @testing-library/user-event 14.5
+**Purpose:** Simulate user interactions
+
+**Features:**
+- Click, type, hover
+- Keyboard navigation
+- Realistic event sequences
+
+---
+
+### jsdom 23.0
+**Purpose:** DOM environment for tests
+
+**Why:** Test React components without browser
+
+---
+
+## Test Organization
+
+### File Placement
+
+**Tests live next to source files:**
+
+```
+src/ui/components/common/Button/
+├── Button.tsx
+├── Button.test.tsx      ← Test file
+└── index.ts
 ```
 
-**How to use:**
-1. Start Storybook: `npm run storybook`
-2. Open http://localhost:6006 in your browser
-3. Navigate to your component (e.g., "Common/Button")
-4. Test different variants using the Controls panel
-5. Check accessibility with the A11y addon
+**Naming convention:** `ComponentName.test.tsx`
 
-**Example workflow:**
-- Make changes to [Button.tsx](src/ui/components/common/Button/Button.tsx)
-- Storybook auto-reloads
-- Verify visually in the browser
-- Test all variants (Primary, Secondary, Danger, etc.)
-- Check responsive behavior and accessibility
+---
 
-### 2. Unit Testing with Vitest
+## Test Patterns
 
-**Best for:** Testing component logic, props, events, and edge cases
+### Component Test Structure
 
-```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm test -- --watch
-
-# Run specific test file
-npm test Button.test.tsx
-
-# Run tests with coverage report
-npm test -- --coverage
-```
-
-**Example test file structure:**
-
-```typescript
-// Button.test.tsx
+```tsx
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from './Button';
 
 describe('Button', () => {
-  it('renders children correctly', () => {
+  it('renders with text', () => {
     render(<Button>Click me</Button>);
     expect(screen.getByText('Click me')).toBeInTheDocument();
   });
@@ -84,231 +82,534 @@ describe('Button', () => {
   it('calls onClick when clicked', () => {
     const handleClick = vi.fn();
     render(<Button onClick={handleClick}>Click me</Button>);
+
     fireEvent.click(screen.getByText('Click me'));
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('applies primary variant class', () => {
+  it('applies variant class', () => {
     const { container } = render(<Button variant="primary">Primary</Button>);
-    expect(container.querySelector('.btn-primary')).toBeInTheDocument();
+    const button = container.querySelector('button');
+    expect(button).toHaveClass('bg-primary');
   });
 
-  it('disables button when disabled prop is true', () => {
+  it('is disabled when prop is true', () => {
     render(<Button disabled>Disabled</Button>);
-    expect(screen.getByText('Disabled')).toBeDisabled();
+    expect(screen.getByRole('button')).toBeDisabled();
   });
 });
 ```
 
-### 3. Testing in Figma (Plugin Integration Testing)
+---
 
-**Best for:** Testing full plugin functionality in real Figma environment
+### AAA Pattern
 
-**Steps:**
-1. Build the plugin: `npm run build`
-2. Open Figma Desktop
-3. Go to Plugins → Development → Import plugin from manifest
-4. Select the [manifest.json](manifest.json) file from this project
-5. Test the plugin functionality
+**Arrange, Act, Assert:**
 
-**What to test:**
-- Variable creation/editing/deletion
-- Collection management
-- Color picker functionality
-- Shade generation
-- Theme switching
-- Contrast checking
+```tsx
+it('increments counter on button click', () => {
+  // Arrange
+  render(<Counter initialValue={0} />);
 
-### 4. Type Checking
+  // Act
+  fireEvent.click(screen.getByText('Increment'));
 
-**Best for:** Catching TypeScript errors before runtime
-
-```bash
-# Check types for UI code
-npm run build:ui
-
-# Check types for plugin code
-npm run build:plugin
-
-# Check all types
-npm run build
-```
-
-## Component Testing Checklist
-
-When creating or modifying a component, verify:
-
-### Visual Tests (Storybook)
-- [ ] Component renders correctly in all variants
-- [ ] Hover states work properly
-- [ ] Focus states are visible (keyboard navigation)
-- [ ] Disabled states look correct
-- [ ] Responsive behavior works
-- [ ] Dark/light theme support
-- [ ] Accessibility check passes (A11y addon)
-
-### Unit Tests (Vitest)
-- [ ] Component renders with default props
-- [ ] All props are applied correctly
-- [ ] Event handlers are called
-- [ ] Edge cases are handled (empty state, error state, etc.)
-- [ ] Accessibility attributes are present (aria-*, role, etc.)
-
-### Integration Tests (Figma Plugin)
-- [ ] Component works in real plugin context
-- [ ] Plugin messages are sent/received correctly
-- [ ] Figma API calls work as expected
-- [ ] State updates correctly
-
-### Type Safety
-- [ ] No TypeScript errors
-- [ ] Props are properly typed
-- [ ] Ref forwarding works (if applicable)
-
-## Test File Organization
-
-```
-src/ui/components/common/
-├── Button/
-│   ├── Button.tsx           # Component implementation
-│   ├── Button.test.tsx      # Unit tests
-│   ├── Button.stories.tsx   # Storybook stories
-│   └── index.ts             # Exports
-```
-
-## Running Tests Before Commit
-
-Add this to your workflow:
-
-```bash
-# Full verification before committing
-npm run build && npm test && npm run build-storybook
-```
-
-## CI/CD Integration
-
-The project uses GitHub Actions for automated testing. See [.github/workflows/](.github/workflows/) for configuration.
-
-Tests run automatically on:
-- Pull requests
-- Pushes to main branch
-- Manual workflow dispatch
-
-## Common Testing Patterns
-
-### Testing Button Clicks
-```typescript
-const handleClick = vi.fn();
-render(<Button onClick={handleClick}>Click</Button>);
-fireEvent.click(screen.getByText('Click'));
-expect(handleClick).toHaveBeenCalled();
-```
-
-### Testing Input Changes
-```typescript
-const handleChange = vi.fn();
-render(<Input onChange={handleChange} />);
-const input = screen.getByRole('textbox');
-fireEvent.change(input, { target: { value: 'test' } });
-expect(handleChange).toHaveBeenCalled();
-```
-
-### Testing Checkbox Toggle
-```typescript
-const handleChange = vi.fn();
-render(<Checkbox label="Accept" onChange={handleChange} />);
-const checkbox = screen.getByLabelText('Accept');
-fireEvent.click(checkbox);
-expect(handleChange).toHaveBeenCalled();
-```
-
-### Testing Async Behavior
-```typescript
-it('shows loading state', async () => {
-  render(<Button loading>Save</Button>);
-  expect(screen.getByText('Loading...')).toBeInTheDocument();
+  // Assert
+  expect(screen.getByText('Count: 1')).toBeInTheDocument();
 });
 ```
 
-## Debugging Tests
+---
 
-### Visual Debugging in Storybook
-- Use the browser DevTools while Storybook is running
-- Use the "Actions" addon to log events
-- Use the "Controls" addon to test different prop combinations
+### Testing User Interactions
 
-### Unit Test Debugging
-```typescript
-import { screen } from '@testing-library/react';
+```tsx
+import userEvent from '@testing-library/user-event';
 
-// Print current DOM
-screen.debug();
+it('allows typing in input', async () => {
+  const user = userEvent.setup();
+  render(<Input />);
 
-// Print specific element
-screen.debug(screen.getByText('Button'));
+  const input = screen.getByRole('textbox');
+  await user.type(input, 'Hello');
+
+  expect(input).toHaveValue('Hello');
+});
 ```
 
-### Figma Plugin Debugging
-- Open Figma DevTools: Right-click → Inspect
-- Check Console for errors
-- Use `console.log()` in [code.ts](src/plugin/code.ts) or [ui components](src/ui/)
+**Use `userEvent` instead of `fireEvent`** for realistic interactions.
+
+---
+
+### Testing Props
+
+```tsx
+describe('Button props', () => {
+  it('renders with icon', () => {
+    const Icon = () => <span data-testid="icon">🔍</span>;
+    render(<Button icon={<Icon />}>Search</Button>);
+
+    expect(screen.getByTestId('icon')).toBeInTheDocument();
+    expect(screen.getByText('Search')).toBeInTheDocument();
+  });
+
+  it('supports different sizes', () => {
+    const { rerender } = render(<Button size="sm">Small</Button>);
+    expect(screen.getByRole('button')).toHaveClass('btn-sm');
+
+    rerender(<Button size="lg">Large</Button>);
+    expect(screen.getByRole('button')).toHaveClass('btn-lg');
+  });
+});
+```
+
+---
+
+### Testing State
+
+```tsx
+it('toggles checkbox on click', async () => {
+  const user = userEvent.setup();
+  render(<Checkbox label="Accept terms" />);
+
+  const checkbox = screen.getByRole('checkbox');
+  expect(checkbox).not.toBeChecked();
+
+  await user.click(checkbox);
+  expect(checkbox).toBeChecked();
+
+  await user.click(checkbox);
+  expect(checkbox).not.toBeChecked();
+});
+```
+
+---
+
+### Testing Callbacks
+
+```tsx
+it('calls onSubmit with form data', async () => {
+  const handleSubmit = vi.fn();
+  const user = userEvent.setup();
+
+  render(<Form onSubmit={handleSubmit} />);
+
+  await user.type(screen.getByLabelText('Name'), 'John');
+  await user.click(screen.getByText('Submit'));
+
+  expect(handleSubmit).toHaveBeenCalledWith({ name: 'John' });
+});
+```
+
+---
+
+### Testing Conditional Rendering
+
+```tsx
+it('shows error message when error prop is provided', () => {
+  const { rerender } = render(<Input error={undefined} />);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+  rerender(<Input error="Required field" />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Required field');
+});
+```
+
+---
+
+## Testing Hooks
+
+### Custom Hook Testing
+
+```tsx
+import { renderHook, act } from '@testing-library/react';
+
+describe('useCounter', () => {
+  it('increments counter', () => {
+    const { result } = renderHook(() => useCounter(0));
+
+    expect(result.current.count).toBe(0);
+
+    act(() => {
+      result.current.increment();
+    });
+
+    expect(result.current.count).toBe(1);
+  });
+
+  it('decrements counter', () => {
+    const { result } = renderHook(() => useCounter(10));
+
+    act(() => {
+      result.current.decrement();
+    });
+
+    expect(result.current.count).toBe(9);
+  });
+});
+```
+
+---
+
+## Mocking
+
+### Mocking Functions
+
+```tsx
+import { vi } from 'vitest';
+
+it('calls console.log on button click', () => {
+  const consoleSpy = vi.spyOn(console, 'log');
+
+  render(<Button onClick={() => console.log('clicked')}>Click</Button>);
+  fireEvent.click(screen.getByText('Click'));
+
+  expect(consoleSpy).toHaveBeenCalledWith('clicked');
+});
+```
+
+---
+
+### Mocking Modules
+
+```tsx
+import { vi } from 'vitest';
+
+vi.mock('@/hooks/usePluginMessages', () => ({
+  usePluginMessages: () => ({
+    sendMessage: vi.fn(),
+    onMessage: vi.fn(),
+  }),
+}));
+```
+
+---
+
+### Mocking Message Passing
+
+```tsx
+describe('Plugin communication', () => {
+  it('sends update message to plugin', () => {
+    const mockPost = vi.fn();
+    vi.spyOn(window.parent, 'postMessage').mockImplementation(mockPost);
+
+    render(<VariableEditor />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'New Name' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(mockPost).toHaveBeenCalledWith(
+      {
+        pluginMessage: {
+          type: 'update-variable-name',
+          id: expect.any(String),
+          name: 'New Name',
+        },
+      },
+      '*'
+    );
+  });
+});
+```
+
+---
+
+## Coverage Goals
+
+### Targets
+
+- **Components:** 80%+ coverage
+- **Hooks:** 90%+ coverage
+- **Utilities:** 95%+ coverage
+- **Critical paths:** 100% coverage
+
+### Check Coverage
+
+```bash
+npm run test:coverage
+```
+
+**Output:**
+```
+File               | % Stmts | % Branch | % Funcs | % Lines
+-------------------|---------|----------|---------|--------
+Button.tsx         |   95.00 |    90.00 |  100.00 |   95.00
+Input.tsx          |   85.00 |    80.00 |  100.00 |   85.00
+useCounter.ts      |  100.00 |   100.00 |  100.00 |  100.00
+```
+
+---
 
 ## Best Practices
 
-1. **Test user behavior, not implementation**
-   - ✅ Test that clicking a button calls a function
-   - ❌ Test that setState was called with specific arguments
+### DO
 
-2. **Use accessibility selectors**
-   - ✅ `screen.getByRole('button', { name: 'Submit' })`
-   - ❌ `container.querySelector('.btn-primary')`
+1. **Test user behavior**
+   ```tsx
+   // ✅ Good
+   expect(screen.getByText('Welcome')).toBeInTheDocument();
 
-3. **Keep tests simple and focused**
-   - One test = one behavior
-   - Avoid testing multiple things in one test
+   // ❌ Bad
+   expect(component.state.isVisible).toBe(true);
+   ```
 
-4. **Use Storybook for visual regression**
-   - Create stories for all visual states
-   - Review changes visually before committing
+2. **Use semantic queries**
+   ```tsx
+   // ✅ Good
+   screen.getByRole('button', { name: 'Submit' })
+   screen.getByLabelText('Email')
 
-5. **Mock external dependencies**
-   - Mock Figma API calls in unit tests
-   - Use Storybook for isolated component testing
+   // ❌ Bad
+   screen.getByTestId('submit-btn')
+   ```
 
-## Troubleshooting
+3. **Test accessibility**
+   ```tsx
+   expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Close');
+   ```
 
-### Storybook won't start
-```bash
-# Clear cache and reinstall
-rm -rf node_modules .storybook-cache
-npm install
-npm run storybook
+4. **Use userEvent over fireEvent**
+   ```tsx
+   // ✅ Good
+   await user.click(button);
+
+   // ❌ Bad
+   fireEvent.click(button);
+   ```
+
+---
+
+### DON'T
+
+1. **Don't test implementation details**
+   ```tsx
+   // ❌ Bad
+   expect(component.instance().handleClick).toBeDefined();
+
+   // ✅ Good
+   fireEvent.click(screen.getByText('Click'));
+   expect(handleClick).toHaveBeenCalled();
+   ```
+
+2. **Don't use test IDs unless necessary**
+   ```tsx
+   // ❌ Avoid
+   <button data-testid="submit">Submit</button>
+   screen.getByTestId('submit')
+
+   // ✅ Better
+   <button>Submit</button>
+   screen.getByRole('button', { name: 'Submit' })
+   ```
+
+3. **Don't test third-party libraries**
+   ```tsx
+   // ❌ Don't test React itself
+   it('useState works', () => { ... });
+
+   // ✅ Test your component's behavior
+   it('counter increments on click', () => { ... });
+   ```
+
+---
+
+## Query Priority
+
+**Use in this order:**
+
+1. **getByRole** - `screen.getByRole('button')`
+2. **getByLabelText** - `screen.getByLabelText('Email')`
+3. **getByPlaceholderText** - `screen.getByPlaceholderText('Enter email')`
+4. **getByText** - `screen.getByText('Submit')`
+5. **getByTestId** - `screen.getByTestId('custom-element')` (last resort)
+
+---
+
+## Async Testing
+
+### Waiting for Elements
+
+```tsx
+it('shows success message after submission', async () => {
+  render(<Form />);
+
+  fireEvent.click(screen.getByText('Submit'));
+
+  // Wait for success message to appear
+  const message = await screen.findByText('Success!');
+  expect(message).toBeInTheDocument();
+});
 ```
 
-### Tests failing after dependency update
-```bash
-# Clear test cache
-npm test -- --clearCache
+### Wait For Changes
+
+```tsx
+it('loads data on mount', async () => {
+  render(<DataDisplay />);
+
+  expect(screen.getByText('Loading...')).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(screen.getByText('Data loaded')).toBeInTheDocument();
+  });
+});
 ```
 
-### TypeScript errors in tests
-```bash
-# Regenerate types
-npm run build:plugin
+---
+
+## Accessibility Testing
+
+### ARIA Attributes
+
+```tsx
+it('has accessible label', () => {
+  render(<Button aria-label="Close dialog">✕</Button>);
+  expect(screen.getByRole('button')).toHaveAccessibleName('Close dialog');
+});
 ```
 
-### Plugin not loading in Figma
-```bash
-# Rebuild and check manifest
-npm run build
-# Verify manifest.json is valid JSON
-# Check that "main" and "ui" paths in manifest.json exist in dist/
+### Keyboard Navigation
+
+```tsx
+it('submits form on Enter key', async () => {
+  const user = userEvent.setup();
+  const handleSubmit = vi.fn();
+
+  render(<Form onSubmit={handleSubmit} />);
+
+  const input = screen.getByRole('textbox');
+  await user.type(input, 'Test{Enter}');
+
+  expect(handleSubmit).toHaveBeenCalled();
+});
 ```
 
-## Resources
+---
 
-- [Vitest Documentation](https://vitest.dev/)
-- [React Testing Library](https://testing-library.com/react)
-- [Storybook Documentation](https://storybook.js.org/)
-- [Figma Plugin API](https://www.figma.com/plugin-docs/)
-- [WCAG Accessibility Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+## Snapshot Testing
+
+**Use sparingly** - Prefer explicit assertions.
+
+```tsx
+import { render } from '@testing-library/react';
+
+it('matches snapshot', () => {
+  const { container } = render(<Button variant="primary">Save</Button>);
+  expect(container.firstChild).toMatchSnapshot();
+});
+```
+
+**When to use:**
+- Complex output structures
+- Generated HTML/SVG
+- Documenting component API
+
+**When NOT to use:**
+- Dynamic content
+- Implementation testing
+
+---
+
+## Test-Driven Development (TDD)
+
+### Process
+
+1. **Write failing test**
+   ```tsx
+   it('increments counter', () => {
+     // This will fail initially
+     render(<Counter />);
+     fireEvent.click(screen.getByText('Increment'));
+     expect(screen.getByText('Count: 1')).toBeInTheDocument();
+   });
+   ```
+
+2. **Implement minimum code to pass**
+   ```tsx
+   export function Counter() {
+     const [count, setCount] = useState(0);
+     return (
+       <div>
+         <p>Count: {count}</p>
+         <button onClick={() => setCount(count + 1)}>Increment</button>
+       </div>
+     );
+   }
+   ```
+
+3. **Refactor**
+   - Improve code quality
+   - Tests still pass
+
+---
+
+## Running Tests
+
+### Watch Mode
+
+```bash
+npm run test:watch
+```
+
+**Features:**
+- Auto-runs on file save
+- Only tests changed files
+- Press `a` to run all tests
+
+### Single File
+
+```bash
+npm test -- Button.test.tsx
+```
+
+### Pattern Matching
+
+```bash
+npm test -- --grep="Button"
+```
+
+### UI Mode
+
+```bash
+npm run test:ui
+```
+
+Opens visual interface for debugging tests.
+
+---
+
+## Debugging Tests
+
+### Console Logging
+
+```tsx
+import { screen, render } from '@testing-library/react';
+
+it('debugs component', () => {
+  render(<Component />);
+
+  // Print entire DOM
+  screen.debug();
+
+  // Print specific element
+  screen.debug(screen.getByRole('button'));
+});
+```
+
+### Browser Debugging
+
+```tsx
+it('debugs in browser', () => {
+  render(<Component />);
+
+  // Opens browser with component
+  screen.logTestingPlaygroundURL();
+});
+```
+
+---
+
+## Related Documentation
+
+- [devnotes.md](devnotes.md) - Development workflow
+- [components.md](components.md) - Component patterns
+- [techstack.md](techstack.md) - Technologies used

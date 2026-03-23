@@ -5,6 +5,8 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { CloseIcon } from '../Icons';
+import { TextButton } from '../common/Button';
+import { Textarea } from '../common/Textarea';
 
 export function BulkEditModal() {
   const { modals, closeBulkEdit } = useModalContext();
@@ -100,9 +102,10 @@ export function BulkEditModal() {
         <div className="modal-body">
           <div className="form-group">
             <label>One variable per line: <code>name, value</code></label>
-            <textarea
+            <Textarea
               className="bulk-edit-textarea"
               spellCheck={false}
+              mono
               placeholder={'50, #FFFFFF\n100, #F5F5F5\n200, #EEEEEE'}
               value={textValue}
               onChange={e => setTextValue(e.target.value)}
@@ -130,8 +133,8 @@ export function BulkEditModal() {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={closeBulkEdit}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleApply}>Apply Changes</button>
+          <TextButton onClick={closeBulkEdit}>Cancel</TextButton>
+          <TextButton variant="primary" onClick={handleApply}>Apply Changes</TextButton>
         </div>
       </div>
     </div>

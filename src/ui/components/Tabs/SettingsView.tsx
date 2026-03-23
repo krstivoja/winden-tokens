@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
+import { TextButton } from '../common/Button';
+import { Select } from '../common/Select';
 import type { ThemeMode } from '../../App';
 
 interface SettingsViewProps {
@@ -43,16 +45,16 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
 
         <div className="settings-control">
           <label className="settings-label" htmlFor="theme-mode-select">Theme</label>
-          <select
+          <Select
             id="theme-mode-select"
             className="settings-select"
             value={themeMode}
             onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
           >
-            <option value="figma">Follow Figma</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+            <Select.Option value="figma">Follow Figma</Select.Option>
+            <Select.Option value="light">Light</Select.Option>
+            <Select.Option value="dark">Dark</Select.Option>
+          </Select>
         </div>
 
         <p className="settings-note">
@@ -65,13 +67,13 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
         <p className="settings-description">
           Destructive actions that cannot be undone.
         </p>
-        <button
-          className="btn btn-danger"
+        <TextButton
+          variant="danger"
           onClick={handleDeleteAll}
           disabled={isDeleting || variables.length === 0}
         >
           {isDeleting ? 'Deleting...' : 'Delete All Variables'}
-        </button>
+        </TextButton>
         <p className="settings-note">
           Current: {collections.length} collections, {variables.length} variables
         </p>
@@ -84,18 +86,16 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
         </p>
 
         <div className="presets-simple">
-          <button
-            className="btn"
+          <TextButton
             onClick={() => handleImportPreset('tailwind-complete')}
           >
             Import Tailwind CSS
-          </button>
-          <button
-            className="btn"
+          </TextButton>
+          <TextButton
             onClick={() => handleImportPreset('basic')}
           >
             Import Basic Tokens
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

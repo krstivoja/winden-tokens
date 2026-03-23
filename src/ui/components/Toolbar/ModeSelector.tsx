@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { Radio } from '../common/Radio';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 
 export function ModeSelector() {
@@ -59,15 +60,14 @@ export function ModeSelector() {
     <OptionsDropdown label={buttonLabel}>
       <div className="dropdown-list">
         {availableModes.map(mode => (
-          <label key={mode.modeId} className="dropdown-item">
-            <input
-              type="radio"
-              name="mode"
-              checked={selectedModeId === mode.modeId}
-              onChange={() => setSelectedModeId(mode.modeId)}
-            />
-            <span>{mode.name}</span>
-          </label>
+          <Radio
+            key={mode.modeId}
+            className="dropdown-item"
+            name="mode"
+            label={mode.name}
+            checked={selectedModeId === mode.modeId}
+            onChange={() => setSelectedModeId(mode.modeId)}
+          />
         ))}
       </div>
     </OptionsDropdown>

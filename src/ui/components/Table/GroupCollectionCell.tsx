@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { VariableData } from '../../types';
+import { Radio } from '../common/Radio';
 import { ChevronDownIcon } from '../Icons';
 
 interface GroupCollectionCellProps {
@@ -74,15 +75,14 @@ export function GroupCollectionCell({ variables }: GroupCollectionCellProps) {
         <div className="collection-cell-dropdown">
           <div className="dropdown-list">
             {collections.map(collection => (
-              <label key={collection.id} className="dropdown-item">
-                <input
-                  type="radio"
-                  name="group-collection-cell"
-                  checked={currentCollectionId === collection.id}
-                  onChange={() => handleMoveGroupToCollection(collection.id)}
-                />
-                <span>{collection.name}</span>
-              </label>
+              <Radio
+                key={collection.id}
+                className="dropdown-item"
+                name="group-collection-cell"
+                label={collection.name}
+                checked={currentCollectionId === collection.id}
+                onChange={() => handleMoveGroupToCollection(collection.id)}
+              />
             ))}
           </div>
         </div>

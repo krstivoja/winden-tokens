@@ -7,7 +7,7 @@
 //   </OptionsDropdown>
 
 import { useState, useRef, useEffect, ReactNode } from 'react';
-import { Button } from '../Button/Button';
+import { IconTextButton } from '../Button/Button';
 import { ChevronDownIcon } from '../../Icons';
 
 interface OptionsDropdownProps {
@@ -50,7 +50,7 @@ export function OptionsDropdown({ label, children, className = '' }: OptionsDrop
 
   return (
     <div className={`options-dropdown ${className}`.trim()} ref={dropdownRef}>
-      <Button
+      <IconTextButton
         variant="ghost"
         icon={<ChevronDownIcon />}
         iconPosition="right"
@@ -59,7 +59,7 @@ export function OptionsDropdown({ label, children, className = '' }: OptionsDrop
         aria-haspopup="menu"
       >
         {label}
-      </Button>
+      </IconTextButton>
 
       {isOpen && (
         <div className="options-dropdown-menu">

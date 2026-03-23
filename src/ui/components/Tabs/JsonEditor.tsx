@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
+import { TextButton } from '../common/Button';
+import { Textarea } from '../common/Textarea';
 
 export function JsonEditor() {
   const { collections, variables } = useAppContext();
@@ -47,20 +49,21 @@ export function JsonEditor() {
 
   return (
     <div className="json-panel">
-      <textarea
+      <Textarea
         id="json-editor"
         className={`json-editor ${hasError ? 'error' : ''}`}
         spellCheck={false}
+        mono
         value={jsonValue}
         onChange={e => setJsonValue(e.target.value)}
       />
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" onClick={handleUpdate}>
+        <TextButton variant="primary" onClick={handleUpdate}>
           Update
-        </button>
-        <button className="btn" onClick={handleFormat}>
+        </TextButton>
+        <TextButton onClick={handleFormat}>
           Format
-        </button>
+        </TextButton>
       </div>
     </div>
   );

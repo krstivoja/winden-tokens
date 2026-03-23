@@ -6,6 +6,9 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
 import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
+import { Radio } from '../common/Radio';
+import { Select } from '../common/Select';
 import type { VariableData } from '../../types';
 
 const RATIO_PRESETS = [
@@ -457,18 +460,18 @@ export function StepsModal() {
           {!preSelectedGroup && (
             <div className="form-group">
               <label>Select Number Group</label>
-              <select
+              <Select
                 className="form-input"
                 value={sourceNumberId}
                 onChange={handleSourceChange}
               >
-                <option value="">-- Select a group --</option>
+                <Select.Option value="">-- Select a group --</Select.Option>
                 {numberGroups.map(g => (
-                  <option key={g.name} value={g.name}>
+                  <Select.Option key={g.name} value={g.name}>
                     {g.name} ({g.count})
-                  </option>
+                  </Select.Option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
@@ -493,15 +496,15 @@ export function StepsModal() {
               <div className="form-group">
                 <label>Scale Ratio</label>
                 <div className="form-row">
-                  <select
+                  <Select
                     className="form-input"
                     value={ratioPreset}
                     onChange={handleRatioPresetChange}
                   >
                     {RATIO_PRESETS.map(p => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
+                      <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
                     ))}
-                  </select>
+                  </Select>
                   <Input
                     type="number"
                     className="form-input"
@@ -517,15 +520,15 @@ export function StepsModal() {
 
               <div className="form-group">
                 <label>Steps</label>
-                <select
+                <Select
                   className="form-input"
                   value={stepsPreset}
                   onChange={handleStepsPresetChange}
                 >
                   {STEPS_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
+                    <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="form-group steps-list-section">
@@ -537,14 +540,14 @@ export function StepsModal() {
                     <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'right' }}>Value</label>
                     <div />
                   </div>
-                  <button
+                  <TextButton
                     type="button"
-                    className="btn btn-sm"
+                    size="sm"
                     onClick={handleAddStep}
                     style={{ marginLeft: 8 }}
                   >
                     + Add Step
-                  </button>
+                  </TextButton>
                 </div>
                 <div className="steps-editable-table">
                   {editableSteps.map((step, index) => (
@@ -568,8 +571,7 @@ export function StepsModal() {
                           <circle cx="9" cy="9" r="1.5" />
                         </svg>
                       </div>
-                      <input
-                        type="radio"
+                      <Radio
                         name="base-step"
                         checked={step.name === baseStep}
                         onChange={() => handleBaseStepChange(step.name)}
@@ -628,19 +630,19 @@ export function StepsModal() {
         </div>
         <div className="modal-footer">
           {existingGroup && (
-            <button className="btn btn-danger" onClick={handleRemove}>
+            <TextButton variant="danger" onClick={handleRemove}>
               Remove Steps
-            </button>
+            </TextButton>
           )}
           <div className="spacer" />
-          <button className="btn" onClick={closeStepsModal}>Cancel</button>
-          <button
-            className="btn btn-primary"
+          <TextButton onClick={closeStepsModal}>Cancel</TextButton>
+          <TextButton
+            variant="primary"
             onClick={handleGenerate}
             disabled={!sourceNumberId || !groupName || !selectedNumberGroup || !targetCollectionId}
           >
             {existingGroup ? 'Update' : 'Generate'}
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

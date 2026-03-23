@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { PlusIcon, SearchIcon } from '../Icons';
-import { IconButton } from '../common/IconButton';
+import { IconTextButton, IconButton } from '../common/Button';
 import { Input } from '../common/Input';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
@@ -68,24 +68,25 @@ export function Toolbar({ status }: ToolbarProps) {
   return (
     <div className="toolbar border-b border-border flex justify-between gap-4 p-4">
       <div className="flex gap-4">
-        <button
+        <IconTextButton
           id="add-variable-btn"
           ref={addBtnRef}
-          className="btn btn-primary"
+          variant="primary"
+          icon={<PlusIcon />}
           onClick={handleAddVariable}
         >
-          <span className="icon"><PlusIcon /></span>
           Add Variable
-        </button>
-        
+        </IconTextButton>
+
         <VariableTypeFilters />
-        
+
       </div>
 
       <div className="flex gap-4">
         <CollectionFilters />
         <IconButton
           id="add-collection-btn"
+          variant="default"
           icon={<PlusIcon />}
           onClick={handleAddCollection}
           title="New Collection"

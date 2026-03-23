@@ -96,33 +96,86 @@ winden-tokens/
 
 These are **foundational components** - DO NOT create duplicates!
 
-#### 1. Button
-**File:** `common/Button/Button.tsx`
+#### 1. Button Components (Three Specialized Types)
+
+**Location:** `common/Button/`, `common/TextButton/`, `common/IconTextButton/`, `common/IconButton/`
+
+**IMPORTANT:** We have **three focused button components**, each with a single responsibility:
+
+##### 1a. TextButton (Text-only)
+**File:** `common/TextButton/TextButton.tsx`
 
 **Props:**
 ```typescript
-interface ButtonProps {
+interface TextButtonProps {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   loading?: boolean;
   disabled?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
+  children: React.ReactNode; // Required
 }
 ```
 
 **Usage:**
 ```tsx
-<Button variant="primary" onClick={handleSave}>
+<TextButton variant="primary" onClick={handleSave}>
   Save Changes
-</Button>
+</TextButton>
+```
+
+##### 1b. IconTextButton (Text + Icon)
+**File:** `common/IconTextButton/IconTextButton.tsx`
+
+**Props:**
+```typescript
+interface IconTextButtonProps {
+  icon: React.ReactNode; // Required
+  iconPosition?: 'left' | 'right';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  fullWidth?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode; // Required
+}
+```
+
+**Usage:**
+```tsx
+<IconTextButton icon={<PlusIcon />} variant="primary">
+  Add Item
+</IconTextButton>
+<IconTextButton icon={<ArrowIcon />} iconPosition="right">
+  Next
+</IconTextButton>
+```
+
+##### 1c. IconButton (Icon-only)
+**File:** `common/IconButton/IconButton.tsx`
+
+**Props:**
+```typescript
+interface IconButtonProps {
+  icon: React.ReactNode; // Required
+  'aria-label': string; // Required for accessibility
+  variant?: 'default' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+}
+```
+
+**Usage:**
+```tsx
+<IconButton icon={<TrashIcon />} aria-label="Delete" variant="danger" />
 ```
 
 **Files:**
-- `Button.tsx` - Implementation
-- `Button.test.tsx` - Unit tests
-- `Button.stories.tsx` - Storybook stories
+- `Button/Button.tsx` - Re-exports all three components
+- `TextButton/TextButton.tsx` - Text-only implementation
+- `IconTextButton/IconTextButton.tsx` - Text + icon implementation
+- `IconButton/IconButton.tsx` - Icon-only implementation
+- `IconButton/IconButton.stories.tsx` - Storybook stories
 
 #### 2. Input
 **File:** `common/Input/Input.tsx`
@@ -245,22 +298,7 @@ interface FormGroupProps {
 </FormGroup>
 ```
 
-#### 8. IconButton
-**File:** `common/IconButton/IconButton.tsx`
-
-**Props:**
-```typescript
-interface IconButtonProps {
-  icon: React.ReactNode;
-  onClick: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
-  disabled?: boolean;
-  ariaLabel: string;
-}
-```
-
-#### 9. Modal
+#### 8. Modal
 **File:** `common/Modal/Modal.tsx`
 
 **Props:**
@@ -290,7 +328,7 @@ interface ModalProps {
 </Modal>
 ```
 
-#### 10. Dropdown
+#### 9. Dropdown
 **File:** `common/Dropdown/Dropdown.tsx`
 
 **Props:**

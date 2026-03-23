@@ -1,4 +1,4 @@
-// Button component exports
+// Button component exports - re-exports all three button types
 
-export { Button } from './Button';
-export type { ButtonProps } from './Button';
+export { TextButton, IconTextButton, IconButton, Button } from './Button';
+export type { TextButtonProps, IconTextButtonProps, IconButtonProps } from './Button';

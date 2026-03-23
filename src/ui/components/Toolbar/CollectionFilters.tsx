@@ -1,7 +1,8 @@
 // Collection filters component
 
 import { useAppContext } from '../../context/AppContext';
-import { Button } from '../common/Button/Button';
+import { TextButton } from '../common/Button/Button';
+import { Checkbox } from '../common/Checkbox';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 
 export function CollectionFilters() {
@@ -18,21 +19,20 @@ export function CollectionFilters() {
     <OptionsDropdown label={`Collections (${selectedCount}/${totalCount})`}>
       <div className="collection-filters-header">
         <span>Select Collections</span>
-        <Button size="sm" onClick={toggleAllCollections}>
+        <TextButton size="sm" onClick={toggleAllCollections}>
           {selectedCount === totalCount ? 'None' : 'All'}
-        </Button>
+        </TextButton>
       </div>
 
       <div className="collection-filters-list">
         {collections.map(collection => (
-          <label key={collection.id} className="collection-filter-item">
-            <input
-              type="checkbox"
-              checked={selectedCollectionIds.has(collection.id)}
-              onChange={() => toggleCollection(collection.id)}
-            />
-            <span>{collection.name}</span>
-          </label>
+          <Checkbox
+            key={collection.id}
+            className="collection-filter-item"
+            label={collection.name}
+            checked={selectedCollectionIds.has(collection.id)}
+            onChange={() => toggleCollection(collection.id)}
+          />
         ))}
       </div>
     </OptionsDropdown>

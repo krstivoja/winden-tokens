@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { InputModal } from '../components/Modals/InputModal';
 import { ModalProvider, useModalContext } from '../components/Modals/ModalContext';
 import { AppProvider, useAppContext } from '../context/AppContext';
+import { Button } from '../components/common/Button';
 import { mockCollections, mockVariables, mockShadeGroups } from './mockData';
 
 // Wrapper with mock data
@@ -37,8 +38,8 @@ function InputModalTrigger({ title, label, confirmText }: { title: string; label
       <p style={{ marginBottom: '16px', color: 'var(--text-dim)' }}>
         The modal should open automatically. Close it and click the button to reopen.
       </p>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="primary"
         onClick={() => {
           openInputModal({
             title,
@@ -52,7 +53,7 @@ function InputModalTrigger({ title, label, confirmText }: { title: string; label
         }}
       >
         Reopen {title}
-      </button>
+      </Button>
       <InputModal />
     </div>
   );

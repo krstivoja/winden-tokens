@@ -5,6 +5,7 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
 
 export function ColorReferenceModal() {
   const { modals, closeColorReference } = useModalContext();
@@ -167,7 +168,7 @@ export function ColorReferenceModal() {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={closeColorReference}>Cancel</button>
+          <TextButton onClick={closeColorReference}>Cancel</TextButton>
         </div>
       </div>
     </div>

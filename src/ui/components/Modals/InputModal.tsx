@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useModalContext } from './ModalContext';
 import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
 
 export function InputModal() {
   const { modals, closeInputModal } = useModalContext();
@@ -65,10 +66,10 @@ export function InputModal() {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={closeInputModal}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleConfirm}>
+          <TextButton onClick={closeInputModal}>Cancel</TextButton>
+          <TextButton variant="primary" onClick={handleConfirm}>
             {config.confirmText}
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

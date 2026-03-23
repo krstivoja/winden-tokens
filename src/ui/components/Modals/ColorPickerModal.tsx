@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useModalContext } from './ModalContext';
 import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
 import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb, rgbToHsl, hslToRgb, RGB } from '../../utils/color';
 
 type ColorMode = 'HEX' | 'RGB' | 'HSL';
@@ -296,8 +297,8 @@ export function ColorPickerModal() {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={closeColorPicker}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleConfirm}>Apply</button>
+          <TextButton onClick={closeColorPicker}>Cancel</TextButton>
+          <TextButton variant="primary" onClick={handleConfirm}>Apply</TextButton>
         </div>
       </div>
     </div>

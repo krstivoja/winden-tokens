@@ -7,6 +7,8 @@ import { post } from '../../hooks/usePluginMessages';
 import { ShadeCurveHandles, VariableData } from '../../types';
 import { CloseIcon, RefreshIcon } from '../Icons';
 import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
+import { Select } from '../common/Select';
 import {
   rgbObjToHex,
   parseColorToRgb,
@@ -821,16 +823,16 @@ export function ShadesModal() {
           {!preSelectedGroup && (
             <div className="form-group">
               <label>Select Color Group</label>
-              <select
+              <Select
                 className="form-input"
                 value={sourceColorId}
                 onChange={handleSourceChange}
               >
-                <option value="">-- Select a group --</option>
+                <Select.Option value="">-- Select a group --</Select.Option>
                 {sourceColors.map(variable => (
-                  <option key={variable.id} value={variable.id}>{variable.name}</option>
+                  <Select.Option key={variable.id} value={variable.id}>{variable.name}</Select.Option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
@@ -936,19 +938,19 @@ export function ShadesModal() {
         </div>
         <div className="modal-footer">
           {existingGroup && (
-            <button className="btn btn-danger" onClick={handleRemove}>
+            <TextButton variant="danger" onClick={handleRemove}>
               Remove Shades
-            </button>
+            </TextButton>
           )}
           <div className="spacer" />
-          <button className="btn" onClick={closeShadesModal}>Cancel</button>
-          <button
-            className="btn btn-primary"
+          <TextButton onClick={closeShadesModal}>Cancel</TextButton>
+          <TextButton
+            variant="primary"
             onClick={handleGenerate}
             disabled={!groupName || generatedShades.length === 0}
           >
             {existingGroup ? 'Update' : 'Generate'}
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

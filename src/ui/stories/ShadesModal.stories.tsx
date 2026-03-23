@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { ShadesModal } from '../components/Modals/ShadesModal';
 import { ModalProvider, useModalContext } from '../components/Modals/ModalContext';
 import { AppProvider, useAppContext } from '../context/AppContext';
+import { Button } from '../components/common/Button';
 import { mockCollections, mockVariables, mockShadeGroups } from './mockData';
 
 // Wrapper with mock data
@@ -29,14 +30,14 @@ function ShadesModalTrigger({ groupName }: { groupName?: string }) {
       <p style={{ marginBottom: '16px', color: 'var(--text-dim)' }}>
         The Shades Generator modal should open automatically{groupName && ` for group: ${groupName}`}.
       </p>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="primary"
         onClick={() => {
           openShadesModal({ groupName: groupName || '' });
         }}
       >
         Reopen Shades Generator {groupName && `(${groupName})`}
-      </button>
+      </Button>
       <ShadesModal />
     </div>
   );

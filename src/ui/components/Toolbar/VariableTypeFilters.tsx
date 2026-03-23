@@ -2,7 +2,8 @@
 
 import { useAppContext } from '../../context/AppContext';
 import { TypeIcon } from '../Icons';
-import { Button } from '../common/Button/Button';
+import { TextButton } from '../common/Button/Button';
+import { Checkbox } from '../common/Checkbox';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 
 const VARIABLE_TYPES = [
@@ -22,24 +23,27 @@ export function VariableTypeFilters() {
     <OptionsDropdown label={`Types (${selectedCount}/${totalCount})`}>
       <div className="variable-type-filters-header">
         <span>Select Variable Types</span>
-        <Button size="sm" onClick={toggleAllVariableTypes}>
+        <TextButton size="sm" onClick={toggleAllVariableTypes}>
           {selectedCount === totalCount ? 'None' : 'All'}
-        </Button>
+        </TextButton>
       </div>
 
       <div className="variable-type-filters-list">
         {VARIABLE_TYPES.map(({ type, label }) => (
-          <label key={type} className="variable-type-filter-item">
-            <input
-              type="checkbox"
-              checked={selectedVariableTypes.has(type)}
-              onChange={() => toggleVariableType(type)}
-            />
-            <span className="type-icon">
-              <TypeIcon type={type} />
-            </span>
-            <span>{label}</span>
-          </label>
+          <Checkbox
+            key={type}
+            className="variable-type-filter-item"
+            label={
+              <>
+                <span className="type-icon">
+                  <TypeIcon type={type} />
+                </span>
+                <span>{label}</span>
+              </>
+            }
+            checked={selectedVariableTypes.has(type)}
+            onChange={() => toggleVariableType(type)}
+          />
         ))}
       </div>
     </OptionsDropdown>
