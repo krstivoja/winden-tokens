@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { RefreshIcon, ExpandIcon, CollapseIcon, UndoIcon, RedoIcon } from '../Icons';
+import { IconButton } from '../common/IconButton';
 import { post } from '../../hooks/usePluginMessages';
 
 interface TabBarProps {
@@ -86,42 +87,36 @@ export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps
         Settings
       </button>
       <div className="spacer" />
-      <button
+      <IconButton
         id="undo-btn"
-        className="btn btn-icon"
-        title="Undo (Ctrl/Cmd+Z)"
+        icon={<UndoIcon />}
         onClick={handleUndo}
         disabled={!canUndo}
-      >
-        <span className="icon"><UndoIcon /></span>
-      </button>
-      <button
+        title="Undo (Ctrl/Cmd+Z)"
+        aria-label="Undo"
+      />
+      <IconButton
         id="redo-btn"
-        className="btn btn-icon"
-        title="Redo (Ctrl/Cmd+Shift+Z)"
+        icon={<RedoIcon />}
         onClick={handleRedo}
         disabled={!canRedo}
-      >
-        <span className="icon"><RedoIcon /></span>
-      </button>
-      <button
+        title="Redo (Ctrl/Cmd+Shift+Z)"
+        aria-label="Redo"
+      />
+      <IconButton
         id="refresh-btn"
-        className="btn btn-icon"
-        title="Refresh"
+        icon={<RefreshIcon />}
         onClick={handleRefresh}
-      >
-        <span className="icon"><RefreshIcon /></span>
-      </button>
-      <button
+        title="Refresh"
+        aria-label="Refresh"
+      />
+      <IconButton
         id="expand-btn"
-        className="btn btn-icon"
-        title={isExpanded ? 'Collapse' : 'Expand'}
+        icon={isExpanded ? <CollapseIcon /> : <ExpandIcon />}
         onClick={handleToggleExpand}
-      >
-        <span className="icon">
-          {isExpanded ? <CollapseIcon /> : <ExpandIcon />}
-        </span>
-      </button>
+        title={isExpanded ? 'Collapse' : 'Expand'}
+        aria-label={isExpanded ? 'Collapse' : 'Expand'}
+      />
     </div>
   );
 }

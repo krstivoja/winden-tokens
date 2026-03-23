@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { PlusIcon, SearchIcon } from '../Icons';
+import { IconButton } from '../common/IconButton';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
 import { VariableTypeFilters } from './VariableTypeFilters';
@@ -82,14 +83,13 @@ export function Toolbar({ status }: ToolbarProps) {
 
       <div className="toolbar-group">
         <CollectionFilters />
-        <button
+        <IconButton
           id="add-collection-btn"
-          className="btn btn-icon"
-          title="New Collection"
+          icon={<PlusIcon />}
           onClick={handleAddCollection}
-        >
-          <span className="icon"><PlusIcon /></span>
-        </button>
+          title="New Collection"
+          aria-label="New Collection"
+        />
         <ModeSelector />
       </div>
 

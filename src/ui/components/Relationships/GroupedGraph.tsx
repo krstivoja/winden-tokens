@@ -29,6 +29,7 @@ import { useModalContext } from '../Modals/ModalContext';
 import { ColorValueMenu } from '../Table/ColorValueMenu';
 import { CollectionFilters } from '../Toolbar/CollectionFilters';
 import { ModeSelector } from '../Toolbar/ModeSelector';
+import { Icon } from '../icons/Icon';
 
 // ── Constants ──────────────────────────────────────────────────────
 const GROUP_WIDTH = 260;
@@ -585,9 +586,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 }}
                 aria-label={`Open actions for ${group.title}`}
               >
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M3 4.5h10M3 8h10M3 11.5h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-                </svg>
+                <Icon name="menu" />
               </button>
               {isGroupMenuOpen && (
                 <div

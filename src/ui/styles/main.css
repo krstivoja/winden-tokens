@@ -315,12 +315,8 @@
     @apply opacity-45 cursor-default pointer-events-none;
   }
 
-  .btn-icon {
-    @apply w-7 p-0;
-  }
-
   .btn svg {
-    @apply w-3.5 h-3.5;
+    /* Icons are 24x24 by default */
   }
 
   .btn-primary {
@@ -466,7 +462,7 @@
   }
 
   .variable-type-filter-item .type-icon svg {
-    @apply w-3 h-3;
+    /* Icons are 24x24 by default */
   }
 
   .variable-type-filter-item span:last-child {
@@ -495,11 +491,11 @@
   }
 
   .search-icon {
-    @apply text-text-dim flex items-center;
+    @apply text-text flex items-center;
   }
 
   .search-icon svg {
-    @apply w-3.5 h-3.5;
+    /* Icons are 24x24 by default */
   }
 
   .search-input {
@@ -624,7 +620,7 @@
   }
 
   .table-header-action {
-    @apply w-[22px] h-[22px] flex items-center justify-center border border-border rounded bg-bg text-text-dim cursor-pointer p-0 transition-all;
+    @apply w-[22px] h-[22px] flex items-center justify-center border border-border rounded bg-bg text-text cursor-pointer p-0 transition-all;
   }
 
   .table-header-action:hover {
@@ -636,7 +632,7 @@
   }
 
   .table-header-action svg {
-    @apply w-3 h-3;
+    /* Icons are 24x24 by default */
   }
 
   /* Group rows */
@@ -657,15 +653,16 @@
   }
 
   .group-toggle {
-    @apply w-[15px] h-[15px] flex items-center justify-center text-text-dim transition-transform;
+    @apply w-6 h-6 flex items-center justify-center text-text cursor-pointer p-0 m-0 leading-none;
   }
 
-  .group-toggle.collapsed {
-    @apply rotate-90;
+  .group-toggle:hover {
+    @apply text-text;
   }
 
   .group-toggle svg {
-    @apply w-[18px] h-[18px];
+    /* Icons are 24x24 by default */
+    @apply block;
   }
 
   tr.hidden-by-group {
@@ -683,7 +680,7 @@
   }
 
   .row-action {
-    @apply w-6 h-6 border-none bg-transparent rounded cursor-pointer flex items-center justify-center text-text-dim transition-all;
+    @apply w-6 h-6 border-none bg-transparent rounded cursor-pointer flex items-center justify-center text-text transition-all;
   }
 
   .row-action:hover {
@@ -695,7 +692,7 @@
   }
 
   .row-action svg {
-    @apply w-[13px] h-[13px];
+    /* Icons are 24x24 by default */
   }
 
   /* Empty state */
@@ -705,7 +702,7 @@
 
   /* Drag handle */
   .drag-handle {
-    @apply w-4 h-4 flex items-center justify-center text-text-dim cursor-grab opacity-0 transition-opacity flex-shrink-0;
+    @apply w-4 h-4 flex items-center justify-center text-text cursor-grab opacity-0 transition-opacity flex-shrink-0;
   }
 
   .drag-handle:active {
@@ -816,11 +813,12 @@
   }
 
   .modifier-btn .icon {
-    @apply flex items-center justify-center;
+    @apply flex items-center justify-center p-0 leading-none;
   }
 
   .modifier-btn .icon svg {
-    @apply w-3.5 h-3.5;
+    /* Icons are 24x24 by default */
+    @apply block;
   }
 
   .modifier-btn.dirty {
@@ -833,23 +831,23 @@
 
   /* Collection cell */
   .collection-cell {
-    @apply relative px-2.5;
+    @apply px-2.5;
   }
 
   .collection-cell-empty {
     @apply px-2.5 text-text-dim text-sm;
   }
 
-  .collection-cell-btn {
-    @apply flex items-center gap-1 px-2 py-1 border border-border bg-bg rounded text-sm font-medium text-text cursor-pointer transition-all whitespace-nowrap max-w-[120px] overflow-hidden text-ellipsis;
+  .collection-cell-trigger {
+    @apply flex items-center gap-1.5 cursor-pointer p-0 rounded text-sm text-text h-full;
   }
 
-  .collection-cell-btn:hover {
-    @apply bg-bg-hover border-accent;
+  .collection-cell-trigger:hover {
+    @apply bg-bg-hover;
   }
 
-  .collection-cell-btn .dropdown-arrow {
-    @apply text-xs ml-1 flex-shrink-0;
+  .collection-cell-trigger .collection-label {
+    @apply font-medium;
   }
 
   .collection-cell-dropdown {
@@ -1007,7 +1005,7 @@
   }
 
   .type-icon svg {
-    @apply w-6 h-6;
+    /* Icons are 24x24 by default */
   }
 
   /* Color swatch */

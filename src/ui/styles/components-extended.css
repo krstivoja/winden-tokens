@@ -194,7 +194,7 @@
   }
 
   .curve-property-reset svg {
-    @apply w-3 h-3;
+    /* Icons are 24x24 by default */
   }
 
   .curve-property-item.active .curve-property-reset {
@@ -367,7 +367,7 @@
 
   .steps-editable-row .step-reset-btn svg,
   .steps-editable-row .step-delete-btn svg {
-    @apply w-3 h-3;
+    /* Icons are 24x24 by default */
   }
 
   .steps-editable-row .step-reset-btn:hover {
@@ -660,7 +660,7 @@
   }
 
   .rf-group-menu-btn svg {
-    @apply w-3 h-3;
+    /* Icons are 24x24 by default */
   }
 
   .rf-group-menu-popover {

@@ -51,15 +51,15 @@ export function CollectionCell({ variable }: CollectionCellProps) {
   }
 
   return (
-    <div className="collection-cell" ref={dropdownRef}>
-      <button
-        className="collection-cell-btn"
+    <div className="collection-cell relative" ref={dropdownRef}>
+      <div
+        className="collection-cell-trigger"
         onClick={() => setIsOpen(!isOpen)}
         title="Move to collection"
       >
-        {buttonLabel}
+        <span className="collection-label">{buttonLabel}</span>
         <span className="dropdown-arrow">▾</span>
-      </button>
+      </div>
 
       {isOpen && (
         <div className="collection-cell-dropdown">

@@ -5,7 +5,8 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
+import { TypeIcon, ExpandIcon, CollapseIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
+import { IconButton } from '../common/IconButton';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';
@@ -151,12 +152,11 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
               {' '}({variables.length})
             </span>
           </span>
-          <span
-            className={`group-toggle ${isCollapsed ? 'collapsed' : ''}`}
+          <IconButton
+            icon={isCollapsed ? <ExpandIcon /> : <CollapseIcon />}
             onClick={handleToggle}
-          >
-            <ChevronDownIcon />
-          </span>
+            aria-label={isCollapsed ? "Expand group" : "Collapse group"}
+          />
         </div>
       </td>
       <td>

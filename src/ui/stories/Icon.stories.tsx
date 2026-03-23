@@ -1,21 +1,23 @@
-import type { Meta, StoryObj } from '../components/common/IconButton';
-import { IconButton } from '../components/common/IconButton/IconButton';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Icon } from '../components/icons/Icon';
 
 const meta = {
-  title: 'common/IconButton',
-  component: IconButton,
+  title: 'icons/Icon',
+  component: Icon,
   tags: ['autodocs'],
   argTypes: {
     // Add custom controls here
   },
-} satisfies Meta<typeof IconButton>;
+} satisfies Meta<typeof Icon>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
-
+    name: {},
+    size: 42,
+    className: 'Sample className',
   },
 };
 
