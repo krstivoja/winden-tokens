@@ -64,7 +64,7 @@ Color values use Figma's 0-1 range internally (`{ r, g, b, a }`) but display as 
 
 ## UI Conventions
 
-- Any control that opens a dropdown menu should include the same downward triangle indicator (`▾`) used by the contrast controls, so menu-triggering actions are visually consistent.
+- Any control that opens a dropdown menu should use the ChevronDownIcon component for visual consistency.
 
 ## AI Specifications
 
@@ -83,23 +83,11 @@ All AI specifications are organized in the [specs/](specs/) folder:
 - [COMPONENT_SUMMARY.md](specs/COMPONENT_SUMMARY.md) - Component summary and overview
 - [COMPONENT_USAGE_EXAMPLES.md](specs/COMPONENT_USAGE_EXAMPLES.md) - Usage examples and patterns
 
-### Feature & Release Documentation
-- [Changelog.md](specs/Changelog.md) - Version history and release notes
-- [FEATURES.md](specs/FEATURES.md) - Complete feature documentation and usage guide
-- [RELEASE.md](specs/RELEASE.md) - Release process and versioning guidelines
-
-### Storybook Documentation
-- [STORYBOOK_QUICK_START.md](specs/STORYBOOK_QUICK_START.md) - Quick guide to Storybook setup
-- [STORYBOOK_COMPONENTS.md](specs/STORYBOOK_COMPONENTS.md) - Component documentation for Storybook
-- [STORYBOOK_AUTOMATION.md](specs/STORYBOOK_AUTOMATION.md) - Storybook automation workflows
-
 **When working on this project, always review relevant specification files to understand:**
 - Component structure and development patterns
 - Testing approaches and conventions
 - Existing features and their implementation
 - Design decisions and architecture choices
-- Release workflows and versioning strategy
-- Storybook integration and component structure
 
 ## Mandatory Update Rules
 
@@ -170,154 +158,14 @@ All AI specifications are organized in the [specs/](specs/) folder:
 - ✅ Updating test file structure
 - ✅ Modifying test scripts
 
-### Storybook Update Rules
-
-**CRITICAL: You MUST update Storybook stories when creating or modifying components.**
-
-#### When to Create/Update Storybook Stories:
-
-**ALWAYS create stories for:**
-- ✅ New components in `src/ui/components/common/` (reusable UI components)
-- ✅ Components with multiple variants or states
-- ✅ Components with complex props
-
-**Update stories when:**
-- ✅ Adding new props to a component
-- ✅ Adding new variants (e.g., new button style)
-- ✅ Changing component behavior or appearance
-- ✅ Fixing component bugs that affect visual output
-
-**Story file naming:**
-```
-ComponentName/
-├── ComponentName.tsx
-├── ComponentName.stories.tsx  ← MUST create for common components
-└── ComponentName.test.tsx     ← MUST create for common components
-```
-
-**Example story structure:**
-```tsx
-// Button.stories.tsx
-import type { Meta, StoryObj } from '@storybook/react';
-import { Button } from './Button';
-
-const meta: Meta<typeof Button> = {
-  title: 'Common/Button',
-  component: Button,
-  tags: ['autodocs'],
-};
-
-export default meta;
-type Story = StoryObj<typeof Button>;
-
-export const Primary: Story = {
-  args: {
-    variant: 'primary',
-    children: 'Primary Button',
-  },
-};
-
-export const Secondary: Story = {
-  args: {
-    variant: 'secondary',
-    children: 'Secondary Button',
-  },
-};
-
-export const Danger: Story = {
-  args: {
-    variant: 'danger',
-    children: 'Danger Button',
-  },
-};
-```
-
-#### Running Storybook
-
-**During development:**
-```bash
-npm run storybook
-# Opens http://localhost:6006
-# Auto-reloads when stories change
-```
-
-**Before committing:**
-```bash
-npm run build-storybook
-# Builds static Storybook to verify no errors
-```
-
-### Update Workflow Example
-
-**Scenario: Adding a new "Toggle" component**
-
-1. **Create the component**
-   ```bash
-   src/ui/components/common/Toggle/
-   ├── Toggle.tsx
-   ├── Toggle.stories.tsx  ← CREATE
-   ├── Toggle.test.tsx     ← CREATE
-   └── index.ts
-   ```
-
-2. **Update ARCHITECTURE.md**
-   ```markdown
-   #### 11. Toggle
-   **File:** `common/Toggle/Toggle.tsx`
-
-   **Props:**
-   ```typescript
-   interface ToggleProps {
-     checked: boolean;
-     onChange: (checked: boolean) => void;
-     label?: string;
-     disabled?: boolean;
-   }
-   ```
-
-   **Usage:**
-   ```tsx
-   <Toggle checked={enabled} onChange={setEnabled} label="Enable feature" />
-   ```
-   ```
-
-3. **Update common/index.ts**
-   ```typescript
-   export { Toggle } from './Toggle';
-   export type { ToggleProps } from './Toggle';
-   ```
-
-4. **Create Storybook story**
-   ```tsx
-   // Toggle.stories.tsx
-   export const Default: Story = {
-     args: { checked: false, label: 'Toggle me' }
-   };
-   ```
-
-5. **Test in Storybook**
-   ```bash
-   npm run storybook
-   # Verify Toggle appears in Storybook
-   # Test all variants visually
-   ```
-
-6. **Verify build**
-   ```bash
-   npm run build-storybook
-   # Ensure no build errors
-   ```
-
 ### Verification Checklist
 
 Before committing changes, verify:
 
 - [ ] Updated relevant specification files
-- [ ] Created/updated Storybook stories for new/modified components
 - [ ] Added component to ARCHITECTURE.md inventory
 - [ ] Updated TECH_STACK.md if dependencies changed
 - [ ] Updated STYLING.md if design tokens added
-- [ ] Storybook builds without errors (`npm run build-storybook`)
 - [ ] Tests pass (`npm test`)
 - [ ] Build succeeds (`npm run build`)
 
@@ -326,7 +174,6 @@ Before committing changes, verify:
 1. **Prevent duplicate components** - ARCHITECTURE.md lists all components, preventing recreation
 2. **Maintain consistency** - TECH_STACK.md ensures we don't add conflicting technologies
 3. **Preserve styling approach** - STYLING.md documents the Tailwind v4 patterns
-4. **Enable visual testing** - Storybook stories allow UI validation without running plugin
-5. **Knowledge continuity** - Specs document decisions for future development
+4. **Knowledge continuity** - Specs document decisions for future development
 
 **Remember: Specifications are not just documentation - they are operational rules that must be followed and kept up-to-date.**
