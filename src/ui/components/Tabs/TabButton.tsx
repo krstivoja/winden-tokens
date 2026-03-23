@@ -11,7 +11,7 @@ interface TabButtonProps {
 export function TabButton({ label, isActive, onClick }: TabButtonProps) {
   return (
     <button
-      className={`tab p-2 ${isActive ? 'active' : ''}`}
+      className={`tab leading-none p-4 border-2 border-solid border-transparent ${isActive ? 'active font-bold border-b-primary' : ''}`}
       onClick={onClick}
     >
       {label}

@@ -3,10 +3,11 @@
 /* Light mode theme (default) */
 @theme {
 
-    --color-primary: var(--color-blue-600);
-    --color-secondary: var(--color-purple-600);
+    --color-primary: var(--color-blue-400);
+    --color-secondary: var(--color-purple-500);
     --color-base: white;
     --color-text: black;
+    --color-border: var(--color-gray-200);
 }
 
 /* Dark mode theme (system preference) */
@@ -14,10 +15,13 @@
     :root {
         --color-base: black;
         --color-text: white;
+        --color-border: var(--color-gray-700);
     }
 }
 
 body {
     background-color: var(--color-base);
     color: var(--color-text);
+    font-size: 12px;
+    line-height: 1;
 }

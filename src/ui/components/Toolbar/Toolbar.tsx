@@ -65,9 +65,8 @@ export function Toolbar({ status }: ToolbarProps) {
   }, []);
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group">
-        <VariableTypeFilters />
+    <div className="toolbar border-b border-border flex justify-between gap-4 p-4">
+      <div className="flex gap-4">
         <button
           id="add-variable-btn"
           ref={addBtnRef}
@@ -77,11 +76,12 @@ export function Toolbar({ status }: ToolbarProps) {
           <span className="icon"><PlusIcon /></span>
           Add Variable
         </button>
+        
+        <VariableTypeFilters />
+        
       </div>
 
-      <div className="spacer" />
-
-      <div className="toolbar-group">
+      <div className="flex gap-4">
         <CollectionFilters />
         <IconButton
           id="add-collection-btn"
@@ -93,7 +93,6 @@ export function Toolbar({ status }: ToolbarProps) {
         <ModeSelector />
       </div>
 
-      <div className="toolbar-divider" />
 
       <div className="search-wrapper">
         <span className="search-icon"><SearchIcon /></span>

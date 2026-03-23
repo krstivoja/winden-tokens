@@ -66,7 +66,7 @@ export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps
   };
 
   return (
-    <div className="tabs flex items-center justify-between">
+    <div className="tabs flex items-center justify-between border-b border-border">
       <div>
         {TABS.map((tab) => (
           <TabButton
@@ -79,7 +79,7 @@ export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps
 
       </div>
 
-      <div className="flex">
+      <div className="flex mr-4 gap-2">
 
 
         <IconButton
