@@ -122,13 +122,13 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       data-group={groupName}
     >
       <td>
-        <div className="group-header">
+        <div className="group-header flex items-center gap-2">
           <span className={`type-icon ${groupType}`}>
             <TypeIcon type={groupType} />
           </span>
-          <span onClick={handleToggle} style={{ flex: 1, cursor: 'pointer' }}>
+          <span onClick={handleToggle} className="flex-1 cursor-pointer">
             {groupName}
-            <span style={{ color: 'var(--text-dim)', fontWeight: 400, fontSize: '10px' }}>
+            <span className="text-gray-500 font-normal text-[10px]">
               {' '}({variables.length})
             </span>
           </span>
@@ -142,26 +142,23 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       <td>
         <div className="flex items-center justify-end gap-2 h-full pr-2.5">
           {groupType === 'COLOR' && (
-            <button
-              className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
+            <IconTextButton
+              icon={shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
               onClick={handleShadesClick}
               title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
+              className={shadeGroup?.status === 'dirty' ? 'dirty' : ''}
             >
-              <span className="icon">
-                {shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
-              </span>
               {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
-            </button>
+            </IconTextButton>
           )}
           {groupType === 'FLOAT' && (
-            <button
-              className="modifier-btn"
+            <IconTextButton
+              icon={<StepsIcon />}
               onClick={handleStepsClick}
               title="Generate steps"
             >
-              <span className="icon"><StepsIcon /></span>
               Steps
-            </button>
+            </IconTextButton>
           )}
         </div>
       </td>

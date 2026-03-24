@@ -89,7 +89,7 @@ export function TableView() {
 
   const nameHeader = (
     <div className="table-header-content">
-      <span>NAME</span>
+      <span>Name</span>
       {sortedGroups.length > 0 && (
         <div className="table-header-actions">
           <button
@@ -125,10 +125,10 @@ export function TableView() {
           <thead>
             <tr>
               <th className="col-name text-left font-semibold">{nameHeader}</th>
-              <th className="col-value text-left font-semibold">VALUE</th>
-              <th className="col-collection text-left font-semibold">COLLECTION</th>
-              <th className="col-accessibility text-left font-semibold">ACCESSIBILITY</th>
-              <th className="col-actions w-25 text-left font-semibold">ACTIONS</th>
+              <th className="col-value text-left font-semibold">Value</th>
+              <th className="col-collection text-left font-semibold">Collection</th>
+              <th className="col-accessibility text-left font-semibold">Accessibility</th>
+              <th className="col-actions w-25 text-left font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -149,10 +149,10 @@ export function TableView() {
         <thead>
           <tr>
             <th className="col-name text-left font-semibold">{nameHeader}</th>
-            <th className="col-value text-left font-semibold">VALUE</th>
-            <th className="col-collection text-left font-semibold">COLLECTION</th>
-            <th className="col-accessibility text-left font-semibold">ACCESSIBILITY</th>
-            <th className="col-actions w-25 text-left font-semibold">ACTIONS</th>
+            <th className="col-value text-left font-semibold">Value</th>
+            <th className="col-collection text-left font-semibold">Collection</th>
+            <th className="col-accessibility text-left font-semibold">Accessibility</th>
+            <th className="col-actions w-25 text-left font-semibold">Actions</th>
           </tr>
         </thead>
         <tbody id="table-body">

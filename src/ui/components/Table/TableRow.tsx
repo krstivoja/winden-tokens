@@ -108,31 +108,30 @@ export const TableRow = memo(function TableRow({
     openStepsModal({ groupName: variable.name, collectionId: variable.collectionId });
   }, [openStepsModal, variable.collectionId, variable.name]);
 
-  const hiddenClass = isHidden ? 'hidden-by-group' : '';
+  const hiddenClass = isHidden ? 'hidden' : '';
   const groupedClass = isGrouped ? 'grouped-item' : '';
 
   // Modifier button (Shades/Steps) to be displayed inside value cell
   const modifierButton = !isGrouped && (
     <>
       {variable.resolvedType === 'COLOR' && (
-        <button
-          className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
+        <IconTextButton
+          icon={<ShadesIcon />}
           onClick={handleShadesClick}
           title={shadeGroup?.status === 'dirty' ? 'Managed shades need refresh' : 'Generate shades'}
+          className={shadeGroup?.status === 'dirty' ? 'dirty' : ''}
         >
-          <span className="icon"><ShadesIcon /></span>
           Shades
-        </button>
+        </IconTextButton>
       )}
       {variable.resolvedType === 'FLOAT' && (
-        <button
-          className="modifier-btn"
+        <IconTextButton
+          icon={<StepsIcon />}
           onClick={handleStepsClick}
           title="Generate number steps"
         >
-          <span className="icon"><StepsIcon /></span>
           Steps
-        </button>
+        </IconTextButton>
       )}
     </>
   );
