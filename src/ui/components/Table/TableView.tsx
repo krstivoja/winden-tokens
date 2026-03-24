@@ -181,13 +181,14 @@ export function TableView() {
                   variables={groupVars}
                   isCollapsed={isCollapsed}
                 />
-                {groupVars.map(v => (
+                {groupVars.map((v, index) => (
                   <TableRow
                     key={v.id}
                     variable={v}
                     isGrouped={true}
                     isHidden={isCollapsed}
                     groupName={groupName}
+                    isLastInGroup={index === groupVars.length - 1}
                     onShowColorMenu={showColorMenu}
                     contrastColor={groupContrastColor}
                     colorVariables={colorVariables}

@@ -13,12 +13,14 @@ import { ValueCell } from './ValueCell';
 import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
+import { InputTable } from './InputTable';
 
 interface TableRowProps {
   variable: VariableData;
   isGrouped: boolean;
   isHidden?: boolean;
   groupName?: string;
+  isLastInGroup?: boolean;
   onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
   contrastColor: string | null;
   colorVariables: VariableData[];
@@ -29,6 +31,7 @@ export const TableRow = memo(function TableRow({
   isGrouped,
   isHidden = false,
   groupName = '',
+  isLastInGroup = false,
   onShowColorMenu,
   contrastColor,
   colorVariables,
@@ -142,13 +145,20 @@ export const TableRow = memo(function TableRow({
       className={`group ${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
     >
-      <td className="border border-gray-200 px-3 py-2">
-        <div className="name-cell flex items-center gap-2">
+      <td className="border border-border px-3 py-2 relative">
+        <div className={`name-cell flex items-center gap-2 ${isGrouped ? 'pl-6' : ''}`}>
+          {isGrouped && (
+            <>
+              {/* Vertical line - full height for middle items, half for last item */}
+              <div className={`absolute left-5 top-0 w-px bg-border ${isLastInGroup ? 'h-1/2' : 'h-full'}`}></div>
+              {/* Horizontal line to icon */}
+              <div className="absolute left-5 top-1/2 w-4 h-px bg-border"></div>
+            </>
+          )}
           <span className={`type-icon ${variable.resolvedType}`}>
             <TypeIcon type={variable.resolvedType} />
           </span>
-          <input
-            className="cell-input"
+          <InputTable
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
             onBlur={handleNameBlur}
@@ -156,17 +166,17 @@ export const TableRow = memo(function TableRow({
           />
         </div>
       </td>
-      <td className="border border-gray-200 px-3 py-2">
+      <td className="border border-border px-3 py-2">
         <ValueCell
           variable={variable}
           onShowColorMenu={onShowColorMenu}
           modifierButton={modifierButton}
         />
       </td>
-      <td className="border border-gray-200 px-3 py-2">
+      <td className="border border-border px-3 py-2">
         <CollectionCell variable={variable} />
       </td>
-      <td className="accessibility-cell border border-gray-200 px-3 py-2">
+      <td className="accessibility-cell border border-border px-3 py-2">
         {contrastResult ? (
           <OptionsDropdown
             label={
@@ -208,7 +218,7 @@ export const TableRow = memo(function TableRow({
           </OptionsDropdown>
         ) : null}
       </td>
-      <td className="w-25 border border-gray-200 px-3 py-2">
+      <td className="w-25 border border-border px-3 py-2">
         <div className="row-actions flex gap-2">
           <IconButton
             icon={<CopyIcon />}

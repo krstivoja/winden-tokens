@@ -7,6 +7,7 @@ import { post } from '../../hooks/usePluginMessages';
 import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
 import { TextButton } from '../common/Button';
 import { ColorSwatch } from '../common/ColorSwatch';
+import { InputTable } from './InputTable';
 
 interface ValueCellProps {
   variable: VariableData;
@@ -44,8 +45,7 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
 
   // Reusable input component
   const valueInput = (
-    <input
-      className="flex-1 h-full border-none bg-transparent outline-none focus:bg-bg-input"
+    <InputTable
       value={inputValue}
       onChange={e => setInputValue(e.target.value)}
       onBlur={handleBlur}
