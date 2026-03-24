@@ -1,12 +1,14 @@
 // Group header component
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon, ChevronDownIcon } from '../Icons';
+import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
 import { IconButton } from '../common/IconButton/IconButton';
+import { IconTextButton } from '../common/Button/Button';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';
@@ -27,7 +29,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     getShadeGroupByGroupName,
   } = useAppContext();
   const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
-  const [showContrastPicker, setShowContrastPicker] = useState(false);
 
   const groupIds = variables.map(v => v.id);
   const groupType = variables[0]?.resolvedType || 'STRING';
@@ -75,13 +76,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     }
   }, [groupIds, groupName, shadeGroup, sourceVariable]);
 
-  const handleContrastClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContrastPicker(!showContrastPicker);
-  }, [showContrastPicker]);
-
   const handlePickContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorPicker({
       initialColor: contrastColor || '#ffffff',
       onConfirm: (color) => setGroupContrastColor(groupName, color),
@@ -89,7 +84,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   }, [openColorPicker, contrastColor, setGroupContrastColor, groupName]);
 
   const handleReferenceContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorReference({
       onConfirm: (variableId) => {
         const colorVar = colorVariables.find(v => v.id === variableId);
@@ -101,7 +95,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   }, [openColorReference, colorVariables, setGroupContrastColor, groupName]);
 
   const handleClearContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     setGroupContrastColor(groupName, null);
   }, [setGroupContrastColor, groupName]);
 
@@ -123,22 +116,9 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     openStepsModal({ groupName, collectionId: variables[0]?.collectionId });
   }, [openStepsModal, groupName, variables]);
 
-  // Close picker when clicking outside
-  React.useEffect(() => {
-    if (!showContrastPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('#contrast-picker') && !target.closest('.group-contrast-trigger')) {
-        setShowContrastPicker(false);
-      }
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [showContrastPicker]);
-
   return (
     <tr
-      className={`group-row ${isCollapsed ? 'collapsed' : ''}`}
+      className={`group group-row ${isCollapsed ? 'collapsed' : ''}`}
       data-group={groupName}
     >
       <td>
@@ -190,47 +170,39 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       </td>
       <td className="accessibility-cell">
         {groupType === 'COLOR' && (
-          <div className="relative">
-            <div
-              className="group-contrast-trigger"
-              onClick={handleContrastClick}
-              title="Set contrast color for this group"
-            >
-              {contrastColor && (
-                <span className="contrast-swatch" style={{ background: contrastColor }} />
-              )}
-              <span className="contrast-label">Contrast</span>
-              <span className="dropdown-arrow"><ChevronDownIcon /></span>
-            </div>
-            {showContrastPicker && (
-              <ContrastPicker
-                contrastColor={contrastColor}
-                onPickColor={handlePickContrastColor}
-                onReferenceColor={handleReferenceContrastColor}
-                onClear={handleClearContrastColor}
-              />
-            )}
-          </div>
+          <OptionsDropdown
+            label={
+              <>
+                {contrastColor && (
+                  <span className="inline-block w-3 h-3 rounded mr-1" style={{ background: contrastColor }} />
+                )}
+                Contrast
+              </>
+            }
+          >
+            <ContrastPicker
+              contrastColor={contrastColor}
+              onPickColor={handlePickContrastColor}
+              onReferenceColor={handleReferenceContrastColor}
+              onClear={handleClearContrastColor}
+            />
+          </OptionsDropdown>
         )}
       </td>
-      <td>
-        <div className="row-actions">
-          <button
-            className="row-action"
+      <td className="w-25">
+        <div className="row-actions flex gap-2">
+          <IconButton
+            icon={<EditIcon />}
             onClick={handleBulkEdit}
             title="Edit as text"
-            style={{ opacity: 0 }}
-          >
-            <EditIcon />
-          </button>
-          <button
-            className="row-action danger"
+            aria-label="Edit as text"
+          />
+          <IconButton
+            icon={<TrashIcon />}
             onClick={handleDeleteGroup}
             title="Delete group"
-            style={{ opacity: 0 }}
-          >
-            <TrashIcon />
-          </button>
+            aria-label="Delete group"
+          />
         </div>
       </td>
     </tr>

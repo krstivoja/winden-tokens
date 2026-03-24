@@ -121,14 +121,14 @@ export function TableView() {
   if (!filteredVariables.length) {
     return (
       <div className="table-container">
-        <table className="spreadsheet">
+        <table className="spreadsheet w-full">
           <thead>
             <tr>
-              <th className="col-name">{nameHeader}</th>
-              <th className="col-value">VALUE</th>
-              <th className="col-collection">COLLECTION</th>
-              <th className="col-accessibility">ACCESSIBILITY</th>
-              <th className="col-actions">ACTIONS</th>
+              <th className="col-name text-left font-semibold">{nameHeader}</th>
+              <th className="col-value text-left font-semibold">VALUE</th>
+              <th className="col-collection text-left font-semibold">COLLECTION</th>
+              <th className="col-accessibility text-left font-semibold">ACCESSIBILITY</th>
+              <th className="col-actions w-25 text-left font-semibold">ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -145,14 +145,14 @@ export function TableView() {
 
   return (
     <div className="table-container" ref={tableContainerRef} tabIndex={0}>
-      <table className="spreadsheet">
+      <table className="spreadsheet w-full">
         <thead>
           <tr>
-            <th className="col-name">{nameHeader}</th>
-            <th className="col-value">VALUE</th>
-            <th className="col-collection">COLLECTION</th>
-            <th className="col-accessibility">ACCESSIBILITY</th>
-            <th className="col-actions">ACTIONS</th>
+            <th className="col-name text-left font-semibold">{nameHeader}</th>
+            <th className="col-value text-left font-semibold">VALUE</th>
+            <th className="col-collection text-left font-semibold">COLLECTION</th>
+            <th className="col-accessibility text-left font-semibold">ACCESSIBILITY</th>
+            <th className="col-actions w-25 text-left font-semibold">ACTIONS</th>
           </tr>
         </thead>
         <tbody id="table-body">

@@ -1,11 +1,14 @@
 // Table row component
 
-import React, { useState, useCallback, useMemo, useEffect, memo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon, ChevronDownIcon } from '../Icons';
+import { IconButton } from '../common/IconButton/IconButton';
+import { IconTextButton } from '../common/Button/Button';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ValueCell } from './ValueCell';
 import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
@@ -33,7 +36,6 @@ export const TableRow = memo(function TableRow({
   const { setSingleContrastColor, getShadeGroupBySourceId } = useAppContext();
   const { openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
-  const [showContrastPicker, setShowContrastPicker] = useState(false);
 
   const shadeGroup = useMemo(() => {
     if (isGrouped || variable.resolvedType !== 'COLOR') return null;
@@ -74,13 +76,7 @@ export const TableRow = memo(function TableRow({
   }, [variable.id]);
 
   // Contrast picker handlers for ungrouped color variables
-  const handleContrastClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContrastPicker(!showContrastPicker);
-  }, [showContrastPicker]);
-
   const handlePickContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorPicker({
       initialColor: contrastColor || '#ffffff',
       onConfirm: (color) => setSingleContrastColor(variable.id, color),
@@ -88,7 +84,6 @@ export const TableRow = memo(function TableRow({
   }, [openColorPicker, contrastColor, setSingleContrastColor, variable.id]);
 
   const handleReferenceContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorReference({
       onConfirm: (variableId) => {
         const colorVar = colorVariables.find(v => v.id === variableId);
@@ -100,7 +95,6 @@ export const TableRow = memo(function TableRow({
   }, [openColorReference, colorVariables, setSingleContrastColor, variable.id]);
 
   const handleClearContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     setSingleContrastColor(variable.id, null);
   }, [setSingleContrastColor, variable.id]);
 
@@ -113,19 +107,6 @@ export const TableRow = memo(function TableRow({
     e.stopPropagation();
     openStepsModal({ groupName: variable.name, collectionId: variable.collectionId });
   }, [openStepsModal, variable.collectionId, variable.name]);
-
-  // Close picker when clicking outside
-  useEffect(() => {
-    if (!showContrastPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('#contrast-picker') && !target.closest('.single-contrast-trigger')) {
-        setShowContrastPicker(false);
-      }
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [showContrastPicker]);
 
   const hiddenClass = isHidden ? 'hidden-by-group' : '';
   const groupedClass = isGrouped ? 'grouped-item' : '';
@@ -159,7 +140,7 @@ export const TableRow = memo(function TableRow({
   return (
     <tr
       data-id={variable.id}
-      className={`${groupedClass} ${hiddenClass}`.trim()}
+      className={`group ${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
     >
       <td>
@@ -188,71 +169,60 @@ export const TableRow = memo(function TableRow({
       </td>
       <td className="accessibility-cell">
         {contrastResult ? (
-          <div className="relative">
-            <div
-              className="contrast-info"
-              onClick={handleContrastClick}
-              style={{ cursor: 'pointer' }}
-              title="Change contrast color"
-            >
-              <span className="contrast-ratio">{contrastResult.ratio}:1</span>
-              <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
-                {contrastResult.aa ? '✓' : '✗'}AA
-              </span>
-              <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
-                {contrastResult.aaa ? '✓' : '✗'}AAA
-              </span>
-              <span className="dropdown-arrow"><ChevronDownIcon /></span>
-            </div>
-            {showContrastPicker && (
-              <ContrastPicker
-                contrastColor={contrastColor}
-                onPickColor={handlePickContrastColor}
-                onReferenceColor={handleReferenceContrastColor}
-                onClear={handleClearContrastColor}
-              />
-            )}
-          </div>
+          <OptionsDropdown
+            label={
+              <>
+                <span className="contrast-ratio">{contrastResult.ratio}:1</span>
+                <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
+                  {contrastResult.aa ? '✓' : '✗'}AA
+                </span>
+                <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
+                  {contrastResult.aaa ? '✓' : '✗'}AAA
+                </span>
+              </>
+            }
+          >
+            <ContrastPicker
+              contrastColor={contrastColor}
+              onPickColor={handlePickContrastColor}
+              onReferenceColor={handleReferenceContrastColor}
+              onClear={handleClearContrastColor}
+            />
+          </OptionsDropdown>
         ) : !isGrouped && variable.resolvedType === 'COLOR' ? (
-          <div className="relative">
-            <div
-              className="single-contrast-trigger"
-              onClick={handleContrastClick}
-              title="Set contrast color"
-            >
-              {contrastColor && (
-                <span className="contrast-swatch" style={{ background: contrastColor }} />
-              )}
-              <span className="contrast-label">Contrast</span>
-              <span className="dropdown-arrow"><ChevronDownIcon /></span>
-            </div>
-            {showContrastPicker && (
-              <ContrastPicker
-                contrastColor={contrastColor}
-                onPickColor={handlePickContrastColor}
-                onReferenceColor={handleReferenceContrastColor}
-                onClear={handleClearContrastColor}
-              />
-            )}
-          </div>
+          <OptionsDropdown
+            label={
+              <>
+                {contrastColor && (
+                  <span className="inline-block w-3 h-3 rounded mr-1" style={{ background: contrastColor }} />
+                )}
+                Contrast
+              </>
+            }
+          >
+            <ContrastPicker
+              contrastColor={contrastColor}
+              onPickColor={handlePickContrastColor}
+              onReferenceColor={handleReferenceContrastColor}
+              onClear={handleClearContrastColor}
+            />
+          </OptionsDropdown>
         ) : null}
       </td>
-      <td>
-        <div className="row-actions">
-          <button
-            className="row-action"
+      <td className="w-25">
+        <div className="row-actions flex gap-2">
+          <IconButton
+            icon={<CopyIcon />}
             onClick={handleDuplicate}
             title="Duplicate"
-          >
-            <CopyIcon />
-          </button>
-          <button
-            className="row-action danger"
+            aria-label="Duplicate"
+          />
+          <IconButton
+            icon={<TrashIcon />}
             onClick={handleDelete}
             title="Delete"
-          >
-            <TrashIcon />
-          </button>
+            aria-label="Delete"
+          />
         </div>
       </td>
     </tr>

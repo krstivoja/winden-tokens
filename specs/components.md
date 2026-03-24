@@ -256,26 +256,52 @@ Dependency graph in `src/ui/components/Relationships/`
 ### OptionsDropdown
 **File:** `common/OptionsDropdown/OptionsDropdown.tsx`
 
-**Purpose:** Dropdown menu with absolute positioning (overlay, doesn't push content)
+**Purpose:** Dropdown menu with absolute positioning (overlay, doesn't push content). **Standard component for ALL dropdowns in the app.**
 
 **Props:**
 - `label: string` - Button label text
-- `children: React.ReactNode` - Menu content
+- `children: React.ReactNode` - Menu content (Radio buttons, Checkboxes, Buttons, etc.)
 - `className?: string` - Additional CSS classes
 
 **Features:**
-- Absolute positioned menu (overlays content)
-- Ghost button trigger by default
+- Absolute positioned menu (overlays content, doesn't push layout)
+- Ghost button trigger by default (IconTextButton with ChevronDown icon on right)
 - Closes on click outside or Escape key
 - Shadow and border styling
-- `z-50` for proper layering
+- `z-50` for proper layering above content
+- Built-in accessibility: `aria-expanded`, `aria-haspopup="menu"`
+- Min-width 200px, expandable based on content
+- Consistent padding, rounded corners, border
+
+**Used In:**
+- CollectionFilters (toolbar) - Multiple collections with checkboxes
+- VariableTypeFilters (toolbar) - Type checkboxes
+- ModeSelector (toolbar) - Mode selection
+- GroupCollectionCell (table) - Move group to collection (radio buttons)
+- CollectionCell (table) - Move variable to collection (radio buttons)
+- GroupHeader (table) - Contrast color picker with Pick/Reference/Clear options
+- TableRow (table) - Contrast color picker for individual variables (2 instances)
+
+**Pattern:** Use OptionsDropdown for ANY dropdown in the app. Do NOT create custom dropdown implementations.
 
 **Usage:**
 ```tsx
+// With checkboxes
 <OptionsDropdown label="Types (4/4)">
   <Checkbox label="Color" checked={true} onChange={...} />
   <Checkbox label="Number" checked={true} onChange={...} />
-  <Checkbox label="String" checked={false} onChange={...} />
+</OptionsDropdown>
+
+// With radio buttons
+<OptionsDropdown label="colors">
+  <Radio label="Collection 1" checked={true} onChange={...} />
+  <Radio label="Collection 2" checked={false} onChange={...} />
+</OptionsDropdown>
+
+// With buttons
+<OptionsDropdown label="Actions">
+  <TextButton onClick={...}>Edit</TextButton>
+  <TextButton onClick={...}>Delete</TextButton>
 </OptionsDropdown>
 ```
 
