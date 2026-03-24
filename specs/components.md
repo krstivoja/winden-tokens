@@ -256,19 +256,27 @@ Dependency graph in `src/ui/components/Relationships/`
 ### OptionsDropdown
 **File:** `common/OptionsDropdown/OptionsDropdown.tsx`
 
-**Purpose:** Three-dot menu for row actions
+**Purpose:** Dropdown menu with absolute positioning (overlay, doesn't push content)
 
 **Props:**
-- `options: Array<{ label: string, onClick: () => void, icon?: ReactNode }>`
+- `label: string` - Button label text
+- `children: React.ReactNode` - Menu content
+- `className?: string` - Additional CSS classes
+
+**Features:**
+- Absolute positioned menu (overlays content)
+- Ghost button trigger by default
+- Closes on click outside or Escape key
+- Shadow and border styling
+- `z-50` for proper layering
 
 **Usage:**
 ```tsx
-<OptionsDropdown
-  options={[
-    { label: 'Edit', onClick: handleEdit },
-    { label: 'Delete', onClick: handleDelete },
-  ]}
-/>
+<OptionsDropdown label="Types (4/4)">
+  <Checkbox label="Color" checked={true} onChange={...} />
+  <Checkbox label="Number" checked={true} onChange={...} />
+  <Checkbox label="String" checked={false} onChange={...} />
+</OptionsDropdown>
 ```
 
 ---

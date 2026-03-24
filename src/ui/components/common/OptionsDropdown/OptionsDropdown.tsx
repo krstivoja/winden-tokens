@@ -1,4 +1,5 @@
 // Simple dropdown component - button + menu in one UI
+// Menu appears as absolute positioned overlay (doesn't push content)
 //
 // Usage:
 //   <OptionsDropdown label="Actions">
@@ -49,7 +50,7 @@ export function OptionsDropdown({ label, children, className = '' }: OptionsDrop
   }, [isOpen]);
 
   return (
-    <div className={`options-dropdown ${className}`.trim()} ref={dropdownRef}>
+    <div className={`relative ${className}`.trim()} ref={dropdownRef}>
       <IconTextButton
         variant="ghost"
         icon={<ChevronDownIcon />}
@@ -62,7 +63,7 @@ export function OptionsDropdown({ label, children, className = '' }: OptionsDrop
       </IconTextButton>
 
       {isOpen && (
-        <div className="options-dropdown-menu">
+        <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded shadow-lg z-50 min-w-[200px] p-2">
           {children}
         </div>
       )}
