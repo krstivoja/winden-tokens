@@ -6,7 +6,7 @@ import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon, ChevronDownIcon } from '../Icons';
-import { IconButton } from '../common/IconButton/IconButton';
+import { IconButton } from '../common/Button';
 import { IconTextButton } from '../common/Button/Button';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ValueCell } from './ValueCell';
@@ -142,8 +142,8 @@ export const TableRow = memo(function TableRow({
       className={`group ${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
     >
-      <td>
-        <div className="name-cell">
+      <td className="border border-gray-200 px-3 py-2">
+        <div className="name-cell flex items-center gap-2">
           <span className={`type-icon ${variable.resolvedType}`}>
             <TypeIcon type={variable.resolvedType} />
           </span>
@@ -156,17 +156,17 @@ export const TableRow = memo(function TableRow({
           />
         </div>
       </td>
-      <td>
+      <td className="border border-gray-200 px-3 py-2">
         <ValueCell
           variable={variable}
           onShowColorMenu={onShowColorMenu}
           modifierButton={modifierButton}
         />
       </td>
-      <td>
+      <td className="border border-gray-200 px-3 py-2">
         <CollectionCell variable={variable} />
       </td>
-      <td className="accessibility-cell">
+      <td className="accessibility-cell border border-gray-200 px-3 py-2">
         {contrastResult ? (
           <OptionsDropdown
             label={
@@ -208,7 +208,7 @@ export const TableRow = memo(function TableRow({
           </OptionsDropdown>
         ) : null}
       </td>
-      <td className="w-25">
+      <td className="w-25 border border-gray-200 px-3 py-2">
         <div className="row-actions flex gap-2">
           <IconButton
             icon={<CopyIcon />}

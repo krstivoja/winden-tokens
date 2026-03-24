@@ -5,6 +5,8 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
+import { TextButton } from '../common/Button';
+import { ColorSwatch } from '../common/ColorSwatch';
 
 interface ValueCellProps {
   variable: VariableData;
@@ -40,6 +42,16 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
     setInputValue(currentValue);
   }, [currentValue]);
 
+  // Reusable input component
+  const valueInput = (
+    <input
+      className="flex-1 h-full border-none bg-transparent outline-none focus:bg-bg-input"
+      value={inputValue}
+      onChange={e => setInputValue(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+
   if (variable.resolvedType === 'COLOR') {
     // Check if this is a reference (format: {variableName})
     const refMatch = currentValue.match(/^\{(.+)\}$/);
@@ -57,21 +69,11 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
 
     return (
       <div className="flex items-center gap-2 h-full pl-2.5">
-        <div
-          className="w-6 h-6 rounded border border-border cursor-pointer relative overflow-hidden before:content-[''] before:absolute before:inset-0 before:bg-[linear-gradient(45deg,var(--checker-dark)_25%,transparent_25%),linear-gradient(-45deg,var(--checker-dark)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--checker-dark)_75%),linear-gradient(-45deg,transparent_75%,var(--checker-dark)_75%)] before:[background-size:6px_6px] before:[background-position:0_0,0_3px,3px_-3px,-3px_0px]"
+        <ColorSwatch
+          color={displayColor}
           onClick={(e) => onShowColorMenu(e, variable.id, currentValue)}
-        >
-          <div
-            className="absolute inset-0 z-[1]"
-            style={{ background: displayColor }}
-          />
-        </div>
-        <input
-          className="flex-1 h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
-          value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          onBlur={handleBlur}
         />
+        {valueInput}
         {modifierButton}
       </div>
     );
@@ -80,19 +82,21 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
   if (variable.resolvedType === 'BOOLEAN') {
     return (
       <div className="px-2.5 h-full flex items-center gap-2">
-        <div className="flex border border-border rounded overflow-hidden">
-          <button
-            className={`px-3 py-1 border-none text-xs cursor-pointer border-r border-border ${currentValue === 'true' ? 'bg-accent text-text-on-accent' : 'bg-bg'}`}
+        <div className="flex border border-gray-200 rounded overflow-hidden">
+          <TextButton
+            size="sm"
+            className={`rounded-none border-r border-gray-200 ${currentValue === 'true' ? 'bg-blue-500 text-white' : 'bg-transparent'}`}
             onClick={() => handleValueChange('true')}
           >
             True
-          </button>
-          <button
-            className={`px-3 py-1 border-none text-xs cursor-pointer ${currentValue === 'false' ? 'bg-accent text-text-on-accent' : 'bg-bg'}`}
+          </TextButton>
+          <TextButton
+            size="sm"
+            className={`rounded-none ${currentValue === 'false' ? 'bg-blue-500 text-white' : 'bg-transparent'}`}
             onClick={() => handleValueChange('false')}
           >
             False
-          </button>
+          </TextButton>
         </div>
         {modifierButton}
       </div>
@@ -101,12 +105,7 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
 
   return (
     <div className="flex items-center h-full pl-2.5 gap-2">
-      <input
-        className="flex-1 h-full border-none bg-transparent text-base p-0 px-2.5 outline-none focus:bg-bg-input focus:shadow-[inset_0_0_0_2px_var(--accent)] text-sm font-['SF_Mono',Monaco,monospace]"
-        value={inputValue}
-        onChange={e => setInputValue(e.target.value)}
-        onBlur={handleBlur}
-      />
+      {valueInput}
       {modifierButton}
     </div>
   );

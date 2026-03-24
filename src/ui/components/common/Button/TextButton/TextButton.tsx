@@ -6,9 +6,10 @@
 //   <TextButton variant="danger">Delete</TextButton>
 
 import React, { forwardRef } from 'react';
+import { buttonVariants, ButtonVariant } from '../buttonVariants';
 
 export interface TextButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: ButtonVariant;
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   loading?: boolean;
@@ -27,13 +28,6 @@ export const TextButton = forwardRef<HTMLButtonElement, TextButtonProps>(functio
 }, ref) {
   const baseClasses = 'inline-flex items-center justify-center rounded font-medium transition-colors';
 
-  const variantClasses = {
-    primary: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 active:bg-gray-400',
-    danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
-    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200',
-  };
-
   const sizeClasses = {
     sm: 'px-3 py-1.5 text-sm',
     md: 'px-4 py-2 text-base',
@@ -42,7 +36,7 @@ export const TextButton = forwardRef<HTMLButtonElement, TextButtonProps>(functio
 
   const classes = [
     baseClasses,
-    variantClasses[variant],
+    buttonVariants[variant],
     sizeClasses[size],
     fullWidth && 'w-full',
     (disabled || loading) && 'opacity-50 cursor-not-allowed',

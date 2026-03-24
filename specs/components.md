@@ -408,6 +408,51 @@ Dependency graph in `src/ui/components/Relationships/`
 
 ---
 
+### ColorSwatch
+**File:** `common/ColorSwatch/ColorSwatch.tsx`
+
+**Purpose:** Color display with checkerboard background for transparency visualization
+
+**Props:**
+- `color: string` - Color value (hex, rgb, rgba, etc.)
+- `onClick?: (e: React.MouseEvent) => void` - Optional click handler
+- `size?: 'sm' | 'md' | 'lg'` (default: `'md'`)
+- `className?: string` - Additional CSS classes
+
+**Sizes:**
+- `sm`: 16px × 16px
+- `md`: 24px × 24px (default)
+- `lg`: 32px × 32px
+
+**Features:**
+- Checkerboard background pattern (shows transparency)
+- Border and rounded corners
+- Optional click handler with cursor pointer
+- Consistent sizing options
+
+**Usage:**
+```tsx
+// Simple color display
+<ColorSwatch color="#FF0000" />
+
+// With transparency (rgba)
+<ColorSwatch color="rgba(255, 0, 0, 0.5)" />
+
+// Clickable with custom size
+<ColorSwatch
+  color={displayColor}
+  size="lg"
+  onClick={(e) => handleShowColorMenu(e)}
+/>
+```
+
+**Used In:**
+- [ValueCell.tsx](src/ui/components/Table/ValueCell.tsx) - Color variable display
+
+**Replaces:** Massive inline Tailwind checkerboard pattern (saves ~200 characters per usage)
+
+---
+
 ## Table Components
 
 ### TableView

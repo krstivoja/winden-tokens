@@ -11,14 +11,14 @@
 //   <IconButton icon={<TrashIcon />} aria-label="Delete" />
 
 // Re-export all button components from their individual files
-export { TextButton } from '../TextButton';
-export type { TextButtonProps } from '../TextButton';
+export { TextButton } from './TextButton';
+export type { TextButtonProps } from './TextButton';
 
-export { IconTextButton } from '../IconTextButton';
-export type { IconTextButtonProps } from '../IconTextButton';
+export { IconTextButton } from './IconTextButton';
+export type { IconTextButtonProps } from './IconTextButton';
 
-export { IconButton } from '../IconButton/IconButton';
-export type { IconButtonProps } from '../IconButton/IconButton';
+export { IconButton } from './IconButton';
+export type { IconButtonProps } from './IconButton';
 
 // Default export for convenience (text-only button is the most common)
-export { TextButton as Button } from '../TextButton';
+export { TextButton as Button } from './TextButton';

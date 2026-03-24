@@ -11,7 +11,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ error, fullWidth = false, mono = false, className = '', ...props }, ref) => {
     const classes = [
-      'form-input bg-bg-input border-border border border-solid p-2 focus:outline-2 focus:outline-primary focus:outline-offset-2 focus:ring-2 focus:ring-primary',
+      'form-input bg-bg-input border-border border border-solid p-2 focus:outline-1 focus:outline-text focus:outline-offset-2 focus:ring-0',
       mono && 'mono',
       fullWidth && 'full-width',
       error && 'has-error',

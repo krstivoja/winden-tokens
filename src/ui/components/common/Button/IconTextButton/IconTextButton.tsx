@@ -6,12 +6,12 @@
 //   <IconTextButton icon={<SaveIcon />} variant="primary">Save</IconTextButton>
 
 import React, { forwardRef } from 'react';
+import { buttonVariants, ButtonVariant } from '../buttonVariants';
 
 export interface IconTextButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon: React.ReactNode;
   iconPosition?: 'left' | 'right';
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: ButtonVariant;
   fullWidth?: boolean;
   loading?: boolean;
   children: React.ReactNode;
@@ -21,7 +21,6 @@ export const IconTextButton = forwardRef<HTMLButtonElement, IconTextButtonProps>
   icon,
   iconPosition = 'left',
   variant = 'ghost',
-  size = 'md',
   fullWidth = false,
   loading = false,
   className = '',
@@ -29,25 +28,15 @@ export const IconTextButton = forwardRef<HTMLButtonElement, IconTextButtonProps>
   children,
   ...props
 }, ref) {
-  const baseClasses = 'inline-flex items-center justify-center gap-2 rounded font-medium transition-colors';
+  const baseClasses = 'inline-flex items-center justify-center gap-1 rounded font-medium transition-colors text-xs';
 
-  const variantClasses = {
-    primary: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 active:bg-gray-400',
-    danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
-    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200',
-  };
-
-  const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  };
+  // Padding - remove padding on icon side
+  const paddingClass = iconPosition === 'left' ? 'pl-1 pr-3 py-1' : 'pl-3 pr-1 py-1';
 
   const classes = [
     baseClasses,
-    variantClasses[variant],
-    sizeClasses[size],
+    buttonVariants[variant],
+    paddingClass,
     fullWidth && 'w-full',
     (disabled || loading) && 'opacity-50 cursor-not-allowed',
     className,

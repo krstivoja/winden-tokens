@@ -2,6 +2,7 @@
 
 import React, { ReactNode } from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
+import { IconTextButton } from '../common/Button';
 
 export interface ColorMenuOption {
   label: string;
@@ -41,15 +42,15 @@ export function ColorMenu({
         style={{ top: position.top, left: position.left }}
       >
         {options.map((option, index) => (
-          <button
+          <IconTextButton
             key={index}
+            icon={option.icon}
             onClick={option.onClick}
             className={option.className}
             style={option.style}
           >
-            {option.icon && <span className="icon">{option.icon}</span>}
-            <span>{option.label}</span>
-          </button>
+            {option.label}
+          </IconTextButton>
         ))}
       </div>
     );
@@ -63,22 +64,22 @@ export function ColorMenu({
       style={{ top: position.top, left: position.left }}
     >
       {onClear && currentColor && (
-        <button onClick={onClear}>
-          <span className="contrast-item-swatch" style={{ background: currentColor }} />
-          <span>Clear</span>
-        </button>
+        <IconTextButton
+          icon={<span className="inline-block w-3 h-3 rounded" style={{ background: currentColor }} />}
+          onClick={onClear}
+        >
+          Clear
+        </IconTextButton>
       )}
       {onPickColor && (
-        <button onClick={onPickColor}>
-          <span className="icon"><ShadesIcon /></span>
-          <span>Pick Color</span>
-        </button>
+        <IconTextButton icon={<ShadesIcon />} onClick={onPickColor}>
+          Pick Color
+        </IconTextButton>
       )}
       {onReferenceColor && (
-        <button onClick={onReferenceColor}>
-          <span className="icon">{TypeIcons.COLOR}</span>
-          <span>Reference Color</span>
-        </button>
+        <IconTextButton icon={TypeIcons.COLOR} onClick={onReferenceColor}>
+          Reference Color
+        </IconTextButton>
       )}
     </div>
   );

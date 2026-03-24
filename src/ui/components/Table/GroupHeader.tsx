@@ -6,7 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
-import { IconButton } from '../common/IconButton/IconButton';
+import { IconButton } from '../common/Button';
 import { IconTextButton } from '../common/Button/Button';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ContrastPicker } from './ContrastPicker';
@@ -121,7 +121,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       className={`group group-row ${isCollapsed ? 'collapsed' : ''}`}
       data-group={groupName}
     >
-      <td>
+      <td className="border border-gray-200 px-3 py-2">
         <div className="group-header flex items-center gap-2">
           <span className={`type-icon ${groupType}`}>
             <TypeIcon type={groupType} />
@@ -139,8 +139,8 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           />
         </div>
       </td>
-      <td>
-        <div className="flex items-center justify-end gap-2 h-full pr-2.5">
+      <td className="border border-gray-200 px-3 py-2">
+        <div className="flex items-center justify-end gap-2 h-full">
           {groupType === 'COLOR' && (
             <IconTextButton
               icon={shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
@@ -162,10 +162,10 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           )}
         </div>
       </td>
-      <td>
+      <td className="border border-gray-200 px-3 py-2">
         <GroupCollectionCell variables={variables} />
       </td>
-      <td className="accessibility-cell">
+      <td className="accessibility-cell border border-gray-200 px-3 py-2">
         {groupType === 'COLOR' && (
           <OptionsDropdown
             label={
@@ -186,7 +186,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           </OptionsDropdown>
         )}
       </td>
-      <td className="w-25">
+      <td className="w-25 border border-gray-200 px-3 py-2">
         <div className="row-actions flex gap-2">
           <IconButton
             icon={<EditIcon />}

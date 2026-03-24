@@ -66,7 +66,7 @@ export function Toolbar({ status }: ToolbarProps) {
   }, []);
 
   return (
-    <div className="toolbar border-b border-border flex justify-between gap-4 p-4">
+    <div className="toolbar flex justify-between gap-4 p-4">
       <div className="flex gap-4">
         <IconTextButton
           id="add-variable-btn"

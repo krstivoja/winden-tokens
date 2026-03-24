@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
+import { IconTextButton } from '../common/Button';
 
 interface ContrastPickerProps {
   contrastColor: string | null;
@@ -19,19 +20,19 @@ export function ContrastPicker({
   return (
     <div className="contrast-picker">
       {contrastColor && (
-        <button onClick={onClear}>
-          <span className="contrast-item-swatch" style={{ background: contrastColor }} />
-          <span>Clear</span>
-        </button>
+        <IconTextButton
+          icon={<span className="inline-block w-3 h-3 rounded" style={{ background: contrastColor }} />}
+          onClick={onClear}
+        >
+          Clear
+        </IconTextButton>
       )}
-      <button onClick={onPickColor}>
-        <span className="icon"><ShadesIcon /></span>
-        <span>Pick Color</span>
-      </button>
-      <button onClick={onReferenceColor}>
-        <span className="icon">{TypeIcons.COLOR}</span>
-        <span>Reference Color</span>
-      </button>
+      <IconTextButton icon={<ShadesIcon />} onClick={onPickColor}>
+        Pick Color
+      </IconTextButton>
+      <IconTextButton icon={TypeIcons.COLOR} onClick={onReferenceColor}>
+        Reference Color
+      </IconTextButton>
     </div>
   );
 }

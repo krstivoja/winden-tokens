@@ -6,6 +6,7 @@
 //   <IconButton icon={<TrashIcon />} aria-label="Delete" variant="danger" />
 
 import React, { forwardRef } from 'react';
+import { buttonVariants } from '../buttonVariants';
 
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon: React.ReactNode;
@@ -24,10 +25,11 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
 }, ref) {
   const baseClasses = 'inline-flex items-center justify-center rounded transition-colors';
 
+  // IconButton-specific variants (lighter colors for icon-only buttons)
   const variantClasses = {
-    default: 'bg-gray-200 text-gray-900 hover:bg-gray-300 active:bg-gray-400',
-    danger: 'bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300',
-    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200',
+    default: buttonVariants.secondary, // Use shared secondary
+    danger: 'bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300', // Lighter danger
+    ghost: buttonVariants.ghost, // Use shared ghost
   };
 
   const sizeClasses = {

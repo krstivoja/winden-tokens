@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { RefreshIcon, ExpandIcon, CollapseIcon, UndoIcon, RedoIcon } from '../Icons';
-import { IconButton } from '../common/IconButton/IconButton';
+import { IconButton } from '../common/Button';
 import { TabButton } from './TabButton';
 import { post } from '../../hooks/usePluginMessages';
 

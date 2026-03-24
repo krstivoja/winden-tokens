@@ -88,7 +88,7 @@ export function TableView() {
   }, [collapseGroups, sortedGroups]);
 
   const nameHeader = (
-    <div className="table-header-content">
+    <div className="table-header-content flex justify-between items-center">
       <span>Name</span>
       {sortedGroups.length > 0 && (
         <div className="table-header-actions">
@@ -121,14 +121,14 @@ export function TableView() {
   if (!filteredVariables.length) {
     return (
       <div className="table-container">
-        <table className="spreadsheet w-full">
+        <table className="spreadsheet w-full border border-gray-200 border-collapse">
           <thead>
             <tr>
-              <th className="col-name text-left font-semibold">{nameHeader}</th>
-              <th className="col-value text-left font-semibold">Value</th>
-              <th className="col-collection text-left font-semibold">Collection</th>
-              <th className="col-accessibility text-left font-semibold">Accessibility</th>
-              <th className="col-actions w-25 text-left font-semibold">Actions</th>
+              <th className="col-name text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">{nameHeader}</th>
+              <th className="col-value text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Value</th>
+              <th className="col-collection text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Collection</th>
+              <th className="col-accessibility text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Accessibility</th>
+              <th className="col-actions w-25 text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -145,14 +145,14 @@ export function TableView() {
 
   return (
     <div className="table-container" ref={tableContainerRef} tabIndex={0}>
-      <table className="spreadsheet w-full">
+      <table className="spreadsheet w-full border border-gray-200 border-collapse">
         <thead>
           <tr>
-            <th className="col-name text-left font-semibold">{nameHeader}</th>
-            <th className="col-value text-left font-semibold">Value</th>
-            <th className="col-collection text-left font-semibold">Collection</th>
-            <th className="col-accessibility text-left font-semibold">Accessibility</th>
-            <th className="col-actions w-25 text-left font-semibold">Actions</th>
+            <th className="col-name text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">{nameHeader}</th>
+            <th className="col-value text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Value</th>
+            <th className="col-collection text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Collection</th>
+            <th className="col-accessibility text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Accessibility</th>
+            <th className="col-actions w-25 text-left font-semibold border border-gray-200 px-3 py-2 bg-gray-50">Actions</th>
           </tr>
         </thead>
         <tbody id="table-body">

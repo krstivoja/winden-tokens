@@ -14,18 +14,29 @@
 }
 
 /* Dark mode theme (system preference) */
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
     :root {
         --color-base: black;
         --color-text: white;
         --color-border: var(--color-gray-700);
         --color-bg-input: var(--color-gray-800);
     }
-}
+} */
 
 body {
     background-color: var(--color-base);
     color: var(--color-text);
     font-size: 12px;
     line-height: 1;
+}
+
+/* Checkerboard background for color transparency visualization */
+.bg-checkerboard {
+    background-image:
+        linear-gradient(45deg, #e5e5e5 25%, transparent 25%),
+        linear-gradient(-45deg, #e5e5e5 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e5e5e5 75%),
+        linear-gradient(-45deg, transparent 75%, #e5e5e5 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
 }
