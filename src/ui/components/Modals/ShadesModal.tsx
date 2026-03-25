@@ -9,6 +9,7 @@ import { RefreshIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
 import { Select } from '../common/Select';
+import { SegmentedControl } from '../common/SegmentedControl';
 import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 import {
   rgbObjToHex,
@@ -41,7 +42,11 @@ type DragTarget =
   | 'rightHandle2'
   | 'startNode'
   | 'endNode';
-const CURVE_PROPERTIES: CurveProperty[] = ['lightness', 'saturation', 'hue'];
+const CURVE_PROPERTY_OPTIONS = [
+  { value: 'lightness' as const, label: 'Lightness' },
+  { value: 'saturation' as const, label: 'Saturation' },
+  { value: 'hue' as const, label: 'Hue' },
+];
 
 const CURVE_EDITOR_HEIGHT = 200;
 const CURVE_PADDING_Y = 12;
@@ -74,10 +79,6 @@ function curveYToValue(y: number, property: CurveProperty, minY: number, maxY: n
   const clampedY = clamp(y, minY, maxY);
   const normalized = (clampedY - minY) / (maxY - minY);
   return clamp(min + normalized * (max - min), min, max);
-}
-
-function getCurvePropertyLabel(property: CurveProperty): string {
-  return property.charAt(0).toUpperCase() + property.slice(1);
 }
 
 function isDefaultCurve(curve: ShadeCurveHandles, count: number, baseIndex: number): boolean {
@@ -868,42 +869,17 @@ export function ShadesModal() {
                 </div>
                 <div className="flex flex-col gap-2 flex-1">
                   <label className="text-xs font-medium text-text">Curve Property</label>
-                  <div className="flex gap-1 bg-base-2 rounded p-1" role="tablist" aria-label="Curve Property">
-                    {CURVE_PROPERTIES.map(property => {
-                      const label = getCurvePropertyLabel(property);
-                      const isActive = activeProperty === property;
-                      const isEdited = curveResetState[property];
-
-                      return (
-                        <button
-                          key={property}
-                          type="button"
-                          className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                            isActive
-                              ? 'bg-primary text-base'
-                              : 'bg-transparent text-text hover:bg-base-3'
-                          }`}
-                          onClick={() => setActiveProperty(property)}
-                          aria-pressed={isActive}
-                        >
-                          {label}
-                          {isEdited && (
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleResetCurve(property);
-                              }}
-                              className="inline-flex items-center justify-center w-4 h-4"
-                              aria-label={`Reset ${label}`}
-                              title={`Reset ${label}`}
-                            >
-                              <RefreshIcon />
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SegmentedControl
+                    options={CURVE_PROPERTY_OPTIONS.map(option => ({
+                      ...option,
+                      badge: curveResetState[option.value] ? <RefreshIcon /> : undefined,
+                      onBadgeClick: curveResetState[option.value] ? () => handleResetCurve(option.value) : undefined,
+                    }))}
+                    value={activeProperty}
+                    onChange={setActiveProperty}
+                    variant="bordered"
+                    fullWidth
+                  />
                 </div>
               </div>
 

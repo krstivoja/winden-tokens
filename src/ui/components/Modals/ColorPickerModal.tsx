@@ -1,295 +1,133 @@
-// Color picker modal component
+// Color picker modal component using React Aria ColorPicker
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useModalContext } from './ModalContext';
-import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
-import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb, rgbToHsl, hslToRgb, RGB } from '../../utils/color';
+import { SegmentedControl } from '../common/SegmentedControl';
 import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import {
+  ColorPicker,
+  ColorArea,
+  ColorSlider,
+  ColorField,
+  SliderTrack,
+  ColorThumb,
+  Label,
+  Input,
+} from 'react-aria-components';
+import { parseColor } from 'react-aria-components';
 
-type ColorMode = 'HEX' | 'RGB' | 'HSL';
+type ColorMode = 'hex' | 'rgb' | 'hsl';
+
+const COLOR_MODE_OPTIONS = [
+  { value: 'hex' as const, label: 'HEX' },
+  { value: 'rgb' as const, label: 'RGB' },
+  { value: 'hsl' as const, label: 'HSL' },
+];
 
 export function ColorPickerModal() {
   const { modals, closeColorPicker } = useModalContext();
   const config = modals.colorPicker;
 
-  const [hue, setHue] = useState(0);
-  const [saturation, setSaturation] = useState(100);
-  const [value, setValue] = useState(100);
-  const [colorMode, setColorMode] = useState<ColorMode>('HEX');
+  const [colorMode, setColorMode] = useState<ColorMode>('hex');
+  const [color, setColor] = useState(() => parseColor('#000000'));
 
-  // Input states
-  const [hexInput, setHexInput] = useState('#000000');
-  const [rgbInputs, setRgbInputs] = useState({ r: 0, g: 0, b: 0 });
-  const [hslInputs, setHslInputs] = useState({ h: 0, s: 0, l: 0 });
-
-  const svPanelRef = useRef<HTMLDivElement>(null);
-  const hueSliderRef = useRef<HTMLDivElement>(null);
-  const isDraggingSV = useRef(false);
-  const isDraggingHue = useRef(false);
-  const overlayPointerDown = useRef(false);
-
-  // Initialize from config
+  // Update color when config changes
   useEffect(() => {
-    if (config) {
-      const rgb = parseColorToRgb(config.initialColor);
-      if (rgb) {
-        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-        setHue(hsv.h);
-        setSaturation(hsv.s);
-        setValue(hsv.v);
-        updateAllInputs(rgb);
-      }
+    if (config?.initialColor) {
+      setColor(parseColor(config.initialColor));
     }
-  }, [config]);
-
-  const updateAllInputs = useCallback((rgb: RGB) => {
-    setHexInput(rgbObjToHex(rgb));
-    setRgbInputs({ r: rgb.r, g: rgb.g, b: rgb.b });
-    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-    setHslInputs(hsl);
-  }, []);
-
-  // Update inputs when HSV changes
-  useEffect(() => {
-    const rgb = hsvToRgb(hue, saturation, value);
-    updateAllInputs(rgb);
-  }, [hue, saturation, value, updateAllInputs]);
-
-  const updateSVFromMouse = useCallback((clientX: number, clientY: number) => {
-    if (!svPanelRef.current) return;
-    const rect = svPanelRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    setSaturation(x * 100);
-    setValue((1 - y) * 100);
-  }, []);
-
-  const updateHueFromMouse = useCallback((clientX: number) => {
-    if (!hueSliderRef.current) return;
-    const rect = hueSliderRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setHue(x * 360);
-  }, []);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingSV.current) {
-        updateSVFromMouse(e.clientX, e.clientY);
-      }
-      if (isDraggingHue.current) {
-        updateHueFromMouse(e.clientX);
-      }
-    };
-
-    const handleMouseUp = () => {
-      isDraggingSV.current = false;
-      isDraggingHue.current = false;
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [updateSVFromMouse, updateHueFromMouse]);
-
-  const updateFromRgb = useCallback((rgb: RGB) => {
-    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-    setHue(hsv.h);
-    setSaturation(hsv.s);
-    setValue(hsv.v);
-  }, []);
-
-  const handleHexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const hex = e.target.value;
-    setHexInput(hex);
-    const rgb = hexToRgbObj(hex);
-    if (rgb && hex.length === 7) {
-      updateFromRgb(rgb);
-    }
-  };
-
-  const handleRgbChange = (channel: 'r' | 'g' | 'b', val: string) => {
-    const num = Math.max(0, Math.min(255, parseInt(val) || 0));
-    const newRgb = { ...rgbInputs, [channel]: num };
-    setRgbInputs(newRgb);
-    updateFromRgb(newRgb);
-  };
-
-  const handleHslChange = (channel: 'h' | 's' | 'l', val: string) => {
-    const max = channel === 'h' ? 360 : 100;
-    const num = Math.max(0, Math.min(max, parseInt(val) || 0));
-    const newHsl = { ...hslInputs, [channel]: num };
-    setHslInputs(newHsl);
-    const rgb = hslToRgb(newHsl.h, newHsl.s, newHsl.l);
-    updateFromRgb(rgb);
-  };
-
-  const handleConfirm = () => {
-    config?.onConfirm(hexInput);
-    closeColorPicker();
-  };
-
-  const handleOverlayMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    overlayPointerDown.current = e.target === e.currentTarget;
-  };
-
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const shouldClose = overlayPointerDown.current && e.target === e.currentTarget;
-    overlayPointerDown.current = false;
-
-    if (shouldClose) {
-      closeColorPicker();
-    }
-  };
+  }, [config?.initialColor]);
 
   if (!config) return null;
 
-  const hueColor = `hsl(${hue}, 100%, 50%)`;
+  const handleConfirm = () => {
+    config?.onConfirm(color.toString('hex'));
+    closeColorPicker();
+  };
 
   return (
     <ModalOverlay isOpen={!!config} onClose={closeColorPicker}>
       <ModalContainer width={300}>
         <ModalHeader title="Pick Color" onClose={closeColorPicker} />
         <ModalBody>
-          <div className="color-picker-container">
-            <div
-              ref={svPanelRef}
-              className="picker-sv-panel"
-              style={{ background: hueColor }}
-              onMouseDown={(e) => {
-                isDraggingSV.current = true;
-                updateSVFromMouse(e.clientX, e.clientY);
-              }}
+          <ColorPicker value={color} onChange={setColor}>
+            {/* Color area for saturation and brightness */}
+            <ColorArea
+              colorSpace="hsb"
+              xChannel="saturation"
+              yChannel="brightness"
+              className="w-full h-[180px] rounded mb-3"
             >
-              <div
-                className="picker-sv-handle"
-                style={{
-                  left: `${saturation}%`,
-                  top: `${100 - value}%`,
-                }}
-              />
-            </div>
-            <div
-              ref={hueSliderRef}
-              className="picker-hue-slider"
-              onMouseDown={(e) => {
-                isDraggingHue.current = true;
-                updateHueFromMouse(e.clientX);
-              }}
-            >
-              <div
-                className="picker-hue-handle"
-                style={{ left: `${(hue / 360) * 100}%` }}
-              />
-            </div>
+              <ColorThumb className="w-5 h-5 border-2 border-white rounded-full shadow-md" />
+            </ColorArea>
 
-            <div className="color-mode-selector">
-              {(['HEX', 'RGB', 'HSL'] as ColorMode[]).map(mode => (
-                <button
-                  key={mode}
-                  className={`color-mode-btn ${colorMode === mode ? 'active' : ''}`}
-                  onClick={() => setColorMode(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+            {/* Hue slider */}
+            <ColorSlider colorSpace="hsb" channel="hue" className="w-full mb-4">
+              <SliderTrack className="h-6 rounded relative">
+                <ColorThumb className="w-5 h-5 border-2 border-white rounded-full shadow-md top-1/2 -translate-y-1/2" />
+              </SliderTrack>
+            </ColorSlider>
 
-            <div className="color-picker-inputs">
-              {colorMode === 'HEX' && (
-                <Input
-                  type="text"
-                  className="form-input hex-input"
-                  placeholder="#000000"
-                  value={hexInput}
-                  onChange={handleHexChange}
-                />
+            {/* Color mode tabs */}
+            <SegmentedControl
+              options={COLOR_MODE_OPTIONS}
+              value={colorMode}
+              onChange={setColorMode}
+              fullWidth
+              className="mb-3"
+            />
+
+            {/* Color input fields based on selected mode */}
+            <div>
+              {colorMode === 'hex' && (
+                <ColorField className="flex flex-col gap-1">
+                  <Label className="text-xs font-medium text-text">HEX</Label>
+                  <Input />
+                </ColorField>
               )}
 
-              {colorMode === 'RGB' && (
-                <div className="color-input-row">
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="255"
-                      value={rgbInputs.r}
-                      onChange={e => handleRgbChange('r', e.target.value)}
-                    />
-                    <label>R</label>
-                  </div>
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="255"
-                      value={rgbInputs.g}
-                      onChange={e => handleRgbChange('g', e.target.value)}
-                    />
-                    <label>G</label>
-                  </div>
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="255"
-                      value={rgbInputs.b}
-                      onChange={e => handleRgbChange('b', e.target.value)}
-                    />
-                    <label>B</label>
-                  </div>
+              {colorMode === 'rgb' && (
+                <div className="grid grid-cols-3 gap-2">
+                  <ColorField channel="red" colorSpace="rgb" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">R</Label>
+                    <Input />
+                  </ColorField>
+                  <ColorField channel="green" colorSpace="rgb" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">G</Label>
+                    <Input />
+                  </ColorField>
+                  <ColorField channel="blue" colorSpace="rgb" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">B</Label>
+                    <Input />
+                  </ColorField>
                 </div>
               )}
 
-              {colorMode === 'HSL' && (
-                <div className="color-input-row">
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="360"
-                      value={hslInputs.h}
-                      onChange={e => handleHslChange('h', e.target.value)}
-                    />
-                    <label>H</label>
-                  </div>
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="100"
-                      value={hslInputs.s}
-                      onChange={e => handleHslChange('s', e.target.value)}
-                    />
-                    <label>S</label>
-                  </div>
-                  <div className="color-input-group">
-                    <Input
-                      type="number"
-                      className="form-input"
-                      min="0"
-                      max="100"
-                      value={hslInputs.l}
-                      onChange={e => handleHslChange('l', e.target.value)}
-                    />
-                    <label>L</label>
-                  </div>
+              {colorMode === 'hsl' && (
+                <div className="grid grid-cols-3 gap-2">
+                  <ColorField channel="hue" colorSpace="hsl" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">H</Label>
+                    <Input />
+                  </ColorField>
+                  <ColorField channel="saturation" colorSpace="hsl" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">S</Label>
+                    <Input />
+                  </ColorField>
+                  <ColorField channel="lightness" colorSpace="hsl" className="flex flex-col gap-1">
+                    <Label className="text-xs font-medium text-text">L</Label>
+                    <Input />
+                  </ColorField>
                 </div>
               )}
             </div>
-          </div>
+          </ColorPicker>
         </ModalBody>
         <ModalFooter>
           <TextButton onClick={closeColorPicker}>Cancel</TextButton>
-          <TextButton variant="primary" onClick={handleConfirm}>Apply</TextButton>
+          <TextButton variant="primary" onClick={handleConfirm}>
+            Apply
+          </TextButton>
         </ModalFooter>
       </ModalContainer>
     </ModalOverlay>
