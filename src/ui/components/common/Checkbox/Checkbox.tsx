@@ -4,17 +4,18 @@ import React, { forwardRef } from 'react';
 
 export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label?: React.ReactNode;
+  description?: React.ReactNode;
   error?: string;
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ label, error, className = '', id, ...props }, ref) => {
+  ({ label, description, error, className = '', id, ...props }, ref) => {
     const checkboxId = id || `checkbox-${Math.random().toString(36).substr(2, 9)}`;
 
     if (label) {
       return (
-        <div className={`checkbox-wrapper ${className}`}>
-          <label className="checkbox-label">
+        <div className={`block ${className}`}>
+          <label className="flex items-start gap-3 cursor-pointer">
             <input
               ref={ref}
               type="checkbox"
@@ -24,10 +25,15 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
               aria-describedby={error ? `${checkboxId}-error` : undefined}
               {...props}
             />
-            <span className="checkbox-label-text">{label}</span>
+            <div className="flex-1">
+              <span className="block text-sm font-medium text-text leading-tight">{label}</span>
+              {description && (
+                <div className="block text-sm text-text opacity-60 mt-0.5 leading-tight">{description}</div>
+              )}
+            </div>
           </label>
           {error && (
-            <span id={`${checkboxId}-error`} className="checkbox-error" role="alert">
+            <span id={`${checkboxId}-error`} className="text-xs text-danger mt-1 ml-8" role="alert">
               {error}
             </span>
           )}
