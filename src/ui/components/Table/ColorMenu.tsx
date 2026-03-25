@@ -2,7 +2,6 @@
 
 import React, { ReactNode } from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
-import { IconTextButton } from '../common/Button';
 
 export interface ColorMenuOption {
   label: string;
@@ -30,56 +29,53 @@ export function ColorMenu({
   onReferenceColor,
   onClear,
   currentColor,
-  className = 'color-value-menu',
+  className = 'dropdown-menu',
   id,
 }: ColorMenuProps) {
-  // If custom options provided, use those
-  if (options) {
-    return (
-      <div
-        id={id}
-        className={`${className} open`}
-        style={{ top: position.top, left: position.left }}
-      >
-        {options.map((option, index) => (
-          <IconTextButton
-            key={index}
-            icon={option.icon}
-            onClick={option.onClick}
-            className={option.className}
-            style={option.style}
-          >
-            {option.label}
-          </IconTextButton>
-        ))}
-      </div>
-    );
-  }
-
-  // Default: standard Pick/Reference pattern
   return (
     <div
       id={id}
-      className={`${className} open`}
+      className={`${className} absolute z-50`}
       style={{ top: position.top, left: position.left }}
     >
-      {onClear && currentColor && (
-        <IconTextButton
-          icon={<span className="inline-block w-3 h-3 rounded" style={{ background: currentColor }} />}
-          onClick={onClear}
-        >
-          Clear
-        </IconTextButton>
-      )}
-      {onPickColor && (
-        <IconTextButton icon={<ShadesIcon />} onClick={onPickColor}>
-          Pick Color
-        </IconTextButton>
-      )}
-      {onReferenceColor && (
-        <IconTextButton icon={TypeIcons.COLOR} onClick={onReferenceColor}>
-          Reference Color
-        </IconTextButton>
+      {options ? (
+        options.map((option, index) => (
+          <button
+            key={index}
+            type="button"
+            className="dropdown-item"
+            onClick={option.onClick}
+            style={option.style}
+          >
+            {option.icon && <span className="dropdown-item-icon">{option.icon}</span>}
+            <span className="dropdown-item-text">{option.label}</span>
+          </button>
+        ))
+      ) : (
+        <>
+          {onClear && currentColor && (
+            <button type="button" className="dropdown-item" onClick={onClear}>
+              <span className="dropdown-item-icon">
+                <span className="inline-block w-3 h-3 rounded" style={{ background: currentColor }} />
+              </span>
+              <span className="dropdown-item-text">Clear</span>
+            </button>
+          )}
+          {onPickColor && (
+            <button type="button" className="dropdown-item" onClick={onPickColor}>
+              <span className="dropdown-item-icon">
+                <ShadesIcon />
+              </span>
+              <span className="dropdown-item-text">Pick Color</span>
+            </button>
+          )}
+          {onReferenceColor && (
+            <button type="button" className="dropdown-item" onClick={onReferenceColor}>
+              <span className="dropdown-item-icon">{TypeIcons.COLOR}</span>
+              <span className="dropdown-item-text">Reference Color</span>
+            </button>
+          )}
+        </>
       )}
     </div>
   );

@@ -3,20 +3,22 @@
 import React, { useState, useCallback } from 'react';
 import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
 import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
+import { hexToRgb } from '../../utils/color';
 import { TextButton } from '../common/Button';
-import { ColorSwatch } from '../common/ColorSwatch';
 import { InputTable } from './InputTable';
+import { ColorOptionsDropdown } from './ColorOptionsDropdown';
 
 interface ValueCellProps {
   variable: VariableData;
-  onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
   modifierButton?: React.ReactNode;
 }
 
-export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCellProps) {
+export function ValueCell({ variable, modifierButton }: ValueCellProps) {
   const { collections, variables, selectedModeId } = useAppContext();
+  const { openColorPicker, openColorReference } = useModalContext();
 
   const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
 
@@ -67,11 +69,33 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
       }
     }
 
+    const modeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
+
+    const handlePickColor = () => {
+      openColorPicker({
+        initialColor: currentValue,
+        onConfirm: (hex) => {
+          post({ type: 'update-variable-value', id: variable.id, value: hexToRgb(hex), modeId });
+        },
+      });
+    };
+
+    const handleReferenceColor = () => {
+      openColorReference({
+        currentVariableId: variable.id,
+        currentValue,
+        onSelect: (refName) => {
+          post({ type: 'update-variable-value', id: variable.id, value: `{${refName}}`, modeId });
+        },
+      });
+    };
+
     return (
-      <div className="flex items-center gap-2 h-full pl-2.5">
-        <ColorSwatch
+      <div className="flex items-center gap-2 h-full">
+        <ColorOptionsDropdown
           color={displayColor}
-          onClick={(e) => onShowColorMenu(e, variable.id, currentValue)}
+          onPickColor={handlePickColor}
+          onReferenceColor={handleReferenceColor}
         />
         {valueInput}
         {modifierButton}
@@ -82,17 +106,17 @@ export function ValueCell({ variable, onShowColorMenu, modifierButton }: ValueCe
   if (variable.resolvedType === 'BOOLEAN') {
     return (
       <div className="px-2.5 h-full flex items-center gap-2">
-        <div className="flex border border-gray-200 rounded overflow-hidden">
+        <div className="flex border border-border rounded overflow-hidden">
           <TextButton
             size="sm"
-            className={`rounded-none border-r border-gray-200 ${currentValue === 'true' ? 'bg-blue-500 text-white' : 'bg-transparent'}`}
+            className={`rounded-none border-r border-border ${currentValue === 'true' ? 'bg-primary text-base' : 'bg-transparent'}`}
             onClick={() => handleValueChange('true')}
           >
             True
           </TextButton>
           <TextButton
             size="sm"
-            className={`rounded-none ${currentValue === 'false' ? 'bg-blue-500 text-white' : 'bg-transparent'}`}
+            className={`rounded-none ${currentValue === 'false' ? 'bg-primary text-base' : 'bg-transparent'}`}
             onClick={() => handleValueChange('false')}
           >
             False

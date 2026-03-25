@@ -166,7 +166,7 @@ export function Button({ variant = 'primary', children }) {
       className={`
         px-3 py-1.5 rounded border transition
         ${variant === 'primary' ? 'bg-primary text-white hover:bg-blue-600' : ''}
-        ${variant === 'secondary' ? 'bg-gray-100 text-text hover:bg-gray-200' : ''}
+        ${variant === 'secondary' ? 'bg-base-2 text-text hover:bg-base-3' : ''}
       `}
     >
       {children}
@@ -211,7 +211,7 @@ For values from Figma (colors, positions), use **inline styles**:
 
 ```tsx
 <div className="
-  bg-white         /* Light mode */
+  bg-base         /* Light mode */
   dark:bg-gray-900 /* Dark mode */
   text-black
   dark:text-white
@@ -394,7 +394,7 @@ We follow the system's dark mode preference:
 For specific overrides:
 
 ```tsx
-<div className="bg-white dark:bg-gray-900">
+<div className="bg-base dark:bg-gray-900">
   {/* Force specific colors per mode */}
 </div>
 ```
@@ -542,7 +542,7 @@ Current CSS bundle: ~15KB gzipped
 ```tsx
 <tr className="
   border-b border-border
-  hover:bg-gray-50
+  hover:bg-base-2
   dark:hover:bg-gray-800
 ">
   <td className="px-2 py-1">Cell</td>
@@ -564,7 +564,7 @@ Current CSS bundle: ~15KB gzipped
 
 1. **Check system preference:** OS set to dark mode?
 2. **Check token defined:** Does `@media (prefers-color-scheme: dark)` override exist?
-3. **Use `dark:` classes:** `<div className="bg-white dark:bg-gray-900">`
+3. **Use `dark:` classes:** `<div className="bg-base dark:bg-gray-900">`
 
 ### Dynamic Value Not Applying
 

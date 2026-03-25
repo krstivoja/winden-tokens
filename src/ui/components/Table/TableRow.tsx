@@ -21,7 +21,6 @@ interface TableRowProps {
   isHidden?: boolean;
   groupName?: string;
   isLastInGroup?: boolean;
-  onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
   contrastColor: string | null;
   colorVariables: VariableData[];
 }
@@ -32,7 +31,6 @@ export const TableRow = memo(function TableRow({
   isHidden = false,
   groupName = '',
   isLastInGroup = false,
-  onShowColorMenu,
   contrastColor,
   colorVariables,
 }: TableRowProps) {
@@ -169,7 +167,6 @@ export const TableRow = memo(function TableRow({
       <td className="border border-border px-3 py-2">
         <ValueCell
           variable={variable}
-          onShowColorMenu={onShowColorMenu}
           modifierButton={modifierButton}
         />
       </td>

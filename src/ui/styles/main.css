@@ -5,23 +5,33 @@
 
     --color-primary: var(--color-blue-500);
     --color-secondary: var(--color-purple-500);
+    --color-danger: var(--color-red-500);
 
-    --color-base: white;
     --color-text: black;
+    --color-base: white;
+    --color-base-2: var(--color-zinc-100);
+    --color-base-3: var(--color-zinc-200);
 
-    --color-border: var(--color-gray-200);
-    --color-bg-input: var(--color-gray-100);
+    --color-border: var(--color-zinc-200);
+    --color-bg-input: var(--color-zinc-100);
 }
 
 /* Dark mode theme (system preference) */
-/* @media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
     :root {
-        --color-base: black;
-        --color-text: white;
-        --color-border: var(--color-gray-700);
-        --color-bg-input: var(--color-gray-800);
+        --color-primary: var(--color-blue-600);
+        --color-secondary: var(--color-purple-600);
+        --color-danger: var(--color-red-600);
+
+        --color-text: var(--color-zinc-100);
+        --color-base: var(--color-zinc-950);
+        --color-base-2: var(--color-zinc-900);
+        --color-base-3: var(--color-zinc-800);
+
+        --color-border: var(--color-zinc-700);
+        --color-bg-input: var(--color-zinc-900);
     }
-} */
+}
 
 body {
     background-color: var(--color-base);
@@ -39,4 +49,29 @@ body {
         linear-gradient(-45deg, transparent 75%, #e5e5e5 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+}
+
+/* Dropdown Menu Styles */
+.dropdown-menu {
+    @apply bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px];
+}
+
+.dropdown-item {
+    @apply w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left;
+}
+
+.dropdown-item:disabled {
+    @apply opacity-50 cursor-not-allowed hover:bg-transparent;
+}
+
+.dropdown-item-icon {
+    @apply flex-shrink-0 flex items-center justify-center w-4 h-4;
+}
+
+.dropdown-item-text {
+    @apply flex-1;
+}
+
+.dropdown-divider {
+    @apply h-px bg-border my-1;
 }

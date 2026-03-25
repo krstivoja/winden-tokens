@@ -52,7 +52,7 @@ export function InputModal() {
       }
     >
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium text-gray-700">{config.label}</label>
+        <label className="text-xs font-medium text-text">{config.label}</label>
         <Input
           ref={inputRef}
           type="text"

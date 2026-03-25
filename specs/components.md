@@ -321,7 +321,7 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Supports:** forwardRef
 
-**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-base-2 active:bg-base-3`
 
 **Usage:**
 ```tsx
@@ -361,7 +361,7 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Supports:** forwardRef
 
-**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-base-2 active:bg-base-3`
 
 **Usage:**
 ```tsx
@@ -392,7 +392,7 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Supports:** forwardRef
 
-**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200`
+**Default Style:** Ghost variant - `bg-transparent text-gray-700 hover:bg-base-2 active:bg-base-3`
 
 **Usage:**
 ```tsx

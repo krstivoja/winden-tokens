@@ -686,8 +686,8 @@ export function ShadesModal() {
           y={y - handleRadius}
           width={handleRadius * 2}
           height={handleRadius * 2}
-          fill="var(--accent)"
-          stroke="var(--bg)"
+          fill="var(--color-text)"
+          stroke="var(--color-base)"
           strokeWidth={2}
           rx={2}
           style={{ cursor: 'move', pointerEvents: 'none' }}
@@ -711,7 +711,7 @@ export function ShadesModal() {
             y1={0}
             x2={i * swatchWidth}
             y2={CURVE_EDITOR_HEIGHT}
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1}
             opacity={0.35}
           />
@@ -721,7 +721,7 @@ export function ShadesModal() {
           <path
             d={basePathD}
             fill="none"
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1.5}
             strokeDasharray="4,4"
             opacity={0.8}
@@ -732,7 +732,7 @@ export function ShadesModal() {
             y1={zeroY}
             x2={containerWidth}
             y2={zeroY}
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1}
             strokeDasharray="4,4"
             opacity={0.3}
@@ -740,7 +740,7 @@ export function ShadesModal() {
         )}
 
         {/* Curve path */}
-        <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        <path d={pathD} fill="none" stroke="var(--color-text)" strokeWidth={2} />
 
         {/* Handle lines */}
         <line
@@ -748,7 +748,7 @@ export function ShadesModal() {
           y1={startNode.y}
           x2={leftHandle1X}
           y2={leftHandle1Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -757,7 +757,7 @@ export function ShadesModal() {
           y1={baseNode.y}
           x2={leftHandle2X}
           y2={leftHandle2Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -766,7 +766,7 @@ export function ShadesModal() {
           y1={baseNode.y}
           x2={rightHandle1X}
           y2={rightHandle1Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -775,7 +775,7 @@ export function ShadesModal() {
           y1={endNode.y}
           x2={rightHandle2X}
           y2={rightHandle2Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -789,7 +789,7 @@ export function ShadesModal() {
         {nodePositions.map((np, i) => {
           const isFirstOrLast = i === 0 || i === nodePositions.length - 1;
           const isBaseNode = i === normalizedBaseIndex;
-          const fillColor = shadeColors[i] || 'var(--bg)';
+          const fillColor = shadeColors[i] || 'var(--color-base)';
           return (
             <circle
               key={`node-${i}`}
@@ -797,7 +797,7 @@ export function ShadesModal() {
               cy={np.y}
               r={isBaseNode ? baseNodeRadius : nodeRadius}
               fill={fillColor}
-              stroke={isBaseNode ? 'var(--text)' : 'var(--accent)'}
+              stroke="var(--color-text)"
               strokeWidth={isBaseNode ? 3 : 2}
               className={isBaseNode ? 'curve-node curve-node-base' : 'curve-node'}
               style={isFirstOrLast ? { cursor: 'ns-resize' } : undefined}
@@ -817,10 +817,9 @@ export function ShadesModal() {
         <ModalHeader title="Generate Color Shades" onClose={closeShadesModal} />
         <ModalBody>
           {!preSelectedGroup && (
-            <div className="form-group">
-              <label>Select Color Group</label>
+            <div className="flex flex-col gap-2 mb-4">
+              <label className="text-xs font-medium text-text">Select Color Group</label>
               <Select
-                className="form-input"
                 value={sourceColorId}
                 onChange={handleSourceChange}
               >
@@ -833,98 +832,110 @@ export function ShadesModal() {
           )}
 
           {groupName && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Base Color</label>
-                  <div className="color-input-wrapper">
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-4 items-end">
+                <div className="flex flex-col gap-2 flex-1">
+                  <label className="text-xs font-medium text-text">Base Color</label>
+                  <div className="flex gap-2 items-center">
                     <div
-                      className="color-input-preview"
-                      style={{ cursor: 'pointer' }}
+                      className="w-8 h-8 rounded border border-border bg-checkerboard cursor-pointer relative overflow-hidden flex-shrink-0"
                       onClick={() => openColorPicker({
                         initialColor: baseColor,
                         onConfirm: setBaseColor,
                       })}
                     >
-                      <div className="color-fill" style={{ background: baseColor }} />
+                      <div className="absolute inset-0" style={{ background: baseColor }} />
                     </div>
                     <Input
                       type="text"
-                      className="form-input mono"
+                      className="font-mono text-xs"
                       value={baseColor}
                       onChange={e => setBaseColor(e.target.value)}
                       placeholder="#000000"
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label>Shades</label>
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-text">Shades</label>
                   <Input
                     type="number"
-                    className="form-input"
+                    className="w-16"
                     value={shadeCount}
                     onChange={handleShadeCountChange}
                     min={2}
                     max={20}
-                    style={{ width: 60 }}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Curve Property</label>
-                  <div className="curve-property-toggle" role="tablist" aria-label="Curve Property">
+                <div className="flex flex-col gap-2 flex-1">
+                  <label className="text-xs font-medium text-text">Curve Property</label>
+                  <div className="flex gap-1 bg-base-2 rounded p-1" role="tablist" aria-label="Curve Property">
                     {CURVE_PROPERTIES.map(property => {
                       const label = getCurvePropertyLabel(property);
                       const isActive = activeProperty === property;
                       const isEdited = curveResetState[property];
 
                       return (
-                        <div
+                        <button
                           key={property}
-                          className={`curve-property-item ${isActive ? 'active' : ''} ${isEdited ? 'has-reset' : ''}`}
+                          type="button"
+                          className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                            isActive
+                              ? 'bg-primary text-base'
+                              : 'bg-transparent text-text hover:bg-base-3'
+                          }`}
+                          onClick={() => setActiveProperty(property)}
+                          aria-pressed={isActive}
                         >
-                          <button
-                            type="button"
-                            className={`curve-property-btn ${isActive ? 'active' : ''}`}
-                            onClick={() => setActiveProperty(property)}
-                            aria-pressed={isActive}
-                          >
-                            {label}
-                          </button>
+                          {label}
                           {isEdited && (
-                            <button
-                              type="button"
-                              className="curve-property-reset"
-                              onClick={() => handleResetCurve(property)}
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResetCurve(property);
+                              }}
+                              className="inline-flex items-center justify-center w-4 h-4"
                               aria-label={`Reset ${label}`}
                               title={`Reset ${label}`}
                             >
                               <RefreshIcon />
-                            </button>
+                            </span>
                           )}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
               </div>
 
-	              {/* Curve Editor + Preview Combined */}
-	              <div className="form-group">
-		                <div className="curve-preview-combined">
-	                  <div
-	                    ref={containerRef}
-                    className="curve-editor-container"
+              {/* Curve Editor + Preview Combined */}
+              <div className="flex flex-col gap-3">
+                <div className="bg-base rounded-lg border border-border">
+                  <div
+                    ref={containerRef}
+                    className="w-full overflow-visible"
+                    style={{ height: '200px' }}
                   >
                     {renderCurve()}
                   </div>
-                  <div className="shades-preview">
+                  <div className="flex h-8 relative border border-border rounded overflow-hidden mt-2">
                     {shadeColors.map((color, i) => (
                       <div
                         key={i}
-                        className={`shades-preview-item ${i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? 'is-base-shade' : ''}`.trim()}
-                        style={{ background: color }}
+                        className="flex-1 relative"
+                        style={{
+                          background: color
+                        }}
                         title={i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? `${color} (Base)` : color}
-                      />
+                      >
+                        {i === normalizeShadeBaseIndex(baseIndex, shadeCount) && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full border-2 border-text" style={{ backgroundColor: 'var(--color-base)' }}></div>
+                          </div>
+                        )}
+                        {i < shadeColors.length - 1 && (
+                          <div className="absolute right-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'var(--color-text)', opacity: 0.2 }}></div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>

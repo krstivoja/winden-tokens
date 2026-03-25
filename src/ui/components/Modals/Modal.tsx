@@ -100,7 +100,7 @@ export function ModalContainer({ width = 400, children, className = '' }: ModalC
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-xl flex flex-col ${className}`}
+      className={`bg-base rounded-lg shadow-xl flex flex-col ${className}`}
       style={{ width: widthStyle, maxHeight: '90vh' }}
       role="document"
       aria-labelledby="modal-title"
@@ -118,11 +118,11 @@ interface ModalHeaderProps {
 
 export function ModalHeader({ title, onClose }: ModalHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-      <h3 id="modal-title" className="text-sm font-semibold text-gray-900">{title}</h3>
+    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <h3 id="modal-title" className="text-sm font-semibold text-text">{title}</h3>
       <button
         type="button"
-        className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+        className="w-6 h-6 flex items-center justify-center text-text opacity-40 hover:opacity-60 transition-opacity"
         onClick={onClose}
         aria-label="Close modal"
       >
@@ -154,7 +154,7 @@ interface ModalFooterProps {
 
 export function ModalFooter({ children, className = '' }: ModalFooterProps) {
   return (
-    <div className={`flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 ${className}`}>
+    <div className={`flex items-center justify-end gap-2 px-6 py-4 border-t border-border ${className}`}>
       {children}
     </div>
   );

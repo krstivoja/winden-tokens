@@ -94,7 +94,7 @@ export function BulkEditModal() {
     <ModalOverlay isOpen={!!config} onClose={closeBulkEdit}>
       <ModalContainer width={480}>
         <ModalHeader
-          title={<>Edit as Text: <span className="font-normal text-gray-600">{config.groupName}</span></>}
+          title={<>Edit as Text: <span className="font-normal text-text opacity-60">{config.groupName}</span></>}
           onClose={closeBulkEdit}
         />
         <ModalBody>

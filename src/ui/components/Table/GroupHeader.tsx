@@ -121,14 +121,14 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       className={`group group-row ${isCollapsed ? 'collapsed' : ''}`}
       data-group={groupName}
     >
-      <td className="border border-gray-200 px-3 py-2">
+      <td className="border border-border px-3 py-2">
         <div className="group-header flex items-center gap-2">
           <span className={`type-icon ${groupType}`}>
             <TypeIcon type={groupType} />
           </span>
           <span onClick={handleToggle} className="flex-1 cursor-pointer">
             {groupName}
-            <span className="text-gray-500 font-normal text-[10px]">
+            <span className="text-text opacity-50 font-normal text-[10px]">
               {' '}({variables.length})
             </span>
           </span>
@@ -139,7 +139,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           />
         </div>
       </td>
-      <td className="border border-gray-200 px-3 py-2">
+      <td className="border border-border px-3 py-2">
         <div className="flex items-center justify-end gap-2 h-full">
           {groupType === 'COLOR' && (
             <IconTextButton
@@ -162,10 +162,10 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           )}
         </div>
       </td>
-      <td className="border border-gray-200 px-3 py-2">
+      <td className="border border-border px-3 py-2">
         <GroupCollectionCell variables={variables} />
       </td>
-      <td className="accessibility-cell border border-gray-200 px-3 py-2">
+      <td className="accessibility-cell border border-border px-3 py-2">
         {groupType === 'COLOR' && (
           <OptionsDropdown
             label={
@@ -186,7 +186,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
           </OptionsDropdown>
         )}
       </td>
-      <td className="w-25 border border-gray-200 px-3 py-2">
+      <td className="w-25 border border-border px-3 py-2">
         <div className="row-actions flex gap-2">
           <IconButton
             icon={<EditIcon />}

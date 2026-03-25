@@ -21,7 +21,7 @@ export function ColorSwatch({ color, onClick, size = 'md', className = '' }: Col
 
   return (
     <div
-      className={`bg-checkerboard ${sizeClasses[size]} rounded border border-gray-200 ${onClick ? 'cursor-pointer' : ''} relative overflow-hidden ${className}`}
+      className={`bg-checkerboard ${sizeClasses[size]} rounded border border-border ${onClick ? 'cursor-pointer' : ''} relative overflow-hidden ${className}`}
       onClick={onClick}
     >
       <div

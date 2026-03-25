@@ -63,7 +63,7 @@ export function OptionsDropdown({ label, children, className = '' }: OptionsDrop
       </IconTextButton>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded shadow-lg z-50 min-w-[200px] p-2">
+        <div className="absolute top-full left-0 mt-1 bg-base border border-border rounded shadow-lg z-50 min-w-[200px] p-2">
           {children}
         </div>
       )}

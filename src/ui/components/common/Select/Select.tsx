@@ -31,7 +31,7 @@ const SelectRoot = forwardRef<HTMLSelectElement, SelectProps>(
     const selectId = id || `select-${Math.random().toString(36).substr(2, 9)}`;
 
     const classes = [
-      'form-select',
+      'form-select rounded',
       fullWidth && 'full-width',
       error && 'has-error',
       className,
