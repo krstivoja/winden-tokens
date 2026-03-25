@@ -1,27 +1,30 @@
-import type { Meta, StoryObj } from '../components/Modals/ColorReferenceModal';
+// Color reference modal component stories
+
+import type { Meta, StoryObj } from '@storybook/react';
 import { ColorReferenceModal } from '../components/Modals/ColorReferenceModal';
+import { ModalProvider } from '../components/Modals/ModalContext';
+import { AppProvider } from '../context/AppContext';
 
 const meta = {
   title: 'Modals/ColorReferenceModal',
   component: ColorReferenceModal,
   tags: ['autodocs'],
-  argTypes: {
-    // Add custom controls here
-  },
+  decorators: [
+    (Story) => (
+      <AppProvider>
+        <ModalProvider>
+          <Story />
+        </ModalProvider>
+      </AppProvider>
+    ),
+  ],
 } satisfies Meta<typeof ColorReferenceModal>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  args: {
-
+  render: () => {
+    return <ColorReferenceModal />;
   },
 };
-
-// TODO: Add more story variants
-// export const Variant1: Story = {
-//   args: {
-//     ...Default.args,
-//   },
-// };

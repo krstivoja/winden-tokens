@@ -3,9 +3,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { PlusIcon, SearchIcon } from '../Icons';
+import { PlusIcon } from '../Icons';
 import { IconTextButton, IconButton } from '../common/Button';
-import { Input } from '../common/Input';
+import { Search } from '../common/Search';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
 import { VariableTypeFilters } from './VariableTypeFilters';
@@ -38,17 +38,6 @@ export function Toolbar({ status }: ToolbarProps) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setAddMenuPosition({ top: rect.bottom + 4, left: rect.left });
     setShowAddMenu(true);
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      setSearchQuery('');
-      (e.target as HTMLInputElement).value = '';
-    }
   };
 
   const { shown, total } = getFilteredCount();
@@ -95,21 +84,13 @@ export function Toolbar({ status }: ToolbarProps) {
       </div>
 
 
-      <div className="search-wrapper flex items-center gap-2 relative">
-        <span className="absolute left-0"><SearchIcon /></span>
-        <Input
-          type="text"
-          id="search-input"
-          className="search-input  pl-6"
-          placeholder="Search..."
-          autoComplete="off"
-          onChange={handleSearchChange}
-          onKeyDown={handleSearchKeyDown}
-        />
-        <span id="search-count" className="search-count absolute right-2">
-          {searchQuery ? `${shown}/${total}` : ''}
-        </span>
-      </div>
+      <Search
+        id="search-input"
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search..."
+        count={searchQuery ? `${shown}/${total}` : ''}
+      />
 
       {status.message && (
         <span

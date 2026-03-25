@@ -78,11 +78,9 @@ function DropdownRoot({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, close]);
 
-  const dropdownClasses = ['dropdown', className].filter(Boolean).join(' ');
-
   return (
     <DropdownContext.Provider value={{ isOpen, toggle, close, position, align }}>
-      <div className={dropdownClasses} ref={ref}>
+      <div className={`relative ${className}`} ref={ref}>
         {children}
       </div>
     </DropdownContext.Provider>
@@ -98,7 +96,6 @@ interface DropdownTriggerProps {
 
 function DropdownTrigger({ children, className = '', asChild = false }: DropdownTriggerProps) {
   const { toggle } = useDropdownContext();
-  const triggerClasses = ['dropdown-trigger', className].filter(Boolean).join(' ');
 
   // If asChild is true, clone the child and add onClick handler
   if (asChild && React.isValidElement(children)) {
@@ -111,7 +108,7 @@ function DropdownTrigger({ children, className = '', asChild = false }: Dropdown
   }
 
   return (
-    <div className={triggerClasses} onClick={toggle}>
+    <div className={className} onClick={toggle}>
       {children}
     </div>
   );
@@ -128,17 +125,18 @@ function DropdownMenu({ children, className = '' }: DropdownMenuProps) {
 
   if (!isOpen) return null;
 
-  const menuClasses = [
-    'dropdown-menu',
-    'open',
-    `dropdown-${position}`,
-    `dropdown-align-${align}`,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const positionClasses = {
+    'bottom-left': 'top-full left-0 mt-1',
+    'bottom-right': 'top-full right-0 mt-1',
+    'top-left': 'bottom-full left-0 mb-1',
+    'top-right': 'bottom-full right-0 mb-1',
+  };
 
-  return <div className={menuClasses}>{children}</div>;
+  return (
+    <div className={`absolute ${positionClasses[position]} z-50 bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px] ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 // Dropdown Item component
@@ -160,19 +158,22 @@ function DropdownItem({ onClick, disabled = false, icon, children, className = '
     }
   };
 
-  const classes = ['dropdown-item', disabled && 'disabled', className].filter(Boolean).join(' ');
-
   return (
-    <button type="button" className={classes} onClick={handleClick} disabled={disabled}>
-      {icon && <span className="dropdown-item-icon">{icon}</span>}
-      <span className="dropdown-item-text">{children}</span>
+    <button
+      type="button"
+      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left ${disabled ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''} ${className}`}
+      onClick={handleClick}
+      disabled={disabled}
+    >
+      {icon && <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">{icon}</span>}
+      <span className="flex-1">{children}</span>
     </button>
   );
 }
 
 // Dropdown Divider component
 function DropdownDivider() {
-  return <div className="dropdown-divider" />;
+  return <div className="h-px bg-border my-1" />;
 }
 
 // Compound component with namespace exports

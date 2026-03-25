@@ -1,10 +1,12 @@
 // Color reference modal component
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
-import { Input } from '../common/Input';
+import { Search } from '../common/Search';
 import { TextButton } from '../common/Button';
+import { GroupedList, GroupedListSection } from '../common/GroupedList';
+import { ColorSwatch } from '../common/ColorSwatch';
 import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 export function ColorReferenceModal() {
@@ -12,12 +14,10 @@ export function ColorReferenceModal() {
   const { variables } = useAppContext();
   const config = modals.colorReference;
   const [searchQuery, setSearchQuery] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (config) {
       setSearchQuery('');
-      setTimeout(() => searchRef.current?.focus(), 50);
     }
   }, [config]);
 
@@ -72,95 +72,89 @@ export function ColorReferenceModal() {
     closeColorReference();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const firstMatch = [...ungrouped, ...sortedGroups.flatMap(g => grouped[g])]
-        .find(v => matchesSearch(v.name));
-      if (firstMatch) {
-        handleSelect(firstMatch);
-      }
-    } else if (e.key === 'Escape') {
-      closeColorReference();
+  const handleEnter = () => {
+    const firstMatch = [...ungrouped, ...sortedGroups.flatMap(g => grouped[g])]
+      .find(v => matchesSearch(v.name));
+    if (firstMatch) {
+      handleSelect(firstMatch);
     }
   };
 
-  if (!config) return null;
+  const sections = useMemo((): GroupedListSection[] => {
+    const currentRefMatch = config?.currentValue?.match(/^\{(.+)\}$/);
+    const currentRefName = currentRefMatch?.[1];
 
-  const currentRefMatch = config.currentValue?.match(/^\{(.+)\}$/);
-  const currentRefName = currentRefMatch?.[1];
+    const result: GroupedListSection[] = [];
+
+    // Add ungrouped variables section
+    const ungroupedFiltered = ungrouped.filter(v => matchesSearch(v.name));
+    if (ungroupedFiltered.length > 0 && sortedGroups.length > 0) {
+      result.push({
+        title: 'Variables',
+        items: ungroupedFiltered.map(v => ({
+          id: v.id,
+          label: v.name,
+          icon: <ColorSwatch color={getDisplayColor(v)} />,
+          isActive: v.name === currentRefName,
+          _data: v,
+        })),
+      });
+    }
+
+    // Add grouped sections
+    sortedGroups.forEach(groupName => {
+      const groupVars = grouped[groupName].filter(v => matchesSearch(v.name));
+      if (groupVars.length > 0) {
+        result.push({
+          title: groupName,
+          items: groupVars.map(v => ({
+            id: v.id,
+            label: v.name.split('/').pop() || v.name,
+            icon: <ColorSwatch color={getDisplayColor(v)} />,
+            isActive: v.name === currentRefName,
+            _data: v,
+          })),
+        });
+      }
+    });
+
+    // If no groups, add ungrouped as single section without title
+    if (result.length === 0 && ungroupedFiltered.length > 0) {
+      result.push({
+        title: '',
+        items: ungroupedFiltered.map(v => ({
+          id: v.id,
+          label: v.name,
+          icon: <ColorSwatch color={getDisplayColor(v)} />,
+          isActive: v.name === currentRefName,
+          _data: v,
+        })),
+      });
+    }
+
+    return result;
+  }, [config, ungrouped, sortedGroups, grouped, searchQuery, variables]);
+
+  if (!config) return null;
 
   return (
     <ModalOverlay isOpen={!!config} onClose={closeColorReference}>
       <ModalContainer width={360}>
         <ModalHeader title="Reference Color" onClose={closeColorReference} />
         <ModalBody>
-          <div className="form-group">
-            <label>Select a color variable</label>
-            <Input
-              ref={searchRef}
-              type="text"
-              className="form-input"
-              placeholder="Search colors..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-          <div className="color-reference-list">
-            {/* Ungrouped */}
-            {ungrouped.some(v => matchesSearch(v.name)) && (
-              <div className="color-reference-group">
-                {sortedGroups.length > 0 && (
-                  <div className="color-reference-group-header">Variables</div>
-                )}
-                {ungrouped.filter(v => matchesSearch(v.name)).map(v => (
-                  <div
-                    key={v.id}
-                    className={`color-reference-item ${v.name === currentRefName ? 'selected' : ''}`}
-                    onClick={() => handleSelect(v)}
-                  >
-                    <div className="color-reference-swatch">
-                      <div
-                        className="color-reference-swatch-inner"
-                        style={{ background: getDisplayColor(v) }}
-                      />
-                    </div>
-                    <span className="color-reference-name">{v.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Grouped */}
-            {sortedGroups.map(groupName => {
-              const groupVars = grouped[groupName].filter(v => matchesSearch(v.name));
-              if (groupVars.length === 0) return null;
-
-              return (
-                <div key={groupName} className="color-reference-group">
-                  <div className="color-reference-group-header">{groupName}</div>
-                  {groupVars.map(v => {
-                    const displayName = v.name.split('/').pop();
-                    return (
-                      <div
-                        key={v.id}
-                        className={`color-reference-item ${v.name === currentRefName ? 'selected' : ''}`}
-                        onClick={() => handleSelect(v)}
-                      >
-                        <div className="color-reference-swatch">
-                          <div
-                            className="color-reference-swatch-inner"
-                            style={{ background: getDisplayColor(v) }}
-                          />
-                        </div>
-                        <span className="color-reference-name">{displayName}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+          <Search
+            value={searchQuery}
+            onChange={setSearchQuery}
+            onEnter={handleEnter}
+            placeholder="Search colors..."
+            autoFocus
+            fullWidth={true}
+            className="mb-4"
+          />
+          <GroupedList
+            sections={sections}
+            onItemClick={(item: any) => handleSelect(item._data)}
+          />
         </ModalBody>
         <ModalFooter>
           <TextButton onClick={closeColorReference}>Cancel</TextButton>

@@ -1,27 +1,20 @@
 // ColorSwatch - Color display with checkerboard background for transparency
 // Usage:
 //   <ColorSwatch color="#FF0000" onClick={handleClick} />
-//   <ColorSwatch color="rgb(255, 0, 0)" size="lg" />
+//   <ColorSwatch color="rgb(255, 0, 0)" />
 
 import React from 'react';
 
 export interface ColorSwatchProps {
   color: string;
   onClick?: (e: React.MouseEvent) => void;
-  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
-export function ColorSwatch({ color, onClick, size = 'md', className = '' }: ColorSwatchProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-6 h-6',
-    lg: 'w-8 h-8',
-  };
-
+export function ColorSwatch({ color, onClick, className = '' }: ColorSwatchProps) {
   return (
     <div
-      className={`bg-checkerboard ${sizeClasses[size]} rounded border border-border ${onClick ? 'cursor-pointer' : ''} relative overflow-hidden ${className}`}
+      className={`bg-checkerboard w-5 h-5 rounded border border-border ${onClick ? 'cursor-pointer' : ''} relative overflow-hidden shrink-0 ${className}`}
       onClick={onClick}
     >
       <div
