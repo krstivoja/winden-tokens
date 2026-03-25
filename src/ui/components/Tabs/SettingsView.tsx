@@ -36,18 +36,20 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
   };
 
   return (
-    <div className="settings-view">
-      <div className="settings-section">
-        <h3 className="settings-heading">Appearance</h3>
-        <p className="settings-description">
+    <div className="flex flex-col gap-8 p-6 max-w-2xl mx-auto">
+      {/* Appearance Section */}
+      <div className="flex flex-col gap-4">
+        <h3 className="text-lg font-bold text-text">Appearance</h3>
+        <p className="text-sm text-text/60 leading-relaxed">
           Follow Figma automatically, or force a light or dark UI theme for this plugin.
         </p>
 
-        <div className="settings-control">
-          <label className="settings-label" htmlFor="theme-mode-select">Theme</label>
+        <div className="flex flex-col gap-2 mt-1">
+          <label className="text-sm font-semibold text-text" htmlFor="theme-mode-select">
+            Theme
+          </label>
           <Select
             id="theme-mode-select"
-            className="settings-select"
             value={themeMode}
             onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
           >
@@ -57,16 +59,21 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
           </Select>
         </div>
 
-        <p className="settings-note">
+        <p className="text-sm text-text/60 leading-relaxed">
           Follow Figma uses the editor theme passed into the plugin via `themeColors`.
         </p>
       </div>
 
-      <div className="settings-section">
-        <h3 className="settings-heading">Danger Zone</h3>
-        <p className="settings-description">
+      {/* Divider */}
+      <div className="border-t border-border" />
+
+      {/* Danger Zone Section */}
+      <div className="flex flex-col gap-4">
+        <h3 className="text-lg font-bold text-text">Danger Zone</h3>
+        <p className="text-sm text-text/60 leading-relaxed">
           Destructive actions that cannot be undone.
         </p>
+
         <TextButton
           variant="danger"
           onClick={handleDeleteAll}
@@ -74,18 +81,23 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
         >
           {isDeleting ? 'Deleting...' : 'Delete All Variables'}
         </TextButton>
-        <p className="settings-note">
+
+        <p className="text-sm text-text/60 leading-relaxed">
           Current: {collections.length} collections, {variables.length} variables
         </p>
       </div>
 
-      <div className="settings-section">
-        <h3 className="settings-heading">Import Presets</h3>
-        <p className="settings-description">
+      {/* Divider */}
+      <div className="border-t border-border" />
+
+      {/* Import Presets Section */}
+      <div className="flex flex-col gap-4">
+        <h3 className="text-lg font-bold text-text">Import Presets</h3>
+        <p className="text-sm text-text/60 leading-relaxed">
           Quick start with pre-configured design token sets.
         </p>
 
-        <div className="presets-simple">
+        <div className="flex flex-col gap-3">
           <TextButton
             onClick={() => handleImportPreset('tailwind-complete')}
           >
