@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useModalContext } from './ModalContext';
-import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
 import { rgbToHsv, hsvToRgb, rgbObjToHex, hexToRgbObj, parseColorToRgb, rgbToHsl, hslToRgb, RGB } from '../../utils/color';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 type ColorMode = 'HEX' | 'RGB' | 'HSL';
 
@@ -150,19 +150,10 @@ export function ColorPickerModal() {
   const hueColor = `hsl(${hue}, 100%, 50%)`;
 
   return (
-    <div
-      className="modal-overlay open"
-      onMouseDown={handleOverlayMouseDown}
-      onClick={handleOverlayClick}
-    >
-      <div className="modal" style={{ width: 300 }}>
-        <div className="modal-header">
-          <h3>Pick Color</h3>
-          <button className="modal-close" onClick={closeColorPicker}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={!!config} onClose={closeColorPicker}>
+      <ModalContainer width={300}>
+        <ModalHeader title="Pick Color" onClose={closeColorPicker} />
+        <ModalBody>
           <div className="color-picker-container">
             <div
               ref={svPanelRef}
@@ -295,12 +286,12 @@ export function ColorPickerModal() {
               )}
             </div>
           </div>
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           <TextButton onClick={closeColorPicker}>Cancel</TextButton>
           <TextButton variant="primary" onClick={handleConfirm}>Apply</TextButton>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

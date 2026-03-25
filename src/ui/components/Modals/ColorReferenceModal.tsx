@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
-import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 export function ColorReferenceModal() {
   const { modals, closeColorReference } = useModalContext();
@@ -90,15 +90,10 @@ export function ColorReferenceModal() {
   const currentRefName = currentRefMatch?.[1];
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeColorReference()}>
-      <div className="modal" style={{ width: 360 }}>
-        <div className="modal-header">
-          <h3>Reference Color</h3>
-          <button className="modal-close" onClick={closeColorReference}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={!!config} onClose={closeColorReference}>
+      <ModalContainer width={360}>
+        <ModalHeader title="Reference Color" onClose={closeColorReference} />
+        <ModalBody>
           <div className="form-group">
             <label>Select a color variable</label>
             <Input
@@ -166,11 +161,11 @@ export function ColorReferenceModal() {
               );
             })}
           </div>
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           <TextButton onClick={closeColorReference}>Cancel</TextButton>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

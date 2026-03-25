@@ -5,10 +5,11 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { ShadeCurveHandles, VariableData } from '../../types';
-import { CloseIcon, RefreshIcon } from '../Icons';
+import { RefreshIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
 import { Select } from '../common/Select';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 import {
   rgbObjToHex,
   parseColorToRgb,
@@ -811,15 +812,10 @@ export function ShadesModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeShadesModal()}>
-      <div className="modal modal-wide">
-        <div className="modal-header">
-          <h3>Generate Color Shades</h3>
-          <button className="modal-close" onClick={closeShadesModal}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={isOpen} onClose={closeShadesModal}>
+      <ModalContainer width={800}>
+        <ModalHeader title="Generate Color Shades" onClose={closeShadesModal} />
+        <ModalBody>
           {!preSelectedGroup && (
             <div className="form-group">
               <label>Select Color Group</label>
@@ -935,14 +931,14 @@ export function ShadesModal() {
               </div>
             </div>
           )}
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           {existingGroup && (
             <TextButton variant="danger" onClick={handleRemove}>
               Remove Shades
             </TextButton>
           )}
-          <div className="spacer" />
+          <div className="flex-1" />
           <TextButton onClick={closeShadesModal}>Cancel</TextButton>
           <TextButton
             variant="primary"
@@ -951,8 +947,8 @@ export function ShadesModal() {
           >
             {existingGroup ? 'Update' : 'Generate'}
           </TextButton>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

@@ -4,12 +4,13 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
+import { TrashIcon, RefreshIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
 import { Radio } from '../common/Radio';
 import { Select } from '../common/Select';
 import type { VariableData } from '../../types';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 const RATIO_PRESETS = [
   { value: '1.125', label: 'Minor Second (1.125)' },
@@ -448,15 +449,10 @@ export function StepsModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeStepsModal()}>
-      <div className="modal modal-steps">
-        <div className="modal-header">
-          <h3>Generate Number Steps</h3>
-          <button className="modal-close" onClick={closeStepsModal}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={isOpen} onClose={closeStepsModal}>
+      <ModalContainer width={600}>
+        <ModalHeader title="Generate Number Steps" onClose={closeStepsModal} />
+        <ModalBody>
           {!preSelectedGroup && (
             <div className="form-group">
               <label>Select Number Group</label>
@@ -627,14 +623,14 @@ export function StepsModal() {
               </div>
             </div>
           )}
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           {existingGroup && (
             <TextButton variant="danger" onClick={handleRemove}>
               Remove Steps
             </TextButton>
           )}
-          <div className="spacer" />
+          <div className="flex-1" />
           <TextButton onClick={closeStepsModal}>Cancel</TextButton>
           <TextButton
             variant="primary"
@@ -643,8 +639,8 @@ export function StepsModal() {
           >
             {existingGroup ? 'Update' : 'Generate'}
           </TextButton>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

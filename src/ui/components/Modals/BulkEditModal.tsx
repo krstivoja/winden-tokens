@@ -4,9 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { CloseIcon } from '../Icons';
 import { TextButton } from '../common/Button';
 import { Textarea } from '../common/Textarea';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 export function BulkEditModal() {
   const { modals, closeBulkEdit } = useModalContext();
@@ -91,15 +91,13 @@ export function BulkEditModal() {
   if (!config) return null;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeBulkEdit()}>
-      <div className="modal" style={{ width: 480 }}>
-        <div className="modal-header">
-          <h3>Edit as Text: <span>{config.groupName}</span></h3>
-          <button className="modal-close" onClick={closeBulkEdit}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={!!config} onClose={closeBulkEdit}>
+      <ModalContainer width={480}>
+        <ModalHeader
+          title={<>Edit as Text: <span className="font-normal text-gray-600">{config.groupName}</span></>}
+          onClose={closeBulkEdit}
+        />
+        <ModalBody>
           <div className="form-group">
             <label>One variable per line: <code>name, value</code></label>
             <Textarea
@@ -131,12 +129,12 @@ export function BulkEditModal() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           <TextButton onClick={closeBulkEdit}>Cancel</TextButton>
           <TextButton variant="primary" onClick={handleApply}>Apply Changes</TextButton>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

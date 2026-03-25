@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useModalContext } from './ModalContext';
-import { CloseIcon } from '../Icons';
 import { Input } from '../common/Input';
 import { TextButton } from '../common/Button';
+import { Modal } from './Modal';
 
 export function InputModal() {
   const { modals, closeInputModal } = useModalContext();
@@ -36,42 +36,32 @@ export function InputModal() {
     }
   };
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      closeInputModal();
-    }
-  };
-
   return (
-    <div className="modal-overlay open" onClick={handleOverlayClick}>
-      <div className="modal" style={{ width: 300 }}>
-        <div className="modal-header">
-          <h3>{config.title}</h3>
-          <button className="modal-close" onClick={closeInputModal}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{config.label}</label>
-            <Input
-              ref={inputRef}
-              type="text"
-              className="form-input"
-              placeholder="Enter name..."
-              value={value}
-              onChange={e => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-        </div>
-        <div className="modal-footer">
+    <Modal
+      isOpen={!!config}
+      onClose={closeInputModal}
+      title={config.title}
+      width={300}
+      footer={
+        <>
           <TextButton onClick={closeInputModal}>Cancel</TextButton>
           <TextButton variant="primary" onClick={handleConfirm}>
             {config.confirmText}
           </TextButton>
-        </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium text-gray-700">{config.label}</label>
+        <Input
+          ref={inputRef}
+          type="text"
+          placeholder="Enter name..."
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
       </div>
-    </div>
+    </Modal>
   );
 }
