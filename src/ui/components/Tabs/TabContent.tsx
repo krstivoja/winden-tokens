@@ -20,10 +20,8 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
         return <TableView status={status} />;
       case 'json':
         return <JsonEditor />;
-      case 'node-colors':
-        return <RelationshipsView variableType="COLOR" />;
-      case 'node-numbers':
-        return <RelationshipsView variableType="FLOAT" />;
+      case 'relationships':
+        return <RelationshipsView />;
       case 'settings':
         return (
           <SettingsView
@@ -37,7 +35,7 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
   };
 
   // Graph views need overflow-hidden to allow ReactFlow to size properly
-  const isGraphView = activeTab === 'node-colors' || activeTab === 'node-numbers';
+  const isGraphView = activeTab === 'relationships';
 
   return (
     <div id={`${activeTab}-tab`} className={`flex-1 ${isGraphView ? 'overflow-hidden' : 'overflow-auto'}`}>

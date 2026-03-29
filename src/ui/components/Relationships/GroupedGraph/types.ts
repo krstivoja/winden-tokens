@@ -9,7 +9,6 @@ export interface GroupedGraphProps {
   collections: CollectionData[];
   variables: VariableData[];
   selectedCollectionIds: Set<string>;
-  variableType: 'COLOR' | 'FLOAT';
   shadeGroups: ShadeGroupData[];
   selectedModeId: string | null;
 }
@@ -24,6 +23,7 @@ export interface VariableNode {
   color: string;
   value: string;
   resolvedValue: string;
+  resolvedType?: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
   isReference: boolean;
   referenceName: string | null;
   isVirtual?: boolean;

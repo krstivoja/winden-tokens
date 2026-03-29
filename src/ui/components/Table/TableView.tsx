@@ -30,9 +30,10 @@ export function TableView({ status }: TableViewProps) {
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize filters - select all types and collections by default
+  // Initialize filters - select all types, collections, and groups by default
   useEffect(() => {
     if (isInitialized) return;
     if (filteredVariables.length === 0 || collections.length === 0) return;
@@ -43,6 +44,15 @@ export function TableView({ status }: TableViewProps) {
 
     const collectionIds = new Set(collections.map(c => c.id));
     setSelectedCollections(collectionIds);
+
+    const groups = new Set<string>();
+    filteredVariables.forEach(v => {
+      const parts = v.name.split('/');
+      if (parts.length > 1) {
+        groups.add(parts[0]);
+      }
+    });
+    setSelectedGroups(groups);
 
     setIsInitialized(true);
   }, [filteredVariables, collections, isInitialized]);
@@ -72,6 +82,18 @@ export function TableView({ status }: TableViewProps) {
     });
   }, []);
 
+  const handleGroupToggle = useCallback((groupName: string) => {
+    setSelectedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupName)) {
+        newSet.delete(groupName);
+      } else {
+        newSet.add(groupName);
+      }
+      return newSet;
+    });
+  }, []);
+
   // Apply sidebar filters to variables
   const sidebarFilteredVariables = useMemo(() => {
     return filteredVariables.filter(v => {
@@ -81,12 +103,21 @@ export function TableView({ status }: TableViewProps) {
       // Collection filter
       if (!selectedCollections.has(v.collectionId)) return false;
 
+      // Group filter
+      if (selectedGroups.size > 0) {
+        const parts = v.name.split('/');
+        if (parts.length > 1) {
+          const groupName = parts[0];
+          if (!selectedGroups.has(groupName)) return false;
+        }
+      }
+
       // Mode filter - TODO: implement when mode-specific values are available
       // For now, mode filter is just a selector without filtering logic
 
       return true;
     });
-  }, [filteredVariables, selectedTypes, selectedCollections]);
+  }, [filteredVariables, selectedTypes, selectedCollections, selectedGroups]);
 
   // Group variables by path prefix (use sidebar-filtered variables)
   const { grouped, ungrouped, sortedGroups } = React.useMemo(() => {
@@ -151,6 +182,8 @@ export function TableView({ status }: TableViewProps) {
         onTypeToggle={handleTypeToggle}
         selectedCollections={selectedCollections}
         onCollectionToggle={handleCollectionToggle}
+        selectedGroups={selectedGroups}
+        onGroupToggle={handleGroupToggle}
       />
 
       {/* Main content area with header and table */}

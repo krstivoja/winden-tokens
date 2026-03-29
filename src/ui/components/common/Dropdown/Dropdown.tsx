@@ -133,7 +133,10 @@ function DropdownMenu({ children, className = '' }: DropdownMenuProps) {
   };
 
   return (
-    <div className={`absolute ${positionClasses[position]} z-50 bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px] ${className}`}>
+    <div
+      className={`absolute ${positionClasses[position]} z-50 bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px] ${className}`}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       {children}
     </div>
   );

@@ -8,6 +8,7 @@ import { TabContent } from './components/Tabs/TabContent';
 import { ShadesModal } from './components/Modals/ShadesModal';
 import { StepsModal } from './components/Modals/StepsModal';
 import { InputModal } from './components/Modals/InputModal';
+import { AddVariableModal } from './components/Modals/AddVariableModal';
 import { ColorPickerModal } from './components/Modals/ColorPickerModal';
 import { ColorReferenceModal } from './components/Modals/ColorReferenceModal';
 import { BulkEditModal } from './components/Modals/BulkEditModal';
@@ -156,6 +157,7 @@ export function App() {
       <ShadesModal />
       <StepsModal />
       <InputModal />
+      <AddVariableModal />
       <ColorPickerModal />
       <ColorReferenceModal />
       <BulkEditModal />

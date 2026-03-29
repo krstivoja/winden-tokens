@@ -22,8 +22,17 @@ import {
 
 // ── Utility functions ──────────────────────────────────────────────
 
-function getDefaultVariableValue(type: 'COLOR' | 'FLOAT'): string {
-  return type === 'COLOR' ? 'rgb(0, 0, 0)' : '0';
+function getDefaultVariableValue(type: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN'): string {
+  switch (type) {
+    case 'COLOR':
+      return 'rgb(0, 0, 0)';
+    case 'FLOAT':
+      return '0';
+    case 'STRING':
+      return '';
+    case 'BOOLEAN':
+      return 'false';
+  }
 }
 
 function normalizePathSegment(value: string): string {
@@ -105,11 +114,22 @@ function formatVariableNode(
 
   let displayColor = '#888888';
   let displayValue = resolvedValue;
-  if (isColorType) {
+
+  // Format display value based on the variable's actual type
+  if (variable.resolvedType === 'COLOR') {
     const rgb = parseColorToRgb(resolvedValue);
     displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
     displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
+  } else if (variable.resolvedType === 'BOOLEAN') {
+    displayValue = isReference && referenceName
+      ? `{${referenceName}}`
+      : resolvedValue;
+  } else if (variable.resolvedType === 'STRING') {
+    displayValue = isReference && referenceName
+      ? `{${referenceName}}`
+      : resolvedValue || '""';
   } else {
+    // FLOAT or other numeric types
     displayValue = isReference && referenceName
       ? `{${referenceName}:${resolvedValue}}`
       : resolvedValue;
@@ -123,7 +143,8 @@ function formatVariableNode(
     displayName: displayValue,
     color: displayColor,
     value: modeValue,
-    resolvedValue: isColorType ? displayColor : resolvedValue,
+    resolvedValue: variable.resolvedType === 'COLOR' ? displayColor : resolvedValue,
+    resolvedType: variable.resolvedType as 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN',
     isReference,
     referenceName,
   };

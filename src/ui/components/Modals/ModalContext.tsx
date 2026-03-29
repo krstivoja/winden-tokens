@@ -35,6 +35,12 @@ interface StepsModalConfig {
   collectionId?: string;
 }
 
+interface AddVariableModalConfig {
+  title: string;
+  confirmText: string;
+  onConfirm: (name: string, type: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN') => void;
+}
+
 interface ModalState {
   inputModal: InputModalConfig | null;
   colorPicker: ColorPickerConfig | null;
@@ -42,6 +48,7 @@ interface ModalState {
   bulkEdit: BulkEditConfig | null;
   shadesModal: ShadesModalConfig | null;
   stepsModal: StepsModalConfig | null;
+  addVariableModal: AddVariableModalConfig | null;
 }
 
 interface ModalContextValue {
@@ -58,6 +65,8 @@ interface ModalContextValue {
   closeShadesModal: () => void;
   openStepsModal: (config: StepsModalConfig) => void;
   closeStepsModal: () => void;
+  openAddVariableModal: (config: AddVariableModalConfig) => void;
+  closeAddVariableModal: () => void;
 }
 
 const ModalContext = createContext<ModalContextValue | null>(null);
@@ -70,6 +79,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     bulkEdit: null,
     shadesModal: null,
     stepsModal: null,
+    addVariableModal: null,
   });
 
   const openInputModal = useCallback((config: InputModalConfig) => {
@@ -120,6 +130,14 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     setModals(prev => ({ ...prev, stepsModal: null }));
   }, []);
 
+  const openAddVariableModal = useCallback((config: AddVariableModalConfig) => {
+    setModals(prev => ({ ...prev, addVariableModal: config }));
+  }, []);
+
+  const closeAddVariableModal = useCallback(() => {
+    setModals(prev => ({ ...prev, addVariableModal: null }));
+  }, []);
+
   const value: ModalContextValue = {
     modals,
     openInputModal,
@@ -134,6 +152,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     closeShadesModal,
     openStepsModal,
     closeStepsModal,
+    openAddVariableModal,
+    closeAddVariableModal,
   };
 
   return <ModalContext.Provider value={value}>{children}</ModalContext.Provider>;

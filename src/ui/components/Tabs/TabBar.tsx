@@ -8,8 +8,7 @@ import { post } from '../../hooks/usePluginMessages';
 
 const TABS = [
   { id: 'table' as const, label: 'Table' },
-  { id: 'node-colors' as const, label: 'Node Colors' },
-  { id: 'node-numbers' as const, label: 'Node Numbers' },
+  { id: 'relationships' as const, label: 'Relationships' },
   { id: 'json' as const, label: 'JSON' },
   { id: 'settings' as const, label: 'Settings' },
 ] as const;

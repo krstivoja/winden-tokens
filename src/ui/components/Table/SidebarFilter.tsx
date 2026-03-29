@@ -14,6 +14,8 @@ interface SidebarFilterProps {
   onTypeToggle?: (type: string) => void;
   selectedCollections: Set<string>;
   onCollectionToggle: (collectionId: string) => void;
+  selectedGroups?: Set<string>;
+  onGroupToggle?: (groupName: string) => void;
   showTypeFilters?: boolean;
 }
 
@@ -24,10 +26,33 @@ export function SidebarFilter({
   onTypeToggle,
   selectedCollections,
   onCollectionToggle,
+  selectedGroups,
+  onGroupToggle,
   showTypeFilters = true,
 }: SidebarFilterProps) {
   const { collections, variables } = useAppContext();
   const { openInputModal } = useModalContext();
+  const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
+  const hasInitializedExpanded = React.useRef(false);
+
+  // Auto-expand collections with groups when group filtering is enabled (only on first render)
+  React.useEffect(() => {
+    if (selectedGroups && onGroupToggle && !hasInitializedExpanded.current) {
+      const collectionsWithGroups = new Set<string>();
+      collections.forEach(collection => {
+        const hasGroups = variables.some(v => {
+          if (v.collectionId !== collection.id) return false;
+          const parts = v.name.split('/');
+          return parts.length > 1;
+        });
+        if (hasGroups) {
+          collectionsWithGroups.add(collection.id);
+        }
+      });
+      setExpandedCollections(collectionsWithGroups);
+      hasInitializedExpanded.current = true;
+    }
+  }, [collections, variables, selectedGroups, onGroupToggle]);
 
   const handleAddCollection = () => {
     openInputModal({
@@ -45,6 +70,22 @@ export function SidebarFilter({
     const types = new Set<string>();
     variables.forEach(v => types.add(v.resolvedType));
     return Array.from(types).sort();
+  }, [variables]);
+
+  // Extract groups from variables (grouped by collection)
+  const groupsByCollection = React.useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    variables.forEach(v => {
+      const parts = v.name.split('/');
+      if (parts.length > 1) {
+        const groupName = parts[0];
+        if (!map.has(v.collectionId)) {
+          map.set(v.collectionId, new Set());
+        }
+        map.get(v.collectionId)!.add(groupName);
+      }
+    });
+    return map;
   }, [variables]);
 
   // Get all modes from all collections
@@ -146,20 +187,73 @@ export function SidebarFilter({
         <div className="space-y-1 overflow-auto">
           {collections.map(collection => {
             const variableCount = variables.filter(v => v.collectionId === collection.id).length;
+            const groups = groupsByCollection.get(collection.id);
+            const hasGroups = groups && groups.size > 0;
+            const isExpanded = expandedCollections.has(collection.id);
+
             return (
-              <label
-                key={collection.id}
-                className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedCollections.has(collection.id)}
-                  onChange={() => onCollectionToggle(collection.id)}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm flex-1">{collection.name}</span>
-                <span className="text-xs opacity-60">{variableCount}</span>
-              </label>
+              <div key={collection.id} className="space-y-0.5">
+                {/* Collection checkbox */}
+                <div className="flex items-center gap-2 hover:bg-base-2 px-2 py-1 rounded transition-colors">
+                  {hasGroups && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedCollections(prev => {
+                          const next = new Set(prev);
+                          if (next.has(collection.id)) {
+                            next.delete(collection.id);
+                          } else {
+                            next.add(collection.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="w-4 h-4 flex items-center justify-center text-text-muted hover:text-text transition-colors"
+                    >
+                      {isExpanded ? '▼' : '▶'}
+                    </button>
+                  )}
+                  {!hasGroups && <div className="w-4" />}
+                  <label className="flex items-center gap-2 cursor-pointer flex-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedCollections.has(collection.id)}
+                      onChange={() => onCollectionToggle(collection.id)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm flex-1">{collection.name}</span>
+                    <span className="text-xs opacity-60">{variableCount}</span>
+                  </label>
+                </div>
+
+                {/* Groups (nested) */}
+                {hasGroups && isExpanded && selectedGroups && onGroupToggle && (
+                  <div className="ml-8 space-y-0.5">
+                    {Array.from(groups).sort().map(groupName => {
+                      const groupVariableCount = variables.filter(
+                        v => v.collectionId === collection.id && v.name.startsWith(`${groupName}/`)
+                      ).length;
+                      return (
+                        <label
+                          key={groupName}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedGroups.has(groupName)}
+                            onChange={() => onGroupToggle(groupName)}
+                            className="w-3.5 h-3.5"
+                          />
+                          <span className="text-xs flex-1">{groupName}</span>
+                          <span className="text-xs opacity-60">{groupVariableCount}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

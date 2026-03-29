@@ -26,7 +26,6 @@ function getGroupHeight(variableCount: number): number {
 export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
   const {
     group,
-    isColorType,
     connectedVars,
     onGeneratorOpen,
     onShowColorMenu,
@@ -76,18 +75,16 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 />
               </Dropdown.Trigger>
               <Dropdown.Menu>
-                <div onMouseDown={(e) => e.stopPropagation()}>
-                  <Dropdown.Item onClick={() => onRenameGroup(group)}>
-                    Rename
-                  </Dropdown.Item>
-                  <Dropdown.Item onClick={() => onDuplicateGroup(group)}>
-                    Duplicate
-                  </Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
-                    Delete
-                  </Dropdown.Item>
-                </div>
+                <Dropdown.Item onClick={() => onRenameGroup(group)}>
+                  Rename
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => onDuplicateGroup(group)}>
+                  Duplicate
+                </Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
+                  Delete
+                </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
           </div>
@@ -127,7 +124,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               />
 
               {/* Color swatch */}
-              {isColorType && !node.isVirtual && (
+              {node.resolvedType === 'COLOR' && !node.isVirtual && (
                 <div
                   className="absolute left-3.5 w-4.5 h-4.5 rounded border border-border cursor-pointer transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
                   style={{ background: node.color }}
@@ -146,7 +143,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               {/* Name */}
               <span
                 className={`absolute text-xs font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap max-w-30 ${canRenameVariable ? 'cursor-pointer hover:text-primary' : ''}`}
-                style={{ left: node.isVirtual ? 52 : (isColorType ? 42 : 14) }}
+                style={{ left: node.isVirtual ? 52 : (node.resolvedType === 'COLOR' ? 42 : 14) }}
                 onDoubleClick={canRenameVariable ? (e) => {
                   e.stopPropagation();
                   onRenameVariable(node);

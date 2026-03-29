@@ -93,17 +93,11 @@ function GroupedGraphInner({
   shadeGroups,
   selectedModeId,
 }: GroupedGraphProps) {
-  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal } = useModalContext();
+  const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
 
   // Support both COLOR and FLOAT variables - groups are typed individually based on their variables
   // Storage keys are now type-independent since we show all types together
-  // Default to COLOR type for backwards compatibility with color-specific features (can be mixed now)
-  const hasColorVars = variables.some(v => v.resolvedType === 'COLOR');
-  const hasNumberVars = variables.some(v => v.resolvedType === 'FLOAT');
-  // For features that need a type, prefer COLOR if available (for color menu, shades, etc.)
-  const variableType: 'COLOR' | 'FLOAT' = hasColorVars ? 'COLOR' : 'FLOAT';
-  const isColorType = variableType === 'COLOR';
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
     gapX: GROUP_GAP_X,
@@ -115,20 +109,6 @@ function GroupedGraphInner({
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   const reactFlowInstance = useReactFlow();
-
-  // Collection filter state - initialize with all collections from context
-  const [localSelectedCollections, setLocalSelectedCollections] = useState<Set<string>>(selectedCollectionIds);
-
-  // Type filter state - all types selected by default
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']));
-
-  // Group filter state - all groups selected by default
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
-
-  // Sync local collection state when prop changes
-  useEffect(() => {
-    setLocalSelectedCollections(selectedCollectionIds);
-  }, [selectedCollectionIds]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<GroupNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<CustomEdgeData>>([]);
@@ -153,39 +133,7 @@ function GroupedGraphInner({
   }, []);
 
   const handleCollectionToggle = useCallback((collectionId: string) => {
-    setLocalSelectedCollections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(collectionId)) {
-        newSet.delete(collectionId);
-      } else {
-        newSet.add(collectionId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleTypeToggle = useCallback((type: string) => {
-    setSelectedTypes(prev => {
-      const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleGroupToggle = useCallback((groupName: string) => {
-    setSelectedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
-    });
+    post({ type: 'toggle-collection', collectionId });
   }, []);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
@@ -234,7 +182,7 @@ function GroupedGraphInner({
   }, [variableType]);
 
   useEffect(() => {
-    const storageKey = `graph-layout-settings`;
+    const storageKey = `graph-layout-settings-${variableType}`;
     setGridLayoutSettings({ gapX: GROUP_GAP_X, gapY: GROUP_GAP_Y });
     post({ type: 'get-client-storage', key: storageKey });
 
@@ -278,22 +226,23 @@ function GroupedGraphInner({
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
 
-    openAddVariableModal({
+    openInputModal({
       title: `New Variable in ${group.sourceGroupName}`,
+      label: 'Variable name',
       confirmText: 'Add',
-      onConfirm: (name, type) => {
-        const variableName = normalizePathSegment(name);
+      onConfirm: value => {
+        const variableName = normalizePathSegment(value);
         if (!variableName) return;
         post({
           type: 'create-variable',
           collectionId: group.collectionId,
           name: `${group.sourceGroupName}/${variableName}`,
-          varType: type,
-          value: getDefaultVariableValue(type),
+          varType: variableType,
+          value: getDefaultVariableValue(variableType),
         });
       },
     });
-  }, [openAddVariableModal]);
+  }, [openInputModal, variableType]);
 
   const handleRenameGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
@@ -378,7 +327,7 @@ function GroupedGraphInner({
   }, [collections, selectedModeId, variablesById]);
 
   const handleCreateGroup = useCallback(() => {
-    const firstCollectionId = Array.from(localSelectedCollections)[0];
+    const firstCollectionId = Array.from(selectedCollectionIds)[0];
     if (!firstCollectionId) return;
 
     openInputModal({
@@ -397,44 +346,12 @@ function GroupedGraphInner({
         });
       },
     });
-  }, [isColorType, openInputModal, localSelectedCollections, variableType]);
-
-  // Initialize selectedGroups with all available groups on first render
-  React.useEffect(() => {
-    if (selectedGroups.size === 0 && variables.length > 0) {
-      const allGroups = new Set<string>();
-      variables.forEach(v => {
-        const parts = v.name.split('/');
-        if (parts.length > 1) {
-          allGroups.add(parts[0]);
-        }
-      });
-      setSelectedGroups(allGroups);
-    }
-  }, [variables, selectedGroups.size]);
+  }, [isColorType, openInputModal, selectedCollectionIds, variableType]);
 
   // Compute groups and connections from ALL variables (collection filter is applied at render time)
   const { groupsData, connectionData, variableMap } = useMemo(() => {
-    // Filter variables by selected collections, types, and groups
-    const typeVars = variables.filter(v => {
-      // Collection filter (respect the local collection filter)
-      if (!localSelectedCollections.has(v.collectionId)) return false;
-
-      // Type filter
-      if (!selectedTypes.has(v.resolvedType)) return false;
-
-      // Group filter
-      if (selectedGroups.size > 0) {
-        const parts = v.name.split('/');
-        if (parts.length > 1) {
-          const groupName = parts[0];
-          if (!selectedGroups.has(groupName)) return false;
-        }
-        // Include ungrouped variables when groups are selected
-      }
-
-      return true;
-    });
+    // Show all variable types together - each group will have its own type
+    const typeVars = variables;
     const varsByName = new Map<string, VariableData>();
     typeVars.forEach(variable => varsByName.set(variable.name, variable));
 
@@ -595,9 +512,7 @@ function GroupedGraphInner({
       const parts = variable.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
       const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      // Use the actual variable's type instead of global isColorType
-      const varIsColorType = variable.resolvedType === 'COLOR';
-      existing.nodes.push(formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId));
+      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType, collections, selectedModeId));
       unmanagedGroupsMap.set(groupName, existing);
     });
 
@@ -713,7 +628,7 @@ function GroupedGraphInner({
     }
 
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
-  }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId, selectedTypes, selectedGroups, localSelectedCollections]);
+  }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
@@ -736,20 +651,22 @@ function GroupedGraphInner({
     return connected;
   }, [connectionData]);
 
-  // Build React Flow nodes/edges when data changes
-  // Note: Collection, type, and group filtering already applied in groupsData computation
+  // Build React Flow nodes/edges when data changes, hiding by selected collections
   useEffect(() => {
     if (!positionsHydrated) return;
+
+    // Determine which groups are visible based on collection filter
+    const visibleGroupKeys = new Set<string>();
+    groupsData.forEach(group => {
+      if (selectedCollectionIds.has(group.collectionId)) {
+        visibleGroupKeys.add(group.key);
+      }
+    });
 
     const newNodes: Node<GroupNodeData>[] = groupsData.map(group => {
       const savedPos = savedPositions[group.key];
       const position = savedPos || { x: group.initialX, y: group.initialY };
-      const isHidden = false; // All groups in groupsData are already filtered
-      // Determine type based on first non-virtual variable in the group
-      const firstRealVar = group.variables.find(v => !v.isVirtual);
-      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
-      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
-      const groupVariableType = groupIsColorType ? 'COLOR' : 'FLOAT';
+      const isHidden = !visibleGroupKeys.has(group.key);
       return {
         id: group.key,
         type: 'groupNode',
@@ -757,8 +674,8 @@ function GroupedGraphInner({
         hidden: isHidden,
         data: {
           group,
-          isColorType: groupIsColorType,
-          variableType: groupVariableType,
+          isColorType,
+          variableType,
           connectedVars,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
@@ -774,10 +691,11 @@ function GroupedGraphInner({
       };
     });
 
-    // All edges are visible since filtering is already applied to groupsData
+    // Hide edges where either source or target group is hidden
     const newEdges: Edge<CustomEdgeData>[] = connectionData
       .map(conn => {
         const toVarInfo = variableMap.get(conn.toVar);
+        const isHidden = !visibleGroupKeys.has(conn.fromGroup) || !visibleGroupKeys.has(conn.toGroup);
         return {
           id: conn.id,
           source: conn.fromGroup,
@@ -785,7 +703,7 @@ function GroupedGraphInner({
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
           type: 'customEdge',
-          hidden: false, // All connections in connectionData are already filtered
+          hidden: isHidden,
           data: {
             kind: conn.kind,
             receiverName: toVarInfo?.node.id || '',
@@ -799,7 +717,7 @@ function GroupedGraphInner({
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
-      localSelectedCollections, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
+      selectedCollectionIds, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
@@ -882,7 +800,7 @@ function GroupedGraphInner({
     setGridLayoutDraft({ gapX: String(settings.gapX), gapY: String(settings.gapY) });
     post({
       type: 'set-client-storage',
-      key: `graph-layout-settings`,
+      key: `graph-layout-settings-${variableType}`,
       value: settings,
     });
     handleArrangeGrid(settings);
@@ -895,7 +813,7 @@ function GroupedGraphInner({
           <TextButton
             variant="secondary"
             onClick={handleCreateGroup}
-            disabled={localSelectedCollections.size === 0}
+            disabled={selectedCollectionIds.size === 0}
           >
             New Group
           </TextButton>
@@ -969,13 +887,9 @@ function GroupedGraphInner({
         <SidebarFilter
           selectedModeId={selectedModeId}
           onModeChange={handleModeChange}
-          selectedTypes={selectedTypes}
-          onTypeToggle={handleTypeToggle}
-          selectedCollections={localSelectedCollections}
+          selectedCollections={selectedCollectionIds}
           onCollectionToggle={handleCollectionToggle}
-          selectedGroups={selectedGroups}
-          onGroupToggle={handleGroupToggle}
-          showTypeFilters={true}
+          showTypeFilters={false}
         />
 
         {/* Graph content */}
