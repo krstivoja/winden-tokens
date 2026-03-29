@@ -556,7 +556,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
   return (
     <div
-      className={`rf-group-box ${group.kind}`}
+      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base p-sm! h-fit! shadow-md ${group.kind}`}
       style={{ width: GROUP_WIDTH, height, padding: 2 }}
     >
       {/* Header */}
@@ -884,8 +884,16 @@ function GroupedGraphInner({
       }
     };
 
+    // Fallback for browser mode: if no storage response within 100ms, hydrate anyway
+    const fallbackTimeout = setTimeout(() => {
+      setPositionsHydrated(true);
+    }, 100);
+
     window.addEventListener('message', handleStorage);
-    return () => window.removeEventListener('message', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleStorage);
+      clearTimeout(fallbackTimeout);
+    };
   }, [variableType]);
 
   useEffect(() => {
@@ -1627,6 +1635,7 @@ function GroupedGraphInner({
         defaultViewport={{ x: 50, y: 50, zoom: 1 }}
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
+        className="w-full h-full bg-base-2!"
       />
       {colorMenu.show && (
         <ColorValueMenu

@@ -23,7 +23,7 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
   const emptyLabel = variableType === 'COLOR' ? 'color' : 'number';
 
   return (
-    <div className="relationships-view">
+    <div className="relationships-view" style={{ width: '100%', height: '100%' }}>
       <GroupedGraph
         collections={collections}
         variables={variables}

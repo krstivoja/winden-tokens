@@ -169,17 +169,17 @@
 /* ─────────────────────────────────────────────────────────────────── */
 
 /* Group box container */
-.rf-group-box {
+/* .rf-group-box {
     background: var(--color-base);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
+} */
 
 .rf-group-box.shader {
-    border-color: var(--color-secondary);
-    border-width: 2px;
+    /* border-color: var(--color-secondary);
+    border-width: 1px; */
 }
 
 /* Group header */

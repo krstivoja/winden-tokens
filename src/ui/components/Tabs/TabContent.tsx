@@ -36,8 +36,11 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
     }
   };
 
+  // Graph views need overflow-hidden to allow ReactFlow to size properly
+  const isGraphView = activeTab === 'node-colors' || activeTab === 'node-numbers';
+
   return (
-    <div id={`${activeTab}-tab`} className="flex-1 overflow-auto">
+    <div id={`${activeTab}-tab`} className={`flex-1 ${isGraphView ? 'overflow-hidden' : 'overflow-auto'}`}>
       {renderContent()}
     </div>
   );

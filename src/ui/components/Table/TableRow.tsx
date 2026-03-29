@@ -31,7 +31,6 @@ export const TableRow = memo(function TableRow({
   isGrouped,
   isHidden = false,
   groupName = '',
-  isLastInGroup = false,
   contrastColor,
   colorVariables,
 }: TableRowProps) {
@@ -145,15 +144,7 @@ export const TableRow = memo(function TableRow({
       data-parent-group={groupName || undefined}
     >
       <td className="border border-border px-3 py-2 relative">
-        <div className={`max-w-full overflow-hidden flex items-center gap-2 ${isGrouped ? 'pl-6' : ''}`}>
-          {isGrouped && (
-            <>
-              {/* Vertical line - full height for middle items, half for last item */}
-              <div className={`absolute left-5 top-0 w-px bg-text/30 ${isLastInGroup ? 'h-1/2' : 'h-full'}`}></div>
-              {/* Horizontal line to icon */}
-              <div className="absolute left-5 top-1/2 w-4 h-px bg-text/50"></div>
-            </>
-          )}
+        <div className={`max-w-full overflow-hidden flex items-center gap-2 ${isGrouped ? 'opacity-60' : ''}`}>
           <span className={`type-icon ${variable.resolvedType}`}>
             <TypeIcon type={variable.resolvedType} />
           </span>
