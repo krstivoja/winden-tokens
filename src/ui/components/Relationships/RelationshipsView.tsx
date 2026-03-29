@@ -23,7 +23,7 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
   const emptyLabel = variableType === 'COLOR' ? 'color' : 'number';
 
   return (
-    <div className="relationships-view" style={{ width: '100%', height: '100%' }}>
+    <div className="relative w-full h-full">
       <GroupedGraph
         collections={collections}
         variables={variables}
@@ -34,20 +34,20 @@ export function RelationshipsView({ variableType }: RelationshipsViewProps) {
       />
 
       {/* Stats overlay */}
-      <div className="graph-stats">
+      <div className="absolute bottom-3 left-3 z-[5] flex gap-3 px-3 py-2 bg-base border border-border rounded text-[11px] opacity-80">
         <span>{filteredVars.length} {typeLabel}</span>
         <span>{refCount} references</span>
       </div>
 
       {/* Instructions */}
-      <div className="graph-instructions">
+      <div className="absolute bottom-3 right-3 z-[5] px-3 py-2 bg-base border border-border rounded text-[11px] opacity-70">
         Drag from point to connect · Click connection to remove
       </div>
 
       {/* Empty state */}
       {filteredVars.length === 0 && (
-        <div className="graph-empty">
-          <p>No {emptyLabel} variables in this collection</p>
+        <div className="absolute inset-0 flex items-center justify-center z-[1]">
+          <p className="text-sm opacity-50">No {emptyLabel} variables in this collection</p>
         </div>
       )}
     </div>

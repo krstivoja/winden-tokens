@@ -1,0 +1,108 @@
+
+/* React Aria ColorPicker Styles */
+.react-aria-ColorArea {
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    forced-color-adjust: none;
+}
+
+.react-aria-ColorArea::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, white, transparent);
+}
+
+.react-aria-ColorArea::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, black, transparent);
+}
+
+.react-aria-ColorThumb {
+    position: absolute;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-left: -0.625rem;
+    margin-top: -0.625rem;
+    border: 2px solid white;
+    border-radius: 9999px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    forced-color-adjust: none;
+    box-sizing: border-box;
+}
+
+.react-aria-ColorThumb[data-focus-visible] {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.react-aria-ColorSlider {
+    position: relative;
+    forced-color-adjust: none;
+}
+
+.react-aria-ColorSlider[data-orientation="horizontal"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.react-aria-ColorSlider .react-aria-SliderTrack {
+    position: relative;
+    width: 100%;
+    height: 1.5rem;
+    border-radius: 0.25rem;
+}
+
+.react-aria-ColorSlider[data-channel="hue"] .react-aria-SliderTrack {
+    background: linear-gradient(to right,
+        hsl(0, 100%, 50%),
+        hsl(60, 100%, 50%),
+        hsl(120, 100%, 50%),
+        hsl(180, 100%, 50%),
+        hsl(240, 100%, 50%),
+        hsl(300, 100%, 50%),
+        hsl(0, 100%, 50%)
+    );
+}
+
+.react-aria-ColorSlider .react-aria-SliderThumb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid white;
+    border-radius: 9999px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    forced-color-adjust: none;
+}
+
+.react-aria-ColorSlider .react-aria-SliderThumb[data-focus-visible] {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* React Aria Input - Match our form-input styles */
+.react-aria-Input {
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    width: 100%;
+}
+
+.react-aria-Input:focus,
+.react-aria-Input:focus-visible {
+    outline: 1px solid var(--color-text);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.react-aria-ColorField {
+    outline: none;
+}

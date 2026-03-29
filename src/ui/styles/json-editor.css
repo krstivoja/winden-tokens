@@ -1,0 +1,109 @@
+/* ═══════════════════════════════════════════════════════════════════ */
+/* JSON Editor Styles                                                    */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.json-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    height: 100%;
+}
+
+.json-editor {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 12px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    resize: none;
+    overflow: auto;
+    tab-size: 2;
+}
+
+/* Make textarea wrapper fill height */
+.json-editor.w-full.h-full {
+    height: 100% !important;
+}
+
+.textarea-wrapper:has(.json-editor) {
+    width: 100%;
+    height: 100%;
+}
+
+.json-editor:focus {
+    outline: none;
+}
+
+.json-editor.error {
+    border-color: var(--color-danger);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+/* JSON Syntax Highlighting */
+.json-highlight {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 12px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    overflow: auto;
+    white-space: pre;
+    color: var(--color-text);
+}
+
+.json-highlight .json-key {
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.json-highlight .json-string {
+    color: var(--color-secondary);
+}
+
+.json-highlight .json-number {
+    color: #d97706; /* Orange */
+}
+
+.json-highlight .json-boolean {
+    color: #7c3aed; /* Purple */
+    font-weight: 600;
+}
+
+.json-highlight .json-null {
+    color: #ef4444; /* Red */
+    font-style: italic;
+}
+
+.json-highlight .json-punctuation {
+    color: var(--color-text);
+    opacity: 0.7;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .json-highlight .json-key {
+        color: var(--color-blue-400);
+    }
+
+    .json-highlight .json-string {
+        color: var(--color-purple-400);
+    }
+
+    .json-highlight .json-number {
+        color: #fb923c; /* Lighter orange */
+    }
+
+    .json-highlight .json-boolean {
+        color: #a78bfa; /* Lighter purple */
+    }
+
+    .json-highlight .json-null {
+        color: #f87171; /* Lighter red */
+    }
+}

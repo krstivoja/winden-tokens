@@ -30,6 +30,10 @@ import { ColorValueMenu } from '../Table/ColorValueMenu';
 import { CollectionFilters } from '../Toolbar/CollectionFilters';
 import { ModeSelector } from '../Toolbar/ModeSelector';
 import { Icon } from '../icons/Icon';
+import { IconButton } from '../common/Button/IconButton/IconButton';
+import { TextButton } from '../common/Button/Button';
+import { Dropdown } from '../common/Dropdown/Dropdown';
+import { Input } from '../common/Input/Input';
 
 // ── Constants ──────────────────────────────────────────────────────
 const GROUP_WIDTH = 260;
@@ -38,12 +42,12 @@ const HEADER_HEIGHT = 36;
 const GROUP_PADDING = 8;
 const GROUP_GAP_X = 180;
 const GROUP_GAP_Y = 40;
-const GENERATED_CONNECTION_COLOR = 'var(--graph-edge-generated)';
-const REFERENCE_CONNECTION_COLOR = 'var(--graph-edge-reference)';
-const IDLE_HANDLE_BORDER_COLOR = 'var(--graph-handle-idle)';
-const IDLE_HANDLE_FILL_COLOR = 'var(--graph-card-body-bg)';
-const STANDARD_GROUP_HEADER_FILL = 'var(--graph-card-header-bg)';
-const SHADER_GROUP_HEADER_FILL = 'var(--graph-card-header-shader-bg)';
+const GENERATED_CONNECTION_COLOR = 'var(--color-secondary)';
+const REFERENCE_CONNECTION_COLOR = 'var(--color-primary)';
+const IDLE_HANDLE_BORDER_COLOR = 'var(--color-border)';
+const IDLE_HANDLE_FILL_COLOR = 'var(--color-base)';
+const STANDARD_GROUP_HEADER_FILL = 'var(--color-base-2)';
+const SHADER_GROUP_HEADER_FILL = 'var(--color-base-3)';
 const DEFAULT_GROUP_CHILD_NAME = 'base';
 
 // ── Interfaces ─────────────────────────────────────────────────────
@@ -539,100 +543,60 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
   } = data;
   const height = getGroupHeight(group);
   const canManageGroupVariables = group.kind === 'standard';
-  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
-  const groupMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isGroupMenuOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (groupMenuRef.current?.contains(event.target as globalThis.Node)) return;
-      setIsGroupMenuOpen(false);
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
-  }, [isGroupMenuOpen]);
 
   return (
     <div
-      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base p-sm! h-fit! shadow-md ${group.kind}`}
-      style={{ width: GROUP_WIDTH, height, padding: 2 }}
+      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit shadow-md w-65 p-0.5 ${group.kind}`}
+      style={{ height }}
     >
       {/* Header */}
       <div
-        className="rf-group-header"
-        style={{ background: group.headerFill, height: HEADER_HEIGHT }}
+        className="group-header flex items-center justify-between px-3 cursor-move select-none h-9"
+        style={{ background: group.headerFill }}
       >
-        <span className="rf-group-title">{group.title}</span>
+        <span className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">{group.title}</span>
         {canManageGroupVariables && (
-          <div className="rf-group-header-actions">
-            <button
-              type="button"
-              className="rf-group-add-btn"
+          <div className="flex gap-1 items-center">
+            <IconButton
+              icon={<Icon name="plus" size={20} />}
+              size="sm"
+              variant="ghost"
+              aria-label={`Add variable to ${group.title}`}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
-            >
-              +
-            </button>
-            <div className="rf-group-menu" ref={groupMenuRef}>
-              <button
-                type="button"
-                className="rf-group-menu-btn"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsGroupMenuOpen(open => !open);
-                }}
-                aria-label={`Open actions for ${group.title}`}
-              >
-                <Icon name="menu" />
-              </button>
-              {isGroupMenuOpen && (
-                <div
-                  className="rf-group-menu-popover"
+            />
+            <Dropdown position="bottom-right">
+              <Dropdown.Trigger asChild>
+                <IconButton
+                  icon={<Icon name="menu" size={20} />}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Open actions for ${group.title}`}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    className="rf-group-menu-item"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onRenameGroup(group);
-                    }}
-                  >
+                />
+              </Dropdown.Trigger>
+              <Dropdown.Menu>
+                <div onMouseDown={(e) => e.stopPropagation()}>
+                  <Dropdown.Item onClick={() => onRenameGroup(group)}>
                     Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="rf-group-menu-item"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onDuplicateGroup(group);
-                    }}
-                  >
+                  </Dropdown.Item>
+                  <Dropdown.Item onClick={() => onDuplicateGroup(group)}>
                     Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="rf-group-menu-item danger"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onDeleteGroup(group);
-                    }}
-                  >
+                  </Dropdown.Item>
+                  <Dropdown.Divider />
+                  <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
                     Delete
-                  </button>
+                  </Dropdown.Item>
                 </div>
-              )}
-            </div>
+              </Dropdown.Menu>
+            </Dropdown>
           </div>
         )}
       </div>
 
       {/* Variable rows */}
-      <div className="rf-group-body" style={{ padding: `${GROUP_PADDING}px 0` }}>
+      <div className="bg-base py-2">
         {group.variables.map((node, idx) => {
           const flags = connectedVars.get(node.name);
           const hasInput = flags?.hasInput || false;
@@ -647,8 +611,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           return (
             <div
               key={node.id}
-              className={`rf-variable-row ${rowInteractive ? 'shader-row' : ''}`}
-              style={{ height: ROW_HEIGHT, position: 'relative' }}
+              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background] duration-150 ${rowInteractive ? 'cursor-pointer bg-linear-to-r from-base via-base-2 to-base hover:bg-base-3' : ''}`}
               onClick={rowInteractive ? () => onGeneratorOpen(group, node) : undefined}
             >
               {/* Left handle (target) */}
@@ -656,7 +619,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 type="target"
                 position={Position.Left}
                 id={`${node.name}::in`}
-                className={`rf-handle ${hasInput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
+                className={`w-2.5 h-2.5 rounded-full border-2 cursor-crosshair transition-all duration-200 -ml-1.25 -mt-1.25 hover:w-3.25 hover:h-3.25 hover:-ml-[6.5px] hover:-mt-[6.5px] ${hasInput ? 'w-3 h-3' : ''} ${node.connectionsDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
                 isConnectable={!node.connectionsDisabled}
                 style={{
                   top: ROW_HEIGHT / 2,
@@ -668,7 +631,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               {/* Color swatch */}
               {isColorType && !node.isVirtual && (
                 <div
-                  className="rf-color-swatch"
+                  className="absolute left-3.5 w-4.5 h-4.5 rounded border border-border cursor-pointer transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
                   style={{ background: node.color }}
                   onClick={(e) => onShowColorMenu(e, node)}
                   title="Edit color"
@@ -677,14 +640,14 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
               {/* Virtual badge */}
               {node.isVirtual && (
-                <span className={`rf-virtual-badge ${node.virtualType}`}>
+                <span className={`absolute left-3.5 w-7 h-4.5 flex items-center justify-center rounded text-[10px] font-semibold uppercase border ${node.virtualType === 'shader' ? 'bg-secondary text-white border-secondary' : 'bg-primary text-white border-primary'}`}>
                   {node.virtualType === 'shader' ? 'fx' : 'out'}
                 </span>
               )}
 
               {/* Name */}
               <span
-                className={`rf-var-name ${canRenameVariable ? 'editable' : ''}`}
+                className={`absolute text-xs font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap max-w-30 ${canRenameVariable ? 'cursor-pointer hover:text-primary' : ''}`}
                 style={{ left: node.isVirtual ? 52 : (isColorType ? 42 : 14) }}
                 onDoubleClick={canRenameVariable ? (e) => {
                   e.stopPropagation();
@@ -697,11 +660,8 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
               {/* Value */}
               <span
-                className="rf-var-value"
-                style={{
-                  right: showDeleteAction ? 42 : 16,
-                  color: node.isReference ? 'var(--text-secondary)' : 'var(--text-muted)',
-                }}
+                className={`absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 ${node.isReference ? 'text-text-secondary' : 'text-text-muted'}`}
+                style={{ right: showDeleteAction ? 42 : 16 }}
               >
                 {node.displayName}
               </span>
@@ -710,7 +670,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               {showDeleteAction && (
                 <button
                   type="button"
-                  className="rf-delete-btn"
+                  className="absolute right-3.5 w-5 h-5 flex items-center justify-center rounded border border-transparent bg-transparent cursor-pointer text-[16px] text-text opacity-0 group-hover:opacity-50 hover:opacity-100! hover:bg-danger hover:text-white hover:border-danger transition-all duration-150"
                   onClick={(e) => { e.stopPropagation(); onDeleteVariable(node); }}
                 >
                   &times;
@@ -723,7 +683,7 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                   type="source"
                   position={Position.Right}
                   id={`${node.name}::out`}
-                  className={`rf-handle ${hasOutput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
+                  className={`w-2.5 h-2.5 rounded-full border-2 cursor-crosshair transition-all duration-200 -ml-1.25 -mt-1.25 hover:w-3.25 hover:h-3.25 hover:-ml-[6.5px] hover:-mt-[6.5px] ${hasOutput ? 'w-3 h-3' : ''} ${node.connectionsDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
                   isConnectable={!node.connectionsDisabled}
                   style={{
                     top: ROW_HEIGHT / 2,
@@ -773,7 +733,7 @@ function CustomEdge({
   };
 
   return (
-    <g className={`connection-group ${kind}`}>
+    <g>
       {kind === 'reference' && (
         <path
           d={edgePath}
@@ -790,7 +750,6 @@ function CustomEdge({
         stroke={stroke}
         strokeWidth={kind === 'generated' ? 2.5 : 2}
         strokeDasharray={strokeDasharray}
-        className="connection-line"
         style={{ pointerEvents: 'none' }}
       />
     </g>
@@ -820,7 +779,6 @@ function GroupedGraphInner({
   const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
   const isColorType = variableType === 'COLOR';
   const groupedGraphRef = useRef<HTMLDivElement>(null);
-  const gridSettingsRef = useRef<HTMLDivElement>(null);
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
     gapX: GROUP_GAP_X,
@@ -830,7 +788,6 @@ function GroupedGraphInner({
     gapX: String(GROUP_GAP_X),
     gapY: String(GROUP_GAP_Y),
   });
-  const [isGridSettingsOpen, setIsGridSettingsOpen] = useState(false);
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   const reactFlowInstance = useReactFlow();
 
@@ -912,30 +869,6 @@ function GroupedGraphInner({
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
 
-  useEffect(() => {
-    if (isGridSettingsOpen) return;
-    setGridLayoutDraft({
-      gapX: String(gridLayoutSettings.gapX),
-      gapY: String(gridLayoutSettings.gapY),
-    });
-  }, [gridLayoutSettings, isGridSettingsOpen]);
-
-  useEffect(() => {
-    if (!isGridSettingsOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (gridSettingsRef.current?.contains(event.target as globalThis.Node)) return;
-      setIsGridSettingsOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsGridSettingsOpen(false);
-    };
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [isGridSettingsOpen]);
 
   useEffect(() => {
     if (!colorMenu.show) return;
@@ -1425,7 +1358,7 @@ function GroupedGraphInner({
           onDeleteVariable: handleDeleteGraphVariable,
           onDisconnect: handleDisconnect,
         },
-        dragHandle: '.rf-group-header',
+        dragHandle: '.group-header',
       };
     });
 
@@ -1536,7 +1469,6 @@ function GroupedGraphInner({
     });
     setGridLayoutSettings(settings);
     setGridLayoutDraft({ gapX: String(settings.gapX), gapY: String(settings.gapY) });
-    setIsGridSettingsOpen(false);
     post({
       type: 'set-client-storage',
       key: `graph-layout-settings-${variableType}`,
@@ -1546,83 +1478,89 @@ function GroupedGraphInner({
   }, [gridLayoutDraft, variableType, handleArrangeGrid]);
 
   return (
-    <div className="grouped-graph" style={{ width: '100%', height: '100%' }} ref={groupedGraphRef}>
-      <div className="graph-top-controls" onMouseDown={e => e.stopPropagation()}>
-        <div className="toolbar-group">
-          <button
-            type="button"
-            className="graph-action-btn"
+    <div className="flex flex-col w-full h-full" ref={groupedGraphRef}>
+      <div className="flex items-center gap-3 p-3 bg-base border-b border-border shrink-0" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <TextButton
+            variant="secondary"
             onClick={handleCreateGroup}
             disabled={selectedCollectionIds.size === 0}
           >
             New Group
-          </button>
-          <button type="button" className="graph-action-btn" onClick={() => handleArrangeGrid()}>
+          </TextButton>
+          <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
-          </button>
-          <div ref={gridSettingsRef} className="graph-settings-menu" onMouseDown={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="graph-action-btn"
-              onClick={() => {
-                if (isGridSettingsOpen) { setIsGridSettingsOpen(false); return; }
+          </TextButton>
+          <Dropdown
+            position="bottom-right"
+            onOpenChange={(open) => {
+              if (open) {
                 setGridLayoutDraft({
                   gapX: String(gridLayoutSettings.gapX),
                   gapY: String(gridLayoutSettings.gapY),
                 });
-                setIsGridSettingsOpen(true);
-              }}
-            >
-              Grid Settings
-            </button>
-            {isGridSettingsOpen && (
-              <div className="graph-settings-popover">
-                <div className="graph-settings-title">Grid Layout</div>
-                <div className="form-group">
-                  <label htmlFor="grid-gap-x">Horizontal gap</label>
-                  <input
-                    id="grid-gap-x" type="number" min="0" className="form-input"
-                    value={gridLayoutDraft.gapX}
-                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="grid-gap-y">Vertical gap</label>
-                  <input
-                    id="grid-gap-y" type="number" min="0" className="form-input"
-                    value={gridLayoutDraft.gapY}
-                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
-                  />
-                </div>
-                <div className="graph-settings-actions">
-                  <button
-                    type="button" className="graph-action-btn"
-                    onClick={() => {
-                      setGridLayoutDraft({
-                        gapX: String(gridLayoutSettings.gapX),
-                        gapY: String(gridLayoutSettings.gapY),
-                      });
-                      setIsGridSettingsOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button type="button" className="graph-action-btn" onClick={handleApplyGridSettings}>
-                    Apply
-                  </button>
-                </div>
+              }
+            }}
+          >
+            <Dropdown.Trigger asChild>
+              <TextButton variant="secondary">
+                Grid Settings
+              </TextButton>
+            </Dropdown.Trigger>
+            <Dropdown.Menu className="min-w-50 p-3">
+              <div className="font-semibold mb-3 text-sm">Grid Layout</div>
+              <div className="mb-3">
+                <label htmlFor="grid-gap-x" className="block text-[11px] mb-1 opacity-70">
+                  Horizontal gap
+                </label>
+                <Input
+                  id="grid-gap-x"
+                  type="number"
+                  min="0"
+                  value={gridLayoutDraft.gapX}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
+                />
               </div>
-            )}
-          </div>
+              <div className="mb-4">
+                <label htmlFor="grid-gap-y" className="block text-[11px] mb-1 opacity-70">
+                  Vertical gap
+                </label>
+                <Input
+                  id="grid-gap-y"
+                  type="number"
+                  min="0"
+                  value={gridLayoutDraft.gapY}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <TextButton
+                  variant="ghost"
+                  onClick={() => {
+                    setGridLayoutDraft({
+                      gapX: String(gridLayoutSettings.gapX),
+                      gapY: String(gridLayoutSettings.gapY),
+                    });
+                  }}
+                >
+                  Cancel
+                </TextButton>
+                <TextButton variant="primary" onClick={handleApplyGridSettings}>
+                  Apply
+                </TextButton>
+              </div>
+            </Dropdown.Menu>
+          </Dropdown>
         </div>
-        <div className="spacer" />
-        <div className="toolbar-group">
+        <div className="flex-1" />
+        <div className="flex items-center gap-2">
           <CollectionFilters />
           <ModeSelector />
         </div>
       </div>
-      <ReactFlow
-        nodes={nodes}
+      <div className="relative flex-1 w-full">
+        <ReactFlow
+          nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChangeWrapped}
         onEdgesChange={onEdgesChange}
@@ -1637,6 +1575,8 @@ function GroupedGraphInner({
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
         className="w-full h-full bg-base-2!"
       />
+      </div>
+
       {colorMenu.show && (
         <ColorValueMenu
           position={colorMenu.position}

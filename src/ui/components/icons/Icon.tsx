@@ -101,14 +101,8 @@ export function Icon({ name, size = 24, className = '' }: IconProps) {
 
   return (
     <span
-      className={className}
+      className={`inline-block leading-0 ${className}`}
       dangerouslySetInnerHTML={{ __html: svgWithSize }}
-      style={{
-        display: 'inline-block',
-        lineHeight: 0,
-        color: 'inherit',
-        opacity: 1
-      }}
     />
   );
 }
