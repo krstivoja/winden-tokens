@@ -1,6 +1,5 @@
 import React from 'react';
 import type { TabId } from './TabBar';
-import { Toolbar } from '../Toolbar/Toolbar';
 import { TableView } from '../Table/TableView';
 import { JsonEditor } from './JsonEditor';
 import { RelationshipsView } from '../Relationships/RelationshipsView';
@@ -18,12 +17,7 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
   const renderContent = () => {
     switch (activeTab) {
       case 'table':
-        return (
-          <>
-            <Toolbar status={status} />
-            <TableView />
-          </>
-        );
+        return <TableView status={status} />;
       case 'json':
         return <JsonEditor />;
       case 'node-colors':
