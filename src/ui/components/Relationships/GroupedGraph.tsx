@@ -21,8 +21,7 @@ import { resolveModeIdForCollection } from '../../utils/modes';
 import { post } from '../../hooks/usePluginMessages';
 import { useModalContext } from '../Modals/ModalContext';
 import { ColorValueMenu } from '../Table/ColorValueMenu';
-import { CollectionFilters } from '../Toolbar/CollectionFilters';
-import { ModeSelector } from '../Toolbar/ModeSelector';
+import { SidebarFilter } from '../Table/SidebarFilter';
 import { Icon } from '../icons/Icon';
 import { IconButton } from '../common/Button/IconButton/IconButton';
 import { TextButton } from '../common/Button/Button';
@@ -125,6 +124,15 @@ function GroupedGraphInner({
 
   const hideColorMenu = useCallback(() => {
     setColorMenu(prev => ({ ...prev, show: false }));
+  }, []);
+
+  // Sidebar handlers
+  const handleModeChange = useCallback((modeId: string) => {
+    post({ type: 'select-mode', modeId: modeId || null });
+  }, []);
+
+  const handleCollectionToggle = useCallback((collectionId: string) => {
+    post({ type: 'toggle-collection', collectionId });
   }, []);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
@@ -871,14 +879,20 @@ function GroupedGraphInner({
             </Dropdown.Menu>
           </Dropdown>
         </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <CollectionFilters />
-          <ModeSelector />
-        </div>
       </div>
-      <div className="relative flex-1 w-full">
-        <ReactFlow
+      <div className="relative flex-1 w-full flex">
+        {/* Sidebar */}
+        <SidebarFilter
+          selectedModeId={selectedModeId}
+          onModeChange={handleModeChange}
+          selectedCollections={selectedCollectionIds}
+          onCollectionToggle={handleCollectionToggle}
+          showTypeFilters={false}
+        />
+
+        {/* Graph content */}
+        <div className="flex-1 relative">
+          <ReactFlow
           nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChangeWrapped}
@@ -894,6 +908,7 @@ function GroupedGraphInner({
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
         className="w-full h-full bg-base-2!"
       />
+        </div>
       </div>
 
       {colorMenu.show && (

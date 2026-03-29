@@ -1,4 +1,4 @@
-// Table sidebar with mode selector, type filters, and collection tree
+// Sidebar filter with mode selector, type filters, and collection tree
 
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
@@ -7,23 +7,25 @@ import { TypeIcon, PlusIcon } from '../Icons';
 import { TextButton, IconTextButton } from '../common/Button';
 import { useModalContext } from '../Modals/ModalContext';
 
-interface TableSidebarProps {
+interface SidebarFilterProps {
   selectedModeId: string | null;
   onModeChange: (modeId: string) => void;
-  selectedTypes: Set<string>;
-  onTypeToggle: (type: string) => void;
+  selectedTypes?: Set<string>;
+  onTypeToggle?: (type: string) => void;
   selectedCollections: Set<string>;
   onCollectionToggle: (collectionId: string) => void;
+  showTypeFilters?: boolean;
 }
 
-export function TableSidebar({
+export function SidebarFilter({
   selectedModeId,
   onModeChange,
   selectedTypes,
   onTypeToggle,
   selectedCollections,
   onCollectionToggle,
-}: TableSidebarProps) {
+  showTypeFilters = true,
+}: SidebarFilterProps) {
   const { collections, variables } = useAppContext();
   const { openInputModal } = useModalContext();
 
@@ -61,8 +63,9 @@ export function TableSidebar({
   }, [collections]);
 
   // Select all / deselect all for types
-  const allTypesSelected = availableTypes.every(type => selectedTypes.has(type));
+  const allTypesSelected = selectedTypes ? availableTypes.every(type => selectedTypes.has(type)) : false;
   const handleToggleAllTypes = () => {
+    if (!selectedTypes || !onTypeToggle) return;
     if (allTypesSelected) {
       availableTypes.forEach(type => onTypeToggle(type));
     } else {
@@ -104,31 +107,33 @@ export function TableSidebar({
       </div>
 
       {/* Type Filters */}
-      <div className="p-3 border-b border-border">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-semibold">Types</label>
-          <TextButton onClick={handleToggleAllTypes} size="sm">
-            {allTypesSelected ? 'Deselect All' : 'Select All'}
-          </TextButton>
+      {showTypeFilters && selectedTypes && onTypeToggle && (
+        <div className="p-3 border-b border-border">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold">Types</label>
+            <TextButton onClick={handleToggleAllTypes} size="sm">
+              {allTypesSelected ? 'Deselect All' : 'Select All'}
+            </TextButton>
+          </div>
+          <div className="space-y-1">
+            {availableTypes.map(type => (
+              <label
+                key={type}
+                className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedTypes.has(type)}
+                  onChange={() => onTypeToggle(type)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm flex-1">{type}</span>
+                <TypeIcon type={type} />
+              </label>
+            ))}
+          </div>
         </div>
-        <div className="space-y-1">
-          {availableTypes.map(type => (
-            <label
-              key={type}
-              className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
-            >
-              <input
-                type="checkbox"
-                checked={selectedTypes.has(type)}
-                onChange={() => onTypeToggle(type)}
-                className="w-4 h-4"
-              />
-              <span className="text-sm flex-1">{type}</span>
-              <TypeIcon type={type} />
-            </label>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Collections Tree */}
       <div className="flex-1 overflow-auto p-3 flex flex-col min-h-0">

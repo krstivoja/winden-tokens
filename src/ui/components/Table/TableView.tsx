@@ -5,7 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import { VariableData } from '../../types';
 import { TableRow } from './TableRow';
 import { GroupHeader } from './GroupHeader';
-import { TableSidebar } from './TableSidebar';
+import { SidebarFilter } from './SidebarFilter';
 import { TableHeader } from './TableHeader';
 import { ExpandAllIcon, CollapseAllIcon } from '../Icons';
 
@@ -144,7 +144,7 @@ export function TableView({ status }: TableViewProps) {
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <TableSidebar
+      <SidebarFilter
         selectedModeId={selectedModeId}
         onModeChange={setSelectedModeId}
         selectedTypes={selectedTypes}
