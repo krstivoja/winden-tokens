@@ -413,28 +413,10 @@ function GroupedGraphInner({
     }
   }, [variables, selectedGroups.size]);
 
-  // Compute groups and connections from ALL variables (collection filter is applied at render time)
+  // Compute groups and connections from ALL variables (filtering applied at render time)
   const { groupsData, connectionData, variableMap } = useMemo(() => {
-    // Filter variables by selected collections, types, and groups
-    const typeVars = variables.filter(v => {
-      // Collection filter (respect the local collection filter)
-      if (!localSelectedCollections.has(v.collectionId)) return false;
-
-      // Type filter
-      if (!selectedTypes.has(v.resolvedType)) return false;
-
-      // Group filter
-      if (selectedGroups.size > 0) {
-        const parts = v.name.split('/');
-        if (parts.length > 1) {
-          const groupName = parts[0];
-          if (!selectedGroups.has(groupName)) return false;
-        }
-        // Include ungrouped variables when groups are selected
-      }
-
-      return true;
-    });
+    // Use ALL variables - no filtering here
+    const typeVars = variables;
     const varsByName = new Map<string, VariableData>();
     typeVars.forEach(variable => varsByName.set(variable.name, variable));
 
@@ -713,7 +695,7 @@ function GroupedGraphInner({
     }
 
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
-  }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId, selectedTypes, selectedGroups, localSelectedCollections]);
+  }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
@@ -737,14 +719,49 @@ function GroupedGraphInner({
   }, [connectionData]);
 
   // Build React Flow nodes/edges when data changes
-  // Note: Collection, type, and group filtering already applied in groupsData computation
+  // Note: Filtering applied here to hide nodes/edges without removing connections
   useEffect(() => {
     if (!positionsHydrated) return;
 
     const newNodes: Node<GroupNodeData>[] = groupsData.map(group => {
       const savedPos = savedPositions[group.key];
       const position = savedPos || { x: group.initialX, y: group.initialY };
-      const isHidden = false; // All groups in groupsData are already filtered
+
+      // Apply filters to determine visibility
+      let isHidden = false;
+
+      // Collection filter
+      if (!localSelectedCollections.has(group.collectionId)) {
+        isHidden = true;
+      }
+
+      // Type filter - check if any variable in group matches selected types
+      if (!isHidden) {
+        const hasMatchingType = group.variables.some(v => {
+          if (v.isVirtual) return true; // Virtual nodes (shader, palette) always pass type filter
+          const sourceVar = variablesById.get(v.id);
+          return sourceVar && selectedTypes.has(sourceVar.resolvedType);
+        });
+        if (!hasMatchingType) {
+          isHidden = true;
+        }
+      }
+
+      // Group filter - check if group belongs to a selected group prefix
+      if (!isHidden && selectedGroups.size > 0) {
+        const hasMatchingGroup = group.variables.some(v => {
+          if (v.isVirtual) return true; // Virtual nodes always pass group filter
+          const parts = v.name.split('/');
+          if (parts.length > 1) {
+            const groupName = parts[0];
+            return selectedGroups.has(groupName);
+          }
+          return true; // Ungrouped variables always pass
+        });
+        if (!hasMatchingGroup) {
+          isHidden = true;
+        }
+      }
       // Determine type based on first non-virtual variable in the group
       const firstRealVar = group.variables.find(v => !v.isVirtual);
       const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
@@ -774,10 +791,20 @@ function GroupedGraphInner({
       };
     });
 
-    // All edges are visible since filtering is already applied to groupsData
+    // Create visibility map for groups
+    const groupVisibility = new Map<string, boolean>();
+    newNodes.forEach(node => {
+      groupVisibility.set(node.id, !node.hidden);
+    });
+
+    // Hide edges if either source or target node is hidden
     const newEdges: Edge<CustomEdgeData>[] = connectionData
       .map(conn => {
         const toVarInfo = variableMap.get(conn.toVar);
+        const sourceVisible = groupVisibility.get(conn.fromGroup) ?? false;
+        const targetVisible = groupVisibility.get(conn.toGroup) ?? false;
+        const edgeHidden = !sourceVisible || !targetVisible;
+
         return {
           id: conn.id,
           source: conn.fromGroup,
@@ -785,7 +812,7 @@ function GroupedGraphInner({
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
           type: 'customEdge',
-          hidden: false, // All connections in connectionData are already filtered
+          hidden: edgeHidden,
           data: {
             kind: conn.kind,
             receiverName: toVarInfo?.node.id || '',
@@ -799,7 +826,8 @@ function GroupedGraphInner({
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
-      localSelectedCollections, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
+      localSelectedCollections, selectedTypes, selectedGroups, variablesById,
+      isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 

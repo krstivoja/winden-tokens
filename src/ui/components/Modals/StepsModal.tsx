@@ -491,23 +491,26 @@ export function StepsModal() {
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-text">Scale Ratio</label>
                 <div className="flex gap-2">
-                  <Select
-                    value={ratioPreset}
-                    onChange={handleRatioPresetChange}
-                  >
-                    {RATIO_PRESETS.map(p => (
-                      <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
-                    ))}
-                  </Select>
-                  <Input
-                    type="number"
-                    value={customRatio}
-                    onChange={e => setCustomRatio(parseFloat(e.target.value) || 1)}
-                    min={1}
-                    step={0.001}
-                    style={{ width: 80 }}
-                    disabled={ratioPreset !== 'custom'}
-                  />
+                  <div className="flex-1">
+                    <Select
+                      value={ratioPreset}
+                      onChange={handleRatioPresetChange}
+                    >
+                      {RATIO_PRESETS.map(p => (
+                        <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
+                      ))}
+                    </Select>
+                  </div>
+                  {ratioPreset === 'custom' && (
+                    <Input
+                      type="number"
+                      value={customRatio}
+                      onChange={e => setCustomRatio(parseFloat(e.target.value) || 1)}
+                      min={1}
+                      step={0.001}
+                      style={{ width: 80 }}
+                    />
+                  )}
                 </div>
               </div>
 
