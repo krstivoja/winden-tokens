@@ -692,7 +692,7 @@ function GroupedGraphInner({
           target: conn.toGroup,
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
-          type: 'custom',
+          type: 'customEdge',
           hidden: isHidden,
           data: {
             kind: conn.kind,
