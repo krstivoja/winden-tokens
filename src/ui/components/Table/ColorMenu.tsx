@@ -2,6 +2,7 @@
 
 import React, { ReactNode } from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 export interface ColorMenuOption {
   label: string;
@@ -62,7 +63,7 @@ export function ColorMenu({
               onClick={onClear}
             >
               <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">
-                <span className="inline-block w-3 h-3 rounded" style={{ background: currentColor }} />
+                <ColorSwatch color={currentColor} />
               </span>
               <span className="flex-1">Clear</span>
             </button>

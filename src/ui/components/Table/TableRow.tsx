@@ -14,6 +14,7 @@ import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
 import { InputTable } from './InputTable';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 interface TableRowProps {
   variable: VariableData;
@@ -208,7 +209,7 @@ export const TableRow = memo(function TableRow({
             label={
               <>
                 {contrastColor && (
-                  <span className="inline-block w-3 h-3 rounded mr-1" style={{ background: contrastColor }} />
+                  <ColorSwatch color={contrastColor} className="mr-1" />
                 )}
                 Contrast
               </>

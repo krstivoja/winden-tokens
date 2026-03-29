@@ -6,6 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TextButton } from '../common/Button';
 import { Textarea } from '../common/Textarea';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 export function BulkEditModal() {
@@ -49,16 +50,27 @@ export function BulkEditModal() {
       const isModified = existingVar && existingVar.value !== value;
       const isColor = value.startsWith('#') || value.startsWith('rgb') || value.startsWith('{');
 
+      // Resolve color reference if needed
+      let resolvedColor = value;
+      if (value.startsWith('{') && value.endsWith('}')) {
+        const refName = value.slice(1, -1);
+        const referencedVar = variables.find(v => v.name === refName);
+        if (referencedVar && referencedVar.resolvedType === 'COLOR') {
+          resolvedColor = referencedVar.value;
+        }
+      }
+
       return {
         name: trimmedName,
         value,
         isNew,
         isModified,
         isColor,
+        resolvedColor,
         fullName: `${config.groupName}/${trimmedName}`,
       };
     }).filter(Boolean);
-  }, [textValue, config, groupVars]);
+  }, [textValue, config, groupVars, variables]);
 
   const handleApply = () => {
     if (!config) return;
@@ -98,10 +110,12 @@ export function BulkEditModal() {
           onClose={closeBulkEdit}
         />
         <ModalBody>
-          <div className="form-group">
-            <label>One variable per line: <code>name, value</code></label>
+          <div className="space-y-2">
+            <label className="text-sm">
+              One variable per line: <code className="text-xs bg-base-2 px-1 py-0.5 rounded">name, value</code>
+            </label>
             <Textarea
-              className="bulk-edit-textarea"
+              className="min-h-[120px] mt-2"
               spellCheck={false}
               mono
               placeholder={'50, #FFFFFF\n100, #F5F5F5\n200, #EEEEEE'}
@@ -110,25 +124,22 @@ export function BulkEditModal() {
               onKeyDown={handleKeyDown}
             />
           </div>
-          <div className="bulk-edit-preview">
-            {preview.map((p, i) => p && (
-              <div key={i} className="bulk-edit-preview-item">
-                {p.isColor && (
-                  <div
-                    className="preview-swatch"
-                    style={{ background: p.value.startsWith('{') ? '#888' : p.value }}
-                  />
-                )}
-                <span className="preview-name">{p.fullName}</span>
-                <span className="preview-value">{p.value}</span>
-                {(p.isNew || p.isModified) && (
-                  <span className={`preview-status ${p.isNew ? 'new' : 'modified'}`}>
-                    {p.isNew ? 'new' : 'modified'}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+          {preview.length > 0 && (
+            <div className="mt-4 space-y-1 max-h-[200px] overflow-auto border border-border rounded p-2">
+              {preview.map((p, i) => p && (
+                <div key={i} className="flex items-center gap-2 text-sm py-1">
+                  {p.isColor && <ColorSwatch color={p.resolvedColor} />}
+                  <span className="font-mono text-xs opacity-60">{p.fullName}</span>
+                  <span className="font-mono text-xs flex-1">{p.value}</span>
+                  {(p.isNew || p.isModified) && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${p.isNew ? 'bg-primary/20 text-primary' : 'bg-warning/20 text-warning'}`}>
+                      {p.isNew ? 'new' : 'modified'}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </ModalBody>
         <ModalFooter>
           <TextButton onClick={closeBulkEdit}>Cancel</TextButton>

@@ -14,10 +14,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
 
     const classes = [
-      'form-textarea',
-      mono && 'mono',
-      fullWidth && 'full-width',
-      error && 'has-error',
+      'w-full px-3 py-2 border border-border rounded bg-base text-text',
+      'focus:outline focus:outline-2 focus:outline-primary focus:outline-offset-2',
+      'leading-relaxed',
+      mono && 'font-mono',
+      error && 'border-danger',
       className,
     ]
       .filter(Boolean)
@@ -29,7 +30,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     };
 
     return (
-      <div className={fullWidth ? 'textarea-wrapper full-width' : 'textarea-wrapper'}>
+      <div className={fullWidth ? 'w-full' : ''}>
         <textarea
           ref={ref}
           id={textareaId}
@@ -40,7 +41,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {error && (
-          <span id={`${textareaId}-error`} className="textarea-error" role="alert">
+          <span id={`${textareaId}-error`} className="text-xs text-danger mt-1 block" role="alert">
             {error}
           </span>
         )}

@@ -12,6 +12,7 @@ import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 interface GroupHeaderProps {
   groupName: string;
@@ -171,7 +172,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
             label={
               <>
                 {contrastColor && (
-                  <span className="inline-block w-3 h-3 rounded mr-1" style={{ background: contrastColor }} />
+                  <ColorSwatch color={contrastColor} className="mr-1" />
                 )}
                 Contrast
               </>
