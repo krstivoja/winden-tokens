@@ -123,8 +123,8 @@ export function TableSidebar({
                 onChange={() => onTypeToggle(type)}
                 className="w-4 h-4"
               />
-              <TypeIcon type={type} />
               <span className="text-sm flex-1">{type}</span>
+              <TypeIcon type={type} />
             </label>
           ))}
         </div>

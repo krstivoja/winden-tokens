@@ -148,9 +148,9 @@ export const TableRow = memo(function TableRow({
           {isGrouped && (
             <>
               {/* Vertical line - full height for middle items, half for last item */}
-              <div className={`absolute left-5 top-0 w-px bg-border ${isLastInGroup ? 'h-1/2' : 'h-full'}`}></div>
+              <div className={`absolute left-5 top-0 w-px bg-text/30 ${isLastInGroup ? 'h-1/2' : 'h-full'}`}></div>
               {/* Horizontal line to icon */}
-              <div className="absolute left-5 top-1/2 w-4 h-px bg-border"></div>
+              <div className="absolute left-5 top-1/2 w-4 h-px bg-text/50"></div>
             </>
           )}
           <span className={`type-icon ${variable.resolvedType}`}>
