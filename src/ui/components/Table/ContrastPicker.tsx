@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
+import { ColorSwatch } from '../common/ColorSwatch';
 
 interface ContrastPickerProps {
   contrastColor: string | null;
@@ -25,7 +26,7 @@ export function ContrastPicker({
           onClick={onClear}
         >
           <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">
-            <span className="inline-block w-3 h-3 rounded" style={{ background: contrastColor }} />
+            <ColorSwatch color={contrastColor} className="w-4 h-4" />
           </span>
           <span className="flex-1">Clear</span>
         </button>

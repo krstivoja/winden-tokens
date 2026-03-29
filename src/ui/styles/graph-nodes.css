@@ -1,0 +1,494 @@
+/* ═══════════════════════════════════════════════════════════════════ */
+/* Graph / Node Styles                                                  */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Container styles */
+.relationships-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.grouped-graph {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* Top controls bar */
+.graph-top-controls {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--color-base);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.spacer {
+    flex: 1;
+}
+
+.graph-action-btn {
+    padding: 6px 12px;
+    background: var(--color-base-2);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.graph-action-btn:hover:not(:disabled) {
+    background: var(--color-base-3);
+}
+
+.graph-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Grid settings popover */
+.graph-settings-menu {
+    position: relative;
+}
+
+.graph-settings-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 200px;
+    padding: 12px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 20;
+}
+
+.graph-settings-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.graph-settings-popover .form-group {
+    margin-bottom: 12px;
+}
+
+.graph-settings-popover .form-group:last-of-type {
+    margin-bottom: 16px;
+}
+
+.graph-settings-popover label {
+    display: block;
+    font-size: 11px;
+    margin-bottom: 4px;
+    color: var(--color-text);
+    opacity: 0.7;
+}
+
+.graph-settings-popover .form-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.graph-settings-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* Stats overlay */
+.graph-stats {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 5;
+    display: flex;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.graph-stats span {
+    color: var(--color-text);
+}
+
+/* Instructions overlay */
+.graph-instructions {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    z-index: 5;
+    padding: 8px 12px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 11px;
+    opacity: 0.7;
+    color: var(--color-text);
+}
+
+/* Empty state */
+.graph-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.graph-empty p {
+    color: var(--color-text);
+    opacity: 0.5;
+    font-size: 14px;
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Node Component Styles                                                */
+/* ─────────────────────────────────────────────────────────────────── */
+
+/* Group box container */
+.rf-group-box {
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.rf-group-box.shader {
+    border-color: var(--color-secondary);
+    border-width: 2px;
+}
+
+/* Group header */
+.rf-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    cursor: move;
+    user-select: none;
+}
+
+.rf-group-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rf-group-header-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.rf-group-add-btn {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    border: 1px solid var(--color-border);
+    background: var(--color-base-2);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    transition: all 0.15s ease;
+}
+
+.rf-group-add-btn:hover {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+/* Group menu */
+.rf-group-menu {
+    position: relative;
+}
+
+.rf-group-menu-btn {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    border: 1px solid var(--color-border);
+    background: var(--color-base-2);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.rf-group-menu-btn:hover {
+    background: var(--color-base-3);
+}
+
+.rf-group-menu-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 140px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    overflow: hidden;
+}
+
+.rf-group-menu-item {
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--color-text);
+    transition: background 0.15s ease;
+}
+
+.rf-group-menu-item:hover {
+    background: var(--color-base-2);
+}
+
+.rf-group-menu-item.danger {
+    color: var(--color-danger);
+}
+
+.rf-group-menu-item.danger:hover {
+    background: var(--color-danger);
+    color: white;
+}
+
+/* Group body */
+.rf-group-body {
+    background: var(--color-base);
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Variable Row Styles                                                  */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-variable-row {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-base);
+    transition: background 0.15s ease;
+}
+
+.rf-variable-row:last-child {
+    border-bottom: none;
+}
+
+.rf-variable-row:hover {
+    background: var(--color-base-2);
+}
+
+.rf-variable-row.shader-row {
+    cursor: pointer;
+    background: linear-gradient(90deg,
+        var(--color-base) 0%,
+        var(--color-base-2) 50%,
+        var(--color-base) 100%
+    );
+}
+
+.rf-variable-row.shader-row:hover {
+    background: var(--color-base-3);
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Handle Styles (Connection Points)                                    */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-handle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+    cursor: crosshair;
+    transition: all 0.2s ease;
+}
+
+.rf-handle:hover:not(.disabled) {
+    transform: scale(1.3);
+}
+
+.rf-handle.connected {
+    width: 12px;
+    height: 12px;
+}
+
+.rf-handle.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Color Swatch                                                          */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-color-swatch {
+    position: absolute;
+    left: 14px;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.rf-color-swatch:hover {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Virtual Badge (for shader/palette nodes)                             */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-virtual-badge {
+    position: absolute;
+    left: 14px;
+    width: 28px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    border: 1px solid;
+}
+
+.rf-virtual-badge.shader {
+    background: var(--color-secondary);
+    color: white;
+    border-color: var(--color-secondary);
+}
+
+.rf-virtual-badge.palette {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Variable Name & Value                                                 */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-var-name {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+}
+
+.rf-var-name.editable {
+    cursor: pointer;
+}
+
+.rf-var-name.editable:hover {
+    color: var(--color-primary);
+}
+
+.rf-var-value {
+    position: absolute;
+    font-size: 11px;
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100px;
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Delete Button                                                         */
+/* ─────────────────────────────────────────────────────────────────── */
+
+.rf-delete-btn {
+    position: absolute;
+    right: 14px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--color-text);
+    opacity: 0;
+    transition: all 0.15s ease;
+}
+
+.rf-variable-row:hover .rf-delete-btn {
+    opacity: 0.5;
+}
+
+.rf-delete-btn:hover {
+    opacity: 1 !important;
+    background: var(--color-danger);
+    color: white;
+    border-color: var(--color-danger);
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* Connection Lines                                                      */
+/* ─────────────────────────────────────────────────────────────────── */
+
+:root {
+    --graph-edge-reference: var(--color-primary);
+    --graph-edge-generated: var(--color-secondary);
+    --graph-handle-idle: var(--color-border);
+    --graph-card-body-bg: var(--color-base);
+    --graph-card-header-bg: var(--color-base-2);
+    --graph-card-header-shader-bg: var(--color-base-3);
+}
+
+.connection-group.reference .connection-line {
+    stroke: var(--graph-edge-reference);
+}
+
+.connection-group.generated .connection-line {
+    stroke: var(--graph-edge-generated);
+}

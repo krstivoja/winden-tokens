@@ -144,7 +144,7 @@ export const TableRow = memo(function TableRow({
       data-parent-group={groupName || undefined}
     >
       <td className="border border-border px-3 py-2 relative">
-        <div className={`name-cell flex items-center gap-2 ${isGrouped ? 'pl-6' : ''}`}>
+        <div className={`max-w-full overflow-hidden flex items-center gap-2 ${isGrouped ? 'pl-6' : ''}`}>
           {isGrouped && (
             <>
               {/* Vertical line - full height for middle items, half for last item */}
@@ -173,28 +173,36 @@ export const TableRow = memo(function TableRow({
       <td className="border border-border px-3 py-2">
         <CollectionCell variable={variable} />
       </td>
-      <td className="accessibility-cell border border-border px-3 py-2">
+      <td className="border border-border px-3 py-2 text-xs">
         {contrastResult ? (
-          <OptionsDropdown
-            label={
-              <>
-                <span className="contrast-ratio">{contrastResult.ratio}:1</span>
-                <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
-                  {contrastResult.aa ? '✓' : '✗'}AA
-                </span>
-                <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
-                  {contrastResult.aaa ? '✓' : '✗'}AAA
-                </span>
-              </>
-            }
-          >
-            <ContrastPicker
-              contrastColor={contrastColor}
-              onPickColor={handlePickContrastColor}
-              onReferenceColor={handleReferenceContrastColor}
-              onClear={handleClearContrastColor}
-            />
-          </OptionsDropdown>
+          <div className="flex items-center justify-between gap-2">
+            <OptionsDropdown
+              label={<span className="font-semibold mr-2">{contrastResult.ratio}:1</span>}
+            >
+              <ContrastPicker
+                contrastColor={contrastColor}
+                onPickColor={handlePickContrastColor}
+                onReferenceColor={handleReferenceContrastColor}
+                onClear={handleClearContrastColor}
+              />
+            </OptionsDropdown>
+            <div className="flex gap-1">
+              <span
+                className={`inline-block px-1.5 py-0.5 rounded text-footnote ml-1 transition-all ${
+                  contrastResult.aa ? 'bg-badge-success' : 'bg-badge-danger'
+                }`}
+              >
+                {contrastResult.aa ? '✓' : '✗'}AA
+              </span>
+              <span
+                className={`inline-block px-1.5 py-0.5 rounded text-footnote ml-1 transition-all ${
+                  contrastResult.aaa ? 'bg-badge-success' : 'bg-badge-danger'
+                }`}
+              >
+                {contrastResult.aaa ? '✓' : '✗'}AAA
+              </span>
+            </div>
+          </div>
         ) : !isGrouped && variable.resolvedType === 'COLOR' ? (
           <OptionsDropdown
             label={

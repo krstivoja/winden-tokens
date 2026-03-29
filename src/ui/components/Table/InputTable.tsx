@@ -11,7 +11,7 @@ export const InputTable = React.forwardRef<HTMLInputElement, InputTableProps>(
     return (
       <input
         ref={ref}
-        className={`flex-1 py-1.5 h-full border-none bg-transparent outline-none focus:bg-bg-input ${className}`}
+        className={`flex-1 max-w-full py-1.5 h-full border-none bg-transparent outline-none focus:bg-bg-input ${className}`}
         {...props}
       />
     );

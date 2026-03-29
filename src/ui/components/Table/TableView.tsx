@@ -78,11 +78,11 @@ export function TableView() {
         <table className="spreadsheet w-full border border-border border-collapse">
           <thead>
             <tr>
-              <th className="col-name text-left font-semibold border border-border px-3 py-2 bg-base-2">{nameHeader}</th>
-              <th className="col-value text-left font-semibold border border-border px-3 py-2 bg-base-2">Value</th>
-              <th className="col-collection text-left font-semibold border border-border px-3 py-2 bg-base-2">Collection</th>
-              <th className="col-accessibility text-left font-semibold border border-border px-3 py-2 bg-base-2">Accessibility</th>
-              <th className="col-actions w-25 text-left font-semibold border border-border px-3 py-2 bg-base-2">Actions</th>
+              <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">{nameHeader}</th>
+              <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Value</th>
+              <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Collection</th>
+              <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Accessibility</th>
+              <th className="w-[100px] min-w-[100px] max-w-[100px] text-left font-semibold border border-border px-3 py-2 bg-base-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -102,11 +102,11 @@ export function TableView() {
       <table className="spreadsheet w-full border border-border border-collapse">
         <thead>
           <tr>
-            <th className="col-name text-left font-semibold border border-border px-3 py-2 bg-base-2">{nameHeader}</th>
-            <th className="col-value text-left font-semibold border border-border px-3 py-2 bg-base-2">Value</th>
-            <th className="col-collection text-left font-semibold border border-border px-3 py-2 bg-base-2">Collection</th>
-            <th className="col-accessibility text-left font-semibold border border-border px-3 py-2 bg-base-2">Accessibility</th>
-            <th className="col-actions w-25 text-left font-semibold border border-border px-3 py-2 bg-base-2">Actions</th>
+            <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">{nameHeader}</th>
+            <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Value</th>
+            <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Collection</th>
+            <th className="text-left font-semibold border border-border px-3 py-2 bg-base-2">Accessibility</th>
+            <th className="w-[100px] min-w-[100px] max-w-[100px] text-left font-semibold border border-border px-3 py-2 bg-base-2">Actions</th>
           </tr>
         </thead>
         <tbody id="table-body">
