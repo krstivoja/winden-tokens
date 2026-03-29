@@ -546,12 +546,11 @@ function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
   return (
     <div
-      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit shadow-md w-65 p-0.5 ${group.kind}`}
-      style={{ height }}
+      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-md w-65 p-0.5 ${group.kind}`}
     >
       {/* Header */}
       <div
-        className="group-header flex items-center justify-between px-3 cursor-move select-none h-9"
+        className="group-header flex items-center justify-between px-3 cursor-move select-none h-9 rounded-sm"
         style={{ background: group.headerFill }}
       >
         <span className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">{group.title}</span>
