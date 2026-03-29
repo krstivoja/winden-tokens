@@ -43,7 +43,7 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
   };
 
   return (
-    <div id={`${activeTab}-tab`} className="tab-content active">
+    <div id={`${activeTab}-tab`} className="flex-1 overflow-auto">
       {renderContent()}
     </div>
   );

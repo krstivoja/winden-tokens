@@ -93,7 +93,7 @@ export function JsonHighlighter({ json, className = '' }: JsonHighlighterProps) 
   };
 
   return (
-    <div className={`json-highlight ${className}`}>
+    <div className={`json-highlight w-full h-full ${className}`}>
       {highlightJson(json)}
     </div>
   );
