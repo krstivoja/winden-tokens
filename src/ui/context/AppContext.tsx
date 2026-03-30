@@ -241,7 +241,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [singleContrastColors]);
 
   const setSelectedModeId = useCallback((modeId: string) => {
-    console.log('[AppContext] setSelectedModeId called with:', modeId);
     setSelectedModeIdState(modeId);
   }, []);
 

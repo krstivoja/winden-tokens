@@ -19,6 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { CollectionData, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
 import { post } from '../../hooks/usePluginMessages';
+import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { ColorValueMenu } from '../Table/ColorValueMenu';
 import { SidebarFilter } from '../Table/SidebarFilter';
@@ -147,10 +148,13 @@ function GroupedGraphInner({
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
 
+  // Get setSelectedModeId from context to update global mode
+  const { setSelectedModeId: setGlobalModeId } = useAppContext();
+
   // Sidebar handlers
   const handleModeChange = useCallback((modeId: string) => {
-    post({ type: 'select-mode', modeId: modeId || null });
-  }, []);
+    setGlobalModeId(modeId);
+  }, [setGlobalModeId]);
 
   const handleCollectionToggle = useCallback((collectionId: string) => {
     setLocalSelectedCollections(prev => {
