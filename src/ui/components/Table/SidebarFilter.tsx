@@ -135,7 +135,13 @@ export function SidebarFilter({
         <label className="block text-xs font-semibold mb-2">Mode</label>
         <select
           value={selectedModeId || ''}
-          onChange={e => onModeChange(e.target.value)}
+          onChange={e => {
+            console.log('[SidebarFilter] Mode change:', e.target.value);
+            console.log('[SidebarFilter] onModeChange is:', onModeChange);
+            console.log('[SidebarFilter] Calling onModeChange...');
+            onModeChange(e.target.value);
+            console.log('[SidebarFilter] onModeChange called');
+          }}
           className="w-full px-2 py-1.5 border border-border rounded bg-base text-text text-sm"
         >
           <option value="">All Modes</option>

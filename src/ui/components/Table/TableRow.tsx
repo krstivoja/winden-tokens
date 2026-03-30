@@ -13,6 +13,7 @@ import { ValueCell } from './ValueCell';
 import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
+import { getVariableValueForMode } from '../../utils/modes';
 import { InputTable } from './InputTable';
 import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
@@ -24,6 +25,7 @@ interface TableRowProps {
   isLastInGroup?: boolean;
   contrastColor: string | null;
   colorVariables: VariableData[];
+  selectedModeId?: string | null;
 }
 
 export const TableRow = memo(function TableRow({
@@ -35,7 +37,7 @@ export const TableRow = memo(function TableRow({
   contrastColor,
   colorVariables,
 }: TableRowProps) {
-  const { setSingleContrastColor, getShadeGroupBySourceId } = useAppContext();
+  const { setSingleContrastColor, getShadeGroupBySourceId, collections, selectedModeId } = useAppContext();
   const { openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
 
@@ -47,11 +49,12 @@ export const TableRow = memo(function TableRow({
   // Calculate contrast for color variables
   const contrastResult = useMemo(() => {
     if (variable.resolvedType !== 'COLOR' || !contrastColor) return null;
-    const colorRgb = parseColorToRgb(variable.value);
+    const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
+    const colorRgb = parseColorToRgb(currentValue);
     const contrastRgb = parseColorToRgb(contrastColor);
     if (!colorRgb || !contrastRgb) return null;
     return checkContrast(colorRgb, contrastRgb);
-  }, [variable.value, variable.resolvedType, contrastColor]);
+  }, [collections, variable, selectedModeId, variable.resolvedType, contrastColor]);
 
   const handleNameBlur = useCallback(() => {
     const parts = variable.name.split('/');

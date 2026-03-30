@@ -22,6 +22,11 @@ export function ValueCell({ variable, modifierButton }: ValueCellProps) {
 
   const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[ValueCell]', variable.name, 'selectedModeId:', selectedModeId, 'currentValue:', currentValue);
+  }, [selectedModeId, currentValue, variable.name]);
+
   const [inputValue, setInputValue] = useState(currentValue);
 
   const handleValueChange = useCallback((newValue: string) => {

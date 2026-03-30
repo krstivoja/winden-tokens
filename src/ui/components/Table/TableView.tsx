@@ -23,11 +23,12 @@ export function TableView({ status }: TableViewProps) {
     getGroupContrastColor,
     getSingleContrastColor,
     collections,
+    selectedModeId,
+    setSelectedModeId,
   } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sidebar filter state
-  const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
+  // Sidebar filter state (removed selectedModeId - now using global context)
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
@@ -235,6 +236,7 @@ export function TableView({ status }: TableViewProps) {
                     isGrouped={false}
                     contrastColor={v.resolvedType === 'COLOR' ? getSingleContrastColor(v.id) : null}
                     colorVariables={colorVariables}
+                    selectedModeId={selectedModeId}
                   />
                 ))}
 
@@ -261,6 +263,7 @@ export function TableView({ status }: TableViewProps) {
                           isLastInGroup={index === groupVars.length - 1}
                           contrastColor={groupContrastColor}
                           colorVariables={colorVariables}
+                          selectedModeId={selectedModeId}
                         />
                       ))}
                     </React.Fragment>
