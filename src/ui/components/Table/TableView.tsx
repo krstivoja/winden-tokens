@@ -1,6 +1,6 @@
 // Table view component
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useMemo, useCallback } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { VariableData } from '../../types';
 import { TableRow } from './TableRow';
@@ -8,6 +8,7 @@ import { GroupHeader } from './GroupHeader';
 import { SidebarFilter } from './SidebarFilter';
 import { TableHeader } from './TableHeader';
 import { ExpandAllIcon, CollapseAllIcon } from '../Icons';
+import { getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 
 interface TableViewProps {
   status: { message: string; type: string };
@@ -25,100 +26,19 @@ export function TableView({ status }: TableViewProps) {
     collections,
     selectedModeId,
     setSelectedModeId,
+    selectedVariableTypes: selectedTypes,
+    selectedCollectionIds: selectedCollections,
+    selectedGroups,
+    toggleVariableType: handleTypeToggle,
+    toggleCollection: handleCollectionToggle,
+    toggleSelectedGroup: handleGroupToggle,
   } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sidebar filter state (removed selectedModeId - now using global context)
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
-  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Initialize filters - select all types, collections, and groups by default
-  useEffect(() => {
-    if (isInitialized) return;
-    if (filteredVariables.length === 0 || collections.length === 0) return;
-
-    const types = new Set<string>();
-    filteredVariables.forEach(v => types.add(v.resolvedType));
-    setSelectedTypes(types);
-
-    const collectionIds = new Set(collections.map(c => c.id));
-    setSelectedCollections(collectionIds);
-
-    const groups = new Set<string>();
-    filteredVariables.forEach(v => {
-      const parts = v.name.split('/');
-      if (parts.length > 1) {
-        groups.add(parts[0]);
-      }
-    });
-    setSelectedGroups(groups);
-
-    setIsInitialized(true);
-  }, [filteredVariables, collections, isInitialized]);
-
-  // Toggle handlers
-  const handleTypeToggle = useCallback((type: string) => {
-    setSelectedTypes(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(type)) {
-        newSet.delete(type);
-      } else {
-        newSet.add(type);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleCollectionToggle = useCallback((collectionId: string) => {
-    setSelectedCollections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(collectionId)) {
-        newSet.delete(collectionId);
-      } else {
-        newSet.add(collectionId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleGroupToggle = useCallback((groupName: string) => {
-    setSelectedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupName)) {
-        newSet.delete(groupName);
-      } else {
-        newSet.add(groupName);
-      }
-      return newSet;
-    });
-  }, []);
-
-  // Apply sidebar filters to variables
+  // Apply sidebar group filter to variables (type and collection filters are applied in AppContext)
   const sidebarFilteredVariables = useMemo(() => {
-    return filteredVariables.filter(v => {
-      // Type filter
-      if (!selectedTypes.has(v.resolvedType)) return false;
-
-      // Collection filter
-      if (!selectedCollections.has(v.collectionId)) return false;
-
-      // Group filter
-      if (selectedGroups.size > 0) {
-        const parts = v.name.split('/');
-        if (parts.length > 1) {
-          const groupName = parts[0];
-          if (!selectedGroups.has(groupName)) return false;
-        }
-      }
-
-      // Mode filter - TODO: implement when mode-specific values are available
-      // For now, mode filter is just a selector without filtering logic
-
-      return true;
-    });
-  }, [filteredVariables, selectedTypes, selectedCollections, selectedGroups]);
+    return filteredVariables.filter(v => isVariableVisibleForGroupFilters(v, selectedGroups));
+  }, [filteredVariables, selectedGroups]);
 
   // Group variables by path prefix (use sidebar-filtered variables)
   const { grouped, ungrouped, sortedGroups } = React.useMemo(() => {
@@ -126,9 +46,9 @@ export function TableView({ status }: TableViewProps) {
     const ungrouped: VariableData[] = [];
 
     sidebarFilteredVariables.forEach(v => {
-      const parts = v.name.split('/');
-      if (parts.length > 1) {
-        const groupName = parts.slice(0, -1).join('/');
+      const groupName = getVariableGroupName(v.name);
+      if (groupName) {
+        const parts = v.name.split('/');
         if (!grouped[groupName]) grouped[groupName] = [];
         grouped[groupName].push({ ...v, displayName: parts[parts.length - 1] });
       } else {

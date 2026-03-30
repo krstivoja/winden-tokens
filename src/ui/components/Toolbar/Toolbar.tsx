@@ -97,7 +97,6 @@ export function Toolbar({ status }: ToolbarProps) {
           id="status"
           className={`status ${status.type} ${status.type === 'warning' ? 'clickable' : ''}`}
           onClick={status.type === 'warning' ? () => {
-            console.log('[UI] Refresh clicked from status message');
             post({ type: 'refresh' });
           } : undefined}
           style={status.type === 'warning' ? { cursor: 'pointer' } : undefined}

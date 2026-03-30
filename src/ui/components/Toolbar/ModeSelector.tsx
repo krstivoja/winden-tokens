@@ -12,13 +12,6 @@ export function ModeSelector() {
   const availableModes = React.useMemo(() => {
     const selectedCollections = collections.filter(c => selectedCollectionIds.has(c.id));
 
-    console.log('[ModeSelector] All collections:', collections.map(c => ({
-      name: c.name,
-      id: c.id,
-      modesCount: c.modes?.length || 0,
-      modes: c.modes
-    })));
-
     // If no collections selected, return empty array
     if (selectedCollections.length === 0) {
       return [];
@@ -33,9 +26,7 @@ export function ModeSelector() {
       }
     }
 
-    const modes = collectionWithMostModes.modes || [];
-    console.log('[ModeSelector] Using collection with most modes:', collectionWithMostModes.name, '- modes:', modes);
-    return modes;
+    return collectionWithMostModes.modes || [];
   }, [collections, selectedCollectionIds]);
 
   // Auto-select first mode if current selection is invalid

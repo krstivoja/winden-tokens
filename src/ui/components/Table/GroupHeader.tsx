@@ -28,6 +28,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     variables: allVariables,
     selectedCollectionId,
     getShadeGroupByGroupName,
+    selectedModeId,
   } = useAppContext();
   const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
 
@@ -109,8 +110,8 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       }
     }
 
-    openShadesModal({ groupName });
-  }, [groupName, openShadesModal, shadeGroup, sourceVariable]);
+    openShadesModal({ groupName, modeId: selectedModeId });
+  }, [groupName, openShadesModal, shadeGroup, sourceVariable, selectedModeId]);
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

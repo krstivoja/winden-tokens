@@ -6,6 +6,7 @@ import { post } from '../../hooks/usePluginMessages';
 import { TypeIcon, PlusIcon } from '../Icons';
 import { TextButton, IconTextButton } from '../common/Button';
 import { useModalContext } from '../Modals/ModalContext';
+import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
 
 interface SidebarFilterProps {
   selectedModeId: string | null;
@@ -76,9 +77,8 @@ export function SidebarFilter({
   const groupsByCollection = React.useMemo(() => {
     const map = new Map<string, Set<string>>();
     variables.forEach(v => {
-      const parts = v.name.split('/');
-      if (parts.length > 1) {
-        const groupName = parts[0];
+      const groupName = getVariableGroupName(v.name);
+      if (groupName) {
         if (!map.has(v.collectionId)) {
           map.set(v.collectionId, new Set());
         }
@@ -235,15 +235,21 @@ export function SidebarFilter({
                       const groupVariableCount = variables.filter(
                         v => v.collectionId === collection.id && v.name.startsWith(`${groupName}/`)
                       ).length;
+                      const groupKey = getCollectionGroupKey(collection.id, groupName);
+                      const isChecked = selectedGroups.has(groupKey);
+
                       return (
                         <label
-                          key={groupName}
+                          key={groupKey}
                           className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
                         >
                           <input
                             type="checkbox"
-                            checked={selectedGroups.has(groupName)}
-                            onChange={() => onGroupToggle(groupName)}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              onGroupToggle(groupKey);
+                            }}
                             className="w-3.5 h-3.5"
                           />
                           <span className="text-xs flex-1">{groupName}</span>

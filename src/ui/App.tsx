@@ -40,8 +40,6 @@ export function App() {
   // Handle plugin messages
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
-      console.log('[UI] data-loaded received:', msg.collections?.length, 'collections,', msg.variables?.length, 'variables');
-      console.log('[UI] Collections with modes:', msg.collections);
       setData(msg.collections || [], msg.variables || [], msg.shadeGroups || []);
       setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },

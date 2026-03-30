@@ -5,14 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"tsc --watch --project tsconfig.plugin.json\"",
-    "dev:build": "concurrently \"vite build --watch\" \"tsc --watch --project tsconfig.plugin.json\"",
     "build": "vite build && tsc --project tsconfig.plugin.json",
-    "build:ui": "vite build",
-    "build:plugin": "tsc --project tsconfig.plugin.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui",
     "verify": "npm run build && npm test"
   },
   "author": "Marko Krstic",

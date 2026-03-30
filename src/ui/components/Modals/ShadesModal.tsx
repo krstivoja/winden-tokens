@@ -130,6 +130,7 @@ export function ShadesModal() {
   } = useAppContext();
   const isOpen = !!modals.shadesModal;
   const preSelectedGroup = modals.shadesModal?.groupName || '';
+  const targetModeId = modals.shadesModal?.modeId || null;
 
   const [sourceColorId, setSourceColorId] = useState('');
   const [groupName, setGroupName] = useState('');
@@ -440,11 +441,12 @@ export function ShadesModal() {
 
   // Handle generation
   const handleGenerate = () => {
-    if (!groupName || !baseColor || !selectedCollectionId || generatedShades.length === 0) return;
+    if (!groupName || !baseColor || !selectedCollectionId || !targetModeId || generatedShades.length === 0) return;
 
     post({
       type: 'update-shades',
       collectionId: selectedCollectionId,
+      modeId: targetModeId,
       deleteIds: existingShadeIds,
       shades: generatedShades,
       source: {
@@ -467,11 +469,12 @@ export function ShadesModal() {
   };
 
   const handleRemove = () => {
-    if (!groupName || existingShadeIds.length === 0 || !selectedCollectionId) return;
+    if (!groupName || existingShadeIds.length === 0 || !selectedCollectionId || !targetModeId) return;
 
     post({
       type: 'remove-shades',
       collectionId: selectedCollectionId,
+      modeId: targetModeId,
       deleteIds: existingShadeIds,
       source: {
         id: selectedSourceVariable?.id,

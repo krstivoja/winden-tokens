@@ -105,8 +105,8 @@ export const TableRow = memo(function TableRow({
 
   const handleShadesClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    openShadesModal({ groupName: variable.name });
-  }, [openShadesModal, variable.name]);
+    openShadesModal({ groupName: variable.name, modeId: selectedModeId });
+  }, [openShadesModal, variable.name, selectedModeId]);
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

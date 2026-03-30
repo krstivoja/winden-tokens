@@ -5,7 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import { GroupedGraph } from './GroupedGraph';
 
 export function RelationshipsView() {
-  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
+  const { variables, selectedCollectionIds } = useAppContext();
 
   // Count stats - filter by selected collections (all types)
   const filteredVars = variables.filter(v => selectedCollectionIds.has(v.collectionId));
@@ -19,13 +19,7 @@ export function RelationshipsView() {
 
   return (
     <div className="relative w-full h-full">
-      <GroupedGraph
-        collections={collections}
-        variables={variables}
-        selectedCollectionIds={selectedCollectionIds}
-        shadeGroups={shadeGroups}
-        selectedModeId={selectedModeId}
-      />
+      <GroupedGraph />
 
       {/* Stats overlay */}
       <div className="absolute bottom-3 left-3 z-[5] flex gap-3 px-3 py-2 bg-base border border-border rounded text-[11px] opacity-80">
@@ -42,8 +36,8 @@ export function RelationshipsView() {
 
       {/* Empty state */}
       {filteredVars.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center z-[1]">
-          <p className="text-sm opacity-50">No variables in selected collections</p>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[1]">
+          <p className="text-sm text-text opacity-50">No variables in selected collections</p>
         </div>
       )}
     </div>

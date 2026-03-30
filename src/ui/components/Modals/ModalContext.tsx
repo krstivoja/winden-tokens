@@ -28,6 +28,7 @@ interface BulkEditConfig {
 
 interface ShadesModalConfig {
   groupName: string;
+  modeId: string | null;
 }
 
 interface StepsModalConfig {

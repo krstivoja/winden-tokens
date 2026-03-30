@@ -18,6 +18,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { CollectionData, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
+import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -31,7 +32,6 @@ import { Input } from '../common/Input/Input';
 
 // Import from extracted files
 import {
-  GroupedGraphProps,
   GroupNodeData,
   CustomEdgeData,
   GroupData,
@@ -87,13 +87,8 @@ const edgeTypes: EdgeTypes = {
 
 // ── Inner component (needs ReactFlowProvider context) ──────────────
 
-function GroupedGraphInner({
-  collections,
-  variables,
-  selectedCollectionIds,
-  shadeGroups,
-  selectedModeId,
-}: GroupedGraphProps) {
+function GroupedGraphInner() {
+  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
   const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
 
@@ -117,19 +112,16 @@ function GroupedGraphInner({
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   const reactFlowInstance = useReactFlow();
 
-  // Collection filter state - initialize with all collections from context
-  const [localSelectedCollections, setLocalSelectedCollections] = useState<Set<string>>(selectedCollectionIds);
-
-  // Type filter state - all types selected by default
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']));
-
-  // Group filter state - all groups selected by default
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
-
-  // Sync local collection state when prop changes
-  useEffect(() => {
-    setLocalSelectedCollections(selectedCollectionIds);
-  }, [selectedCollectionIds]);
+  // Get filter state from context
+  const {
+    setSelectedModeId: setGlobalModeId,
+    selectedVariableTypes: selectedTypes,
+    selectedCollectionIds: localSelectedCollections,
+    selectedGroups,
+    toggleVariableType,
+    toggleCollection,
+    toggleSelectedGroup,
+  } = useAppContext();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<GroupNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<CustomEdgeData>>([]);
@@ -148,49 +140,22 @@ function GroupedGraphInner({
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
 
-  // Get setSelectedModeId from context to update global mode
-  const { setSelectedModeId: setGlobalModeId } = useAppContext();
-
   // Sidebar handlers
   const handleModeChange = useCallback((modeId: string) => {
     setGlobalModeId(modeId);
   }, [setGlobalModeId]);
 
   const handleCollectionToggle = useCallback((collectionId: string) => {
-    setLocalSelectedCollections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(collectionId)) {
-        newSet.delete(collectionId);
-      } else {
-        newSet.add(collectionId);
-      }
-      return newSet;
-    });
-  }, []);
+    toggleCollection(collectionId);
+  }, [toggleCollection]);
 
   const handleTypeToggle = useCallback((type: string) => {
-    setSelectedTypes(prev => {
-      const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
-      }
-      return next;
-    });
-  }, []);
+    toggleVariableType(type);
+  }, [toggleVariableType]);
 
   const handleGroupToggle = useCallback((groupName: string) => {
-    setSelectedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
-    });
-  }, []);
+    toggleSelectedGroup(groupName);
+  }, [toggleSelectedGroup]);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
     event.stopPropagation();
@@ -272,12 +237,12 @@ function GroupedGraphInner({
   const handleGeneratorOpen = useCallback((group: GroupData, node: VariableNode) => {
     if (group.kind === 'shader' && node.virtualType === 'shader' && group.sourceGroupName) {
       if (isColorType) {
-        openShadesModal({ groupName: group.sourceGroupName });
+        openShadesModal({ groupName: group.sourceGroupName, modeId: selectedModeId });
       } else {
         openStepsModal({ groupName: group.sourceGroupName, collectionId: group.collectionId });
       }
     }
-  }, [isColorType, openShadesModal, openStepsModal]);
+  }, [isColorType, openShadesModal, openStepsModal, selectedModeId]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
@@ -402,20 +367,6 @@ function GroupedGraphInner({
       },
     });
   }, [isColorType, openInputModal, localSelectedCollections, variableType]);
-
-  // Initialize selectedGroups with all available groups on first render
-  React.useEffect(() => {
-    if (selectedGroups.size === 0 && variables.length > 0) {
-      const allGroups = new Set<string>();
-      variables.forEach(v => {
-        const parts = v.name.split('/');
-        if (parts.length > 1) {
-          allGroups.add(parts[0]);
-        }
-      });
-      setSelectedGroups(allGroups);
-    }
-  }, [variables, selectedGroups.size]);
 
   // Compute groups and connections from ALL variables (filtering applied at render time)
   const { groupsData, connectionData, variableMap } = useMemo(() => {
@@ -753,25 +704,27 @@ function GroupedGraphInner({
       }
 
       // Group filter - check if group belongs to a selected group prefix
-      // IMPORTANT: Shader/palette groups should always be visible if their source group is visible
-      if (!isHidden && selectedGroups.size > 0) {
-        // For shader/shades groups, check if the source variable's group is selected
+      if (!isHidden) {
+        let hasMatchingGroup = false;
+
         if (group.kind === 'shader' || group.kind === 'shades') {
-          // Always show shader and shades groups - they're managed and tied to their source
-          // The source group filter will control the entire managed block visibility
-        } else {
-          const hasMatchingGroup = group.variables.some(v => {
-            if (v.isVirtual) return true; // Virtual nodes always pass group filter
-            const parts = v.name.split('/');
-            if (parts.length > 1) {
-              const groupName = parts[0];
-              return selectedGroups.has(groupName);
-            }
-            return true; // Ungrouped variables always pass
-          });
-          if (!hasMatchingGroup) {
-            isHidden = true;
+          if (group.sourceGroupName) {
+            hasMatchingGroup = selectedGroups.has(
+              getCollectionGroupKey(group.collectionId, group.sourceGroupName)
+            );
           }
+        } else {
+          hasMatchingGroup = group.variables.some(v => {
+            if (v.isVirtual) return false;
+            return isVariableVisibleForGroupFilters(
+              { collectionId: group.collectionId, name: v.name },
+              selectedGroups
+            );
+          });
+        }
+
+        if (!hasMatchingGroup) {
+          isHidden = true;
         }
       }
       // Determine type based on first non-virtual variable in the group
@@ -1053,10 +1006,10 @@ function GroupedGraphInner({
 
 // ── Exported component with ReactFlowProvider ──────────────────────
 
-export function GroupedGraph(props: GroupedGraphProps) {
+export function GroupedGraph() {
   return (
     <ReactFlowProvider>
-      <GroupedGraphInner {...props} />
+      <GroupedGraphInner />
     </ReactFlowProvider>
   );
 }

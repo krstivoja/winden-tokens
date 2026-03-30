@@ -2025,9 +2025,6 @@ async function buildUiState(): Promise<UIState> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const variables = await figma.variables.getLocalVariablesAsync();
 
-  console.log('[Plugin] Collections:', collections.map(c => ({ name: c.name, variableIds: c.variableIds })));
-  console.log('[Plugin] Variables from API:', variables.map(v => v.name));
-
   const collectionData: CollectionData[] = collections.map(c => ({
     id: c.id,
     name: c.name,
@@ -2063,7 +2060,6 @@ async function buildUiState(): Promise<UIState> {
   }
 
   variableData = sortVariableData(variableData);
-  console.log('[Plugin] Variables after collection order:', variableData.map(v => v.name));
 
   const formattedValueMap = new Map(variableData.map(variable => [variable.id, variable.value]));
   const shadeGroups = buildShadeGroups(variables, formattedValueMap);
@@ -2088,8 +2084,6 @@ async function fetchData() {
   const { collectionData, variableData, shadeGroups, hash } = await buildUiState();
 
   lastDataHash = hash;
-
-  console.log('[Plugin] Sending data-loaded with', collectionData.length, 'collections,', variableData.length, 'variables and', shadeGroups.length, 'shade groups');
   figma.ui.postMessage({
     type: 'data-loaded',
     collections: collectionData,
@@ -2597,21 +2591,16 @@ async function deleteVariable(id: string) {
 // Delete ALL variables and collections
 async function deleteAllVariables() {
   try {
-    console.log('[Plugin] Deleting all variables and collections...');
-
     // Get all collections
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    console.log(`[Plugin] Found ${collections.length} collections to delete`);
 
     // Delete all collections (this will delete all variables in them)
     for (const collection of collections) {
-      console.log(`[Plugin] Deleting collection: ${collection.name}`);
       collection.remove();
     }
 
     await fetchData();
     figma.ui.postMessage({ type: 'update-success' });
-    console.log('[Plugin] All variables and collections deleted');
   } catch (error: any) {
     console.error('[Plugin] Error deleting all variables:', error);
     figma.ui.postMessage({ type: 'update-error', error: error.message });
@@ -2633,8 +2622,6 @@ function hexToRgb(hex: string): { r: number; g: number; b: number; a: number } {
 // Import preset tokens
 async function importPreset(presetName: string) {
   try {
-    console.log(`[Plugin] Importing preset: ${presetName}`);
-
     if (presetName === 'tailwind-complete') {
       // Import ALL Tailwind tokens in separate collections
       const presets = ['tailwind', 'tailwind-spacing', 'tailwind-width', 'tailwind-typography', 'tailwind-screens'];
@@ -2859,7 +2846,6 @@ async function importPreset(presetName: string) {
 
     await fetchData();
     figma.ui.postMessage({ type: 'update-success' });
-    console.log(`[Plugin] Preset ${presetName} imported`);
   } catch (error: any) {
     console.error('[Plugin] Error importing preset:', error);
     figma.ui.postMessage({ type: 'update-error', error: error.message });
@@ -3267,6 +3253,7 @@ async function createShades(
 // Update color shades (update existing, delete extras, create new ones as needed)
 async function updateShades(
   collectionId: string,
+  modeId: string,
   deleteIds: string[],
   shades: { name: string; value: string }[],
   source?: ShadeSourceInput,
@@ -3276,7 +3263,6 @@ async function updateShades(
     const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
     if (!collection) throw new Error('Collection not found');
 
-    const modeId = collection.modes[0].modeId;
     const sourceVariable = source
       ? await upsertShadeSourceVariable(collection, modeId, source)
       : null;
@@ -3292,6 +3278,7 @@ async function updateShades(
 // Remove shades and keep the source color
 async function removeShades(
   collectionId: string,
+  modeId: string,
   deleteIds: string[],
   source?: ShadeSourceInput
 ) {
@@ -3299,7 +3286,6 @@ async function removeShades(
     const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
     if (!collection) throw new Error('Collection not found');
 
-    const modeId = collection.modes[0].modeId;
     const sourceVariable = source
       ? await upsertShadeSourceVariable(collection, modeId, source)
       : null;
@@ -3857,11 +3843,9 @@ void (async () => {
 figma.ui.onmessage = async (msg: any) => {
   switch (msg.type) {
     case 'refresh':
-      console.log('[Plugin] Refresh received');
       setVariableOrder([]); // Clear custom order on refresh to match Figma's order
       await fetchData();
       await resetHistory();
-      console.log('[Plugin] Refresh complete');
       break;
 
     case 'create-collection':
@@ -3929,11 +3913,11 @@ figma.ui.onmessage = async (msg: any) => {
       break;
 
     case 'update-shades':
-      await runMutationWithHistory(() => updateShades(msg.collectionId, msg.deleteIds, msg.shades, msg.source, msg.config));
+      await runMutationWithHistory(() => updateShades(msg.collectionId, msg.modeId, msg.deleteIds, msg.shades, msg.source, msg.config));
       break;
 
     case 'remove-shades':
-      await runMutationWithHistory(() => removeShades(msg.collectionId, msg.deleteIds, msg.source));
+      await runMutationWithHistory(() => removeShades(msg.collectionId, msg.modeId, msg.deleteIds, msg.source));
       break;
 
     case 'create-steps':
