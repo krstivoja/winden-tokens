@@ -451,6 +451,7 @@ function GroupedGraphInner({
       const managedShades = typeVars
         .filter(v => shadeGroup.deleteIds.includes(v.id) && v.id !== sourceVariable.id)
         .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+
       const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true, collections, selectedModeId));
       const shaderNode = createShaderNode(shadeGroup, sourceColor);
       const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
@@ -748,18 +749,25 @@ function GroupedGraphInner({
       }
 
       // Group filter - check if group belongs to a selected group prefix
+      // IMPORTANT: Shader/palette groups should always be visible if their source group is visible
       if (!isHidden && selectedGroups.size > 0) {
-        const hasMatchingGroup = group.variables.some(v => {
-          if (v.isVirtual) return true; // Virtual nodes always pass group filter
-          const parts = v.name.split('/');
-          if (parts.length > 1) {
-            const groupName = parts[0];
-            return selectedGroups.has(groupName);
+        // For shader/shades groups, check if the source variable's group is selected
+        if (group.kind === 'shader' || group.kind === 'shades') {
+          // Always show shader and shades groups - they're managed and tied to their source
+          // The source group filter will control the entire managed block visibility
+        } else {
+          const hasMatchingGroup = group.variables.some(v => {
+            if (v.isVirtual) return true; // Virtual nodes always pass group filter
+            const parts = v.name.split('/');
+            if (parts.length > 1) {
+              const groupName = parts[0];
+              return selectedGroups.has(groupName);
+            }
+            return true; // Ungrouped variables always pass
+          });
+          if (!hasMatchingGroup) {
+            isHidden = true;
           }
-          return true; // Ungrouped variables always pass
-        });
-        if (!hasMatchingGroup) {
-          isHidden = true;
         }
       }
       // Determine type based on first non-virtual variable in the group
