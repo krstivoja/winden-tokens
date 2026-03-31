@@ -4,15 +4,8 @@ import React, { useState } from 'react';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { TextButton } from '../common/Button';
-import { Select } from '../common/Select';
-import type { ThemeMode } from '../../App';
 
-interface SettingsViewProps {
-  themeMode: ThemeMode;
-  onThemeModeChange: (themeMode: ThemeMode) => void;
-}
-
-export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps) {
+export function SettingsView() {
   const { collections, variables } = useAppContext();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -37,36 +30,6 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
 
   return (
     <div className="flex flex-col gap-8 p-6 max-w-2xl mx-auto">
-      {/* Appearance Section */}
-      <div className="flex flex-col gap-4">
-        <h3 className="text-lg font-bold text-text">Appearance</h3>
-        <p className="text-sm text-text/60 leading-relaxed">
-          Follow Figma automatically, or force a light or dark UI theme for this plugin.
-        </p>
-
-        <div className="flex flex-col gap-2 mt-1">
-          <label className="text-sm font-semibold text-text" htmlFor="theme-mode-select">
-            Theme
-          </label>
-          <Select
-            id="theme-mode-select"
-            value={themeMode}
-            onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
-          >
-            <Select.Option value="figma">Follow Figma</Select.Option>
-            <Select.Option value="light">Light</Select.Option>
-            <Select.Option value="dark">Dark</Select.Option>
-          </Select>
-        </div>
-
-        <p className="text-sm text-text/60 leading-relaxed">
-          Follow Figma uses the editor theme passed into the plugin via `themeColors`.
-        </p>
-      </div>
-
-      {/* Divider */}
-      <div className="border-t border-border" />
-
       {/* Danger Zone Section */}
       <div className="flex flex-col gap-4">
         <h3 className="text-lg font-bold text-text">Danger Zone</h3>
@@ -99,11 +62,13 @@ export function SettingsView({ themeMode, onThemeModeChange }: SettingsViewProps
 
         <div className="flex flex-col gap-3">
           <TextButton
+            variant="outline"
             onClick={() => handleImportPreset('tailwind-complete')}
           >
             Import Tailwind CSS
           </TextButton>
           <TextButton
+            variant="outline"
             onClick={() => handleImportPreset('basic')}
           >
             Import Basic Tokens

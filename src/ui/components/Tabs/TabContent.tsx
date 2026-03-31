@@ -4,16 +4,13 @@ import { TableView } from '../Table/TableView';
 import { JsonEditor } from './JsonEditor';
 import { RelationshipsView } from '../Relationships/RelationshipsView';
 import { SettingsView } from './SettingsView';
-import type { ThemeMode } from '../../App';
 
 interface TabContentProps {
   activeTab: TabId;
   status: { message: string; type: string };
-  themeMode: ThemeMode;
-  onThemeModeChange: (mode: ThemeMode) => void;
 }
 
-export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: TabContentProps) {
+export function TabContent({ activeTab, status }: TabContentProps) {
   const renderContent = () => {
     switch (activeTab) {
       case 'table':
@@ -23,12 +20,7 @@ export function TabContent({ activeTab, status, themeMode, onThemeModeChange }: 
       case 'relationships':
         return <RelationshipsView />;
       case 'settings':
-        return (
-          <SettingsView
-            themeMode={themeMode}
-            onThemeModeChange={onThemeModeChange}
-          />
-        );
+        return <SettingsView />;
       default:
         return null;
     }

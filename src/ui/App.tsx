@@ -15,20 +15,12 @@ import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
 
 export type ActiveTab = TabId;
-export type ThemeMode = 'figma' | 'light' | 'dark';
-
-const THEME_MODE_STORAGE_KEY = 'winden-theme-mode';
-function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'figma' || value === 'light' || value === 'dark';
-}
 
 export function App() {
   const { setData } = useAppContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('table');
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: '', type: '' });
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
-  const [themeMode, setThemeMode] = useState<ThemeMode>('figma');
-  const [themeModeHydrated, setThemeModeHydrated] = useState(false);
 
   const showStatus = useCallback((message: string, type: string) => {
     setStatus({ message, type });
@@ -64,39 +56,13 @@ export function App() {
     'changes-detected': () => {
       showStatus('Changes detected - click Refresh', 'warning');
     },
-    'client-storage-data': (msg: any) => {
-      if (msg.key !== THEME_MODE_STORAGE_KEY) {
-        return;
-      }
-
-      setThemeMode(isThemeMode(msg.value) ? msg.value : 'figma');
-      setThemeModeHydrated(true);
-    },
   }), [setData, showStatus]);
 
   usePluginMessages(messageHandlers());
 
   useEffect(() => {
     post({ type: 'get-history-state' });
-    post({ type: 'get-client-storage', key: THEME_MODE_STORAGE_KEY });
   }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (themeMode === 'figma') {
-      root.removeAttribute('data-theme-mode');
-    } else {
-      root.setAttribute('data-theme-mode', themeMode);
-    }
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (!themeModeHydrated) {
-      return;
-    }
-
-    post({ type: 'set-client-storage', key: THEME_MODE_STORAGE_KEY, value: themeMode });
-  }, [themeMode, themeModeHydrated]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -147,8 +113,6 @@ export function App() {
       <TabContent
         activeTab={activeTab}
         status={status}
-        themeMode={themeMode}
-        onThemeModeChange={setThemeMode}
       />
 
       {/* Modals */}

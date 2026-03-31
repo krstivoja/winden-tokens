@@ -12,6 +12,7 @@
     --color-secondary: var(--color-purple-500);
     --color-danger: var(--color-red-500);
     --color-success: var(--color-green-500);
+    --color-highlight: white;
 
     --color-text: black;
     --color-base: white;
