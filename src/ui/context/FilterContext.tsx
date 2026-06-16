@@ -38,6 +38,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 
   // Track if filters have been initialized
   const hasInitialized = React.useRef(false);
+  const knownGroupKeysRef = React.useRef<Set<string>>(new Set());
 
   // Initialize filters when data is first loaded
   useEffect(() => {
@@ -60,6 +61,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       }
     });
     groupFilter.setItems(groups);
+    knownGroupKeysRef.current = groups;
 
     // Initialize selectedModeId with first mode of first collection
     const availableModes = collections.flatMap(collection => collection.modes);
@@ -70,6 +72,34 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collections, variables]);
+
+  // Auto-select any group created after the initial load (e.g. via "New Group")
+  // so it shows up in the Relationships view without an extra manual click.
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      return;
+    }
+
+    const currentGroupKeys = new Set<string>();
+    variables.forEach(v => {
+      const groupName = getVariableGroupName(v.name);
+      if (groupName) {
+        currentGroupKeys.add(getCollectionGroupKey(v.collectionId, groupName));
+      }
+    });
+
+    const newKeys = Array.from(currentGroupKeys).filter(key => !knownGroupKeysRef.current.has(key));
+    if (newKeys.length > 0) {
+      groupFilter.setItems(prev => {
+        const next = new Set(prev);
+        newKeys.forEach(key => next.add(key));
+        return next;
+      });
+    }
+
+    knownGroupKeysRef.current = currentGroupKeys;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variables]);
 
   const setSearchQuery = useCallback((query: string) => {
     setSearchQueryState(query.toLowerCase().trim());
