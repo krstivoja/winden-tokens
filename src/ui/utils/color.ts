@@ -4,6 +4,7 @@ export interface RGB {
   r: number;
   g: number;
   b: number;
+  a?: number;
 }
 
 export interface HSV {
@@ -33,16 +34,23 @@ export function hexToRgb(hex: string): string {
 }
 
 export function hexToRgbObj(hex: string): RGB {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})?$/i.exec(hex);
   return m
-    ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+    ? {
+        r: parseInt(m[1], 16),
+        g: parseInt(m[2], 16),
+        b: parseInt(m[3], 16),
+        ...(m[4] !== undefined ? { a: parseInt(m[4], 16) / 255 } : {}),
+      }
     : { r: 0, g: 0, b: 0 };
 }
 
 export function rgbObjToHex(rgb: RGB): string {
-  return '#' + [rgb.r, rgb.g, rgb.b]
+  const hex = '#' + [rgb.r, rgb.g, rgb.b]
     .map(x => Math.round(x).toString(16).padStart(2, '0'))
     .join('');
+  if (rgb.a === undefined || rgb.a >= 1) return hex;
+  return hex + Math.round(rgb.a * 255).toString(16).padStart(2, '0');
 }
 
 export function hsvToRgb(h: number, s: number, v: number): RGB {
@@ -200,12 +208,13 @@ export function parseColorToRgb(color: string): RGB | null {
   }
 
   // Handle rgb/rgba
-  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
   if (rgbMatch) {
     return {
       r: parseInt(rgbMatch[1]),
       g: parseInt(rgbMatch[2]),
       b: parseInt(rgbMatch[3]),
+      ...(rgbMatch[4] !== undefined ? { a: parseFloat(rgbMatch[4]) } : {}),
     };
   }
 

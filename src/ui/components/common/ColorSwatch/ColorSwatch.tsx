@@ -9,13 +9,15 @@ export interface ColorSwatchProps {
   color: string;
   onClick?: (e: React.MouseEvent) => void;
   className?: string;
+  title?: string;
 }
 
-export function ColorSwatch({ color, onClick, className = '' }: ColorSwatchProps) {
+export function ColorSwatch({ color, onClick, className = '', title }: ColorSwatchProps) {
   return (
     <div
       className={`bg-checkerboard w-5 h-5 rounded border border-border ${onClick ? 'cursor-pointer' : ''} relative overflow-hidden shrink-0 ${className}`}
       onClick={onClick}
+      title={title}
     >
       <div
         className="absolute inset-0"

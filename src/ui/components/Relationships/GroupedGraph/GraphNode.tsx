@@ -6,6 +6,7 @@ import type { NodeProps, Node } from '@xyflow/react';
 import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../common/Button/IconButton/IconButton';
 import { Dropdown } from '../../common/Dropdown/Dropdown';
+import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { GroupNodeData } from './types';
 import { GraphHandle } from './GraphHandle';
 import {
@@ -125,10 +126,10 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
               {/* Color swatch */}
               {node.resolvedType === 'COLOR' && !node.isVirtual && (
-                <div
-                  className="absolute left-3.5 w-4.5 h-4.5 rounded border border-border cursor-pointer transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
-                  style={{ background: node.color }}
+                <ColorSwatch
+                  color={node.color}
                   onClick={(e) => onShowColorMenu(e, node)}
+                  className="absolute left-3.5 w-4.5 h-4.5 transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
                   title="Edit color"
                 />
               )}
