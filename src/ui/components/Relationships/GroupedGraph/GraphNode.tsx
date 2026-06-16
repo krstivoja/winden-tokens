@@ -126,12 +126,14 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
               {/* Color swatch */}
               {node.resolvedType === 'COLOR' && !node.isVirtual && (
-                <ColorSwatch
-                  color={node.color}
-                  onClick={(e) => onShowColorMenu(e, node)}
-                  className="absolute left-3.5 w-4.5 h-4.5 transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
-                  title="Edit color"
-                />
+                <div className="absolute left-3.5">
+                  <ColorSwatch
+                    color={node.color}
+                    onClick={(e) => onShowColorMenu(e, node)}
+                    className="w-4.5 h-4.5 transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
+                    title="Edit color"
+                  />
+                </div>
               )}
 
               {/* Virtual badge */}

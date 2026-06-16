@@ -53,9 +53,6 @@ export function App() {
     'history-error': (msg: any) => {
       showStatus(msg.error, 'warning');
     },
-    'changes-detected': () => {
-      showStatus('Changes detected - click Refresh', 'warning');
-    },
   }), [setData, showStatus]);
 
   usePluginMessages(messageHandlers());

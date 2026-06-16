@@ -3821,7 +3821,8 @@ async function checkForChanges() {
   const { hash: currentHash } = await buildUiState();
 
   if (lastDataHash && currentHash !== lastDataHash) {
-    figma.ui.postMessage({ type: 'changes-detected' });
+    await fetchData();
+    await resetHistory();
   }
 }
 
