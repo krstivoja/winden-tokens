@@ -2,6 +2,7 @@
 
 import React, { ReactNode } from 'react';
 import { ShadesIcon, TypeIcons } from '../Icons';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 export interface ColorMenuOption {
   label: string;
@@ -29,56 +30,67 @@ export function ColorMenu({
   onReferenceColor,
   onClear,
   currentColor,
-  className = 'color-value-menu',
+  className = '',
   id,
 }: ColorMenuProps) {
-  // If custom options provided, use those
-  if (options) {
-    return (
-      <div
-        id={id}
-        className={`${className} open`}
-        style={{ top: position.top, left: position.left }}
-      >
-        {options.map((option, index) => (
-          <button
-            key={index}
-            onClick={option.onClick}
-            className={option.className}
-            style={option.style}
-          >
-            {option.icon && <span className="icon">{option.icon}</span>}
-            <span>{option.label}</span>
-          </button>
-        ))}
-      </div>
-    );
-  }
+  const menuClasses = `bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px] ${className}`;
 
-  // Default: standard Pick/Reference pattern
   return (
     <div
       id={id}
-      className={`${className} open`}
+      className={`${menuClasses} absolute z-50`}
       style={{ top: position.top, left: position.left }}
     >
-      {onClear && currentColor && (
-        <button onClick={onClear}>
-          <span className="contrast-item-swatch" style={{ background: currentColor }} />
-          <span>Clear</span>
-        </button>
-      )}
-      {onPickColor && (
-        <button onClick={onPickColor}>
-          <span className="icon"><ShadesIcon /></span>
-          <span>Pick Color</span>
-        </button>
-      )}
-      {onReferenceColor && (
-        <button onClick={onReferenceColor}>
-          <span className="icon">{TypeIcons.COLOR}</span>
-          <span>Reference Color</span>
-        </button>
+      {options ? (
+        options.map((option, index) => (
+          <button
+            key={index}
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left"
+            onClick={option.onClick}
+            style={option.style}
+          >
+            {option.icon && <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">{option.icon}</span>}
+            <span className="flex-1">{option.label}</span>
+          </button>
+        ))
+      ) : (
+        <>
+          {onClear && currentColor && (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left"
+              onClick={onClear}
+            >
+              <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">
+                <ColorSwatch color={currentColor} />
+              </span>
+              <span className="flex-1">Clear</span>
+            </button>
+          )}
+          {onPickColor && (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left"
+              onClick={onPickColor}
+            >
+              <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">
+                <ShadesIcon />
+              </span>
+              <span className="flex-1">Pick Color</span>
+            </button>
+          )}
+          {onReferenceColor && (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left"
+              onClick={onReferenceColor}
+            >
+              <span className="flex-shrink-0 flex items-center justify-center w-4 h-4">{TypeIcons.COLOR}</span>
+              <span className="flex-1">Reference Color</span>
+            </button>
+          )}
+        </>
       )}
     </div>
   );

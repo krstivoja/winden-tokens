@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '../components/common/IconButton/IconButton';
+import type { Meta, StoryObj } from '../components/common/IconButton';
 import { IconButton } from '../components/common/IconButton/IconButton';
 
 const meta = {

@@ -1,14 +1,18 @@
 // Group header component
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, ChevronDownIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
+import { TypeIcon, ExpandAllIcon, CollapseAllIcon, EditIcon, TrashIcon, ShadesIcon, StepsIcon, RefreshIcon } from '../Icons';
+import { IconButton } from '../common/Button';
+import { IconTextButton } from '../common/Button/Button';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ContrastPicker } from './ContrastPicker';
 import { GroupCollectionCell } from './GroupCollectionCell';
 import { refreshManagedShadeGroup } from '../../utils/shadeActions';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 interface GroupHeaderProps {
   groupName: string;
@@ -24,10 +28,9 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     variables: allVariables,
     selectedCollectionId,
     getShadeGroupByGroupName,
+    selectedModeId,
   } = useAppContext();
   const { openBulkEdit, openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
-  const [showContrastPicker, setShowContrastPicker] = useState(false);
-  const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
 
   const groupIds = variables.map(v => v.id);
   const groupType = variables[0]?.resolvedType || 'STRING';
@@ -75,15 +78,7 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
     }
   }, [groupIds, groupName, shadeGroup, sourceVariable]);
 
-  const handleContrastClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setContrastPickerPosition({ top: rect.bottom + 4, left: rect.left });
-    setShowContrastPicker(true);
-  }, []);
-
   const handlePickContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorPicker({
       initialColor: contrastColor || '#ffffff',
       onConfirm: (color) => setGroupContrastColor(groupName, color),
@@ -91,7 +86,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   }, [openColorPicker, contrastColor, setGroupContrastColor, groupName]);
 
   const handleReferenceContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorReference({
       onConfirm: (variableId) => {
         const colorVar = colorVariables.find(v => v.id === variableId);
@@ -103,7 +97,6 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
   }, [openColorReference, colorVariables, setGroupContrastColor, groupName]);
 
   const handleClearContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     setGroupContrastColor(groupName, null);
   }, [setGroupContrastColor, groupName]);
 
@@ -117,121 +110,98 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
       }
     }
 
-    openShadesModal({ groupName });
-  }, [groupName, openShadesModal, shadeGroup, sourceVariable]);
+    openShadesModal({ groupName, modeId: selectedModeId });
+  }, [groupName, openShadesModal, shadeGroup, sourceVariable, selectedModeId]);
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     openStepsModal({ groupName, collectionId: variables[0]?.collectionId });
   }, [openStepsModal, groupName, variables]);
 
-  // Close picker when clicking outside
-  React.useEffect(() => {
-    if (!showContrastPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('#contrast-picker') && !target.closest('.group-contrast-trigger')) {
-        setShowContrastPicker(false);
-      }
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [showContrastPicker]);
-
   return (
     <tr
-      className={`group-row ${isCollapsed ? 'collapsed' : ''}`}
+      className={`group group-row ${isCollapsed ? 'collapsed' : ''}`}
       data-group={groupName}
     >
-      <td>
-        <div className="group-header">
+      <td className="border border-border px-3 py-2">
+        <div className="group-header flex items-center gap-2">
           <span className={`type-icon ${groupType}`}>
             <TypeIcon type={groupType} />
           </span>
-          <span onClick={handleToggle} style={{ flex: 1, cursor: 'pointer' }}>
+          <span onClick={handleToggle} className="flex-1 cursor-pointer">
             {groupName}
-            <span style={{ color: 'var(--text-dim)', fontWeight: 400, fontSize: '10px' }}>
+            <span className="text-text opacity-50 font-normal text-[10px]">
               {' '}({variables.length})
             </span>
           </span>
-          <span
-            className={`group-toggle ${isCollapsed ? 'collapsed' : ''}`}
+          <IconButton
+            icon={isCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}
             onClick={handleToggle}
-          >
-            <ChevronDownIcon />
-          </span>
+            aria-label={isCollapsed ? "Expand group" : "Collapse group"}
+          />
         </div>
       </td>
-      <td></td>
-      <td>
+      <td className="border border-border px-3 py-2">
+        <div className="flex items-center justify-end gap-2 h-full">
+          {groupType === 'COLOR' && (
+            <IconTextButton
+              icon={shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
+              onClick={handleShadesClick}
+              title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
+              className={shadeGroup?.status === 'dirty' ? 'dirty' : ''}
+            >
+              {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
+            </IconTextButton>
+          )}
+          {groupType === 'FLOAT' && (
+            <IconTextButton
+              icon={<StepsIcon />}
+              onClick={handleStepsClick}
+              title="Generate steps"
+            >
+              Steps
+            </IconTextButton>
+          )}
+        </div>
+      </td>
+      <td className="border border-border px-3 py-2">
         <GroupCollectionCell variables={variables} />
       </td>
-      <td className="accessibility-cell">
+      <td className="accessibility-cell border border-border px-3 py-2">
         {groupType === 'COLOR' && (
-          <div
-            className="group-contrast-trigger"
-            onClick={handleContrastClick}
-            title="Set contrast color for this group"
+          <OptionsDropdown
+            label={
+              <>
+                {contrastColor && (
+                  <ColorSwatch color={contrastColor} className="mr-1" />
+                )}
+                Contrast
+              </>
+            }
           >
-            {contrastColor && (
-              <span className="contrast-swatch" style={{ background: contrastColor }} />
-            )}
-            <span className="contrast-label">Contrast</span>
-            <span className="dropdown-arrow">▾</span>
-          </div>
-        )}
-        {showContrastPicker && (
-          <ContrastPicker
-            position={contrastPickerPosition}
-            contrastColor={contrastColor}
-            onPickColor={handlePickContrastColor}
-            onReferenceColor={handleReferenceContrastColor}
-            onClear={handleClearContrastColor}
-          />
+            <ContrastPicker
+              contrastColor={contrastColor}
+              onPickColor={handlePickContrastColor}
+              onReferenceColor={handleReferenceContrastColor}
+              onClear={handleClearContrastColor}
+            />
+          </OptionsDropdown>
         )}
       </td>
-      <td className="modifier-cell">
-        {groupType === 'COLOR' && (
-          <button
-            className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
-            onClick={handleShadesClick}
-            title={shadeGroup?.status === 'dirty' ? 'Refresh generated shades' : 'Generate shades'}
-          >
-            <span className="icon">
-              {shadeGroup?.status === 'dirty' ? <RefreshIcon /> : <ShadesIcon />}
-            </span>
-            {shadeGroup?.status === 'dirty' ? 'Refresh' : 'Shades'}
-          </button>
-        )}
-        {groupType === 'FLOAT' && (
-          <button
-            className="modifier-btn"
-            onClick={handleStepsClick}
-            title="Generate steps"
-          >
-            <span className="icon"><StepsIcon /></span>
-            Steps
-          </button>
-        )}
-      </td>
-      <td>
-        <div className="row-actions">
-          <button
-            className="row-action"
+      <td className="w-25 border border-border px-3 py-2">
+        <div className="row-actions flex gap-2">
+          <IconButton
+            icon={<EditIcon />}
             onClick={handleBulkEdit}
             title="Edit as text"
-            style={{ opacity: 0 }}
-          >
-            <EditIcon />
-          </button>
-          <button
-            className="row-action danger"
+            aria-label="Edit as text"
+          />
+          <IconButton
+            icon={<TrashIcon />}
             onClick={handleDeleteGroup}
             title="Delete group"
-            style={{ opacity: 0 }}
-          >
-            <TrashIcon />
-          </button>
+            aria-label="Delete group"
+          />
         </div>
       </td>
     </tr>

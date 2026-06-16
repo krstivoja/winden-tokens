@@ -4,8 +4,13 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { CloseIcon, TrashIcon, RefreshIcon } from '../Icons';
+import { TrashIcon, RefreshIcon } from '../Icons';
+import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
+import { Radio } from '../common/Radio';
+import { Select } from '../common/Select';
 import type { VariableData } from '../../types';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 const RATIO_PRESETS = [
   { value: '1.125', label: 'Minor Second (1.125)' },
@@ -444,117 +449,118 @@ export function StepsModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeStepsModal()}>
-      <div className="modal modal-steps">
-        <div className="modal-header">
-          <h3>Generate Number Steps</h3>
-          <button className="modal-close" onClick={closeStepsModal}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={isOpen} onClose={closeStepsModal}>
+      <ModalContainer width={600}>
+        <ModalHeader title="Generate Number Steps" onClose={closeStepsModal} />
+        <ModalBody>
           {!preSelectedGroup && (
-            <div className="form-group">
-              <label>Select Number Group</label>
-              <select
-                className="form-input"
+            <div className="flex flex-col gap-2 mb-4">
+              <label className="text-sm font-medium text-text">Select Number Group</label>
+              <Select
                 value={sourceNumberId}
                 onChange={handleSourceChange}
               >
-                <option value="">-- Select a group --</option>
+                <Select.Option value="">-- Select a group --</Select.Option>
                 {numberGroups.map(g => (
-                  <option key={g.name} value={g.name}>
+                  <Select.Option key={g.name} value={g.name}>
                     {g.name} ({g.count})
-                  </option>
+                  </Select.Option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
           {sourceNumberId && !selectedNumberGroup && (
-            <div className="empty-state">
+            <div className="text-sm text-text-secondary p-4 text-center">
               This number group is not available in the selected collection.
             </div>
           )}
 
           {sourceNumberId && selectedNumberGroup && (
-            <div className="steps-modal-content">
-              <div className="form-group">
-                <label>Base Reference</label>
-                <input
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-text">Base Reference</label>
+                <Input
                   type="text"
-                  className="form-input"
                   value={baseReferenceDisplay}
                   readOnly
+                  fullWidth
                 />
               </div>
 
-              <div className="form-group">
-                <label>Scale Ratio</label>
-                <div className="form-row">
-                  <select
-                    className="form-input"
-                    value={ratioPreset}
-                    onChange={handleRatioPresetChange}
-                  >
-                    {RATIO_PRESETS.map(p => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={customRatio}
-                    onChange={e => setCustomRatio(parseFloat(e.target.value) || 1)}
-                    min={1}
-                    step={0.001}
-                    style={{ width: 80 }}
-                    disabled={ratioPreset !== 'custom'}
-                  />
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-text">Scale Ratio</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Select
+                      value={ratioPreset}
+                      onChange={handleRatioPresetChange}
+                    >
+                      {RATIO_PRESETS.map(p => (
+                        <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
+                      ))}
+                    </Select>
+                  </div>
+                  {ratioPreset === 'custom' && (
+                    <Input
+                      type="number"
+                      value={customRatio}
+                      onChange={e => setCustomRatio(parseFloat(e.target.value) || 1)}
+                      min={1}
+                      step={0.001}
+                      style={{ width: 80 }}
+                    />
+                  )}
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>Steps</label>
-                <select
-                  className="form-input"
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-text">Steps</label>
+                <Select
                   value={stepsPreset}
                   onChange={handleStepsPresetChange}
                 >
                   {STEPS_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
+                    <Select.Option key={p.value} value={p.value}>{p.label}</Select.Option>
                   ))}
-                </select>
+                </Select>
               </div>
 
-              <div className="form-group steps-list-section">
-                <div className="steps-table-header">
-                  <div className="steps-table-header-grid">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="grid gap-2" style={{ gridTemplateColumns: '20px 40px 1fr 120px 60px' }}>
                     <div />
-                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'center' }}>Base</label>
-                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500 }}>Label</label>
-                    <label style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, textAlign: 'right' }}>Value</label>
+                    <label className="text-xs text-text-secondary font-medium text-center m-0">Base</label>
+                    <label className="text-xs text-text-secondary font-medium m-0">Label</label>
+                    <label className="text-xs text-text-secondary font-medium text-right m-0">Value</label>
                     <div />
                   </div>
-                  <button
+                  <TextButton
                     type="button"
-                    className="btn btn-sm"
+                    size="sm"
                     onClick={handleAddStep}
-                    style={{ marginLeft: 8 }}
+                    className="ml-2"
                   >
                     + Add Step
-                  </button>
+                  </TextButton>
                 </div>
-                <div className="steps-editable-table">
+                <div className="flex flex-col gap-1 max-h-96 overflow-y-auto">
                   {editableSteps.map((step, index) => (
                     <div
                       key={index}
-                      className={`steps-editable-row ${step.name === baseStep ? 'base' : ''} ${draggedIndex === index ? 'dragging' : ''}`}
+                      className={`grid gap-2 items-center p-2 rounded border ${
+                        step.name === baseStep
+                          ? 'bg-primary/10 border-primary'
+                          : 'bg-base-2 border-border'
+                      } ${
+                        draggedIndex === index ? 'opacity-50' : ''
+                      }`}
+                      style={{ gridTemplateColumns: '20px 40px 1fr 120px 60px' }}
                       onDragOver={handleDragOver}
                       onDrop={e => handleDrop(e, index)}
                     >
                       <div
-                        className="drag-handle"
+                        className="flex items-center justify-center cursor-move text-text-secondary hover:text-text"
                         title="Drag to reorder"
                         draggable
                         onDragStart={e => handleDragStart(e, index)}
@@ -567,41 +573,41 @@ export function StepsModal() {
                           <circle cx="9" cy="9" r="1.5" />
                         </svg>
                       </div>
-                      <input
-                        type="radio"
-                        name="base-step"
-                        checked={step.name === baseStep}
-                        onChange={() => handleBaseStepChange(step.name)}
-                        className="base-radio"
-                      />
-                      <input
+                      <div className="flex justify-center">
+                        <Radio
+                          name="base-step"
+                          checked={step.name === baseStep}
+                          onChange={() => handleBaseStepChange(step.name)}
+                        />
+                      </div>
+                      <Input
                         type="text"
-                        className="step-label-input"
                         value={step.name}
                         onChange={e => handleStepNameChange(index, e.target.value)}
+                        fullWidth
                       />
                       {step.name === baseStep ? (
-                        <input
+                        <Input
                           type="text"
-                          className="step-value-input"
                           value={baseReferenceDisplay}
                           readOnly
                           title={`Resolved value: ${baseValue}`}
+                          fullWidth
                         />
                       ) : (
-                        <input
+                        <Input
                           type="number"
-                          className="step-value-input"
                           value={step.value}
                           onChange={e => handleStepValueChange(index, parseFloat(e.target.value) || 0)}
                           step="any"
+                          fullWidth
                         />
                       )}
-                      <div className="step-actions">
+                      <div className="flex items-center justify-end gap-1">
                         {isValueModified(index) && (
                           <button
                             type="button"
-                            className="step-reset-btn"
+                            className="inline-flex items-center justify-center rounded transition-colors bg-transparent text-text hover:bg-base-2 active:bg-base-3 w-6 h-6 text-sm p-0"
                             onClick={() => handleResetStepValue(index)}
                             title="Reset to calculated value"
                           >
@@ -610,7 +616,7 @@ export function StepsModal() {
                         )}
                         <button
                           type="button"
-                          className="step-delete-btn"
+                          className="inline-flex items-center justify-center rounded transition-colors bg-transparent text-text hover:bg-base-2 active:bg-base-3 w-6 h-6 text-sm p-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleDeleteStep(index)}
                           title="Delete step"
                           disabled={editableSteps.length <= 1}
@@ -624,24 +630,24 @@ export function StepsModal() {
               </div>
             </div>
           )}
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           {existingGroup && (
-            <button className="btn btn-danger" onClick={handleRemove}>
+            <TextButton variant="danger" onClick={handleRemove}>
               Remove Steps
-            </button>
+            </TextButton>
           )}
-          <div className="spacer" />
-          <button className="btn" onClick={closeStepsModal}>Cancel</button>
-          <button
-            className="btn btn-primary"
+          <div className="flex-1" />
+          <TextButton onClick={closeStepsModal}>Cancel</TextButton>
+          <TextButton
+            variant="primary"
             onClick={handleGenerate}
             disabled={!sourceNumberId || !groupName || !selectedNumberGroup || !targetCollectionId}
           >
             {existingGroup ? 'Update' : 'Generate'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </TextButton>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

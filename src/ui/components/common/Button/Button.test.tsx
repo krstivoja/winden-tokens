@@ -19,31 +19,31 @@ describe('Button', () => {
 
   describe('Variants', () => {
     it('applies primary variant class', () => {
-      const { container } = render(<Button variant="primary">Primary</Button>);
-      expect(container.querySelector('.btn-primary')).toBeInTheDocument();
+      render(<Button variant="primary">Primary</Button>);
+      expect(screen.getByText('Primary')).toHaveClass('bg-primary');
     });
 
     it('applies danger variant class', () => {
-      const { container } = render(<Button variant="danger">Delete</Button>);
-      expect(container.querySelector('.btn-danger')).toBeInTheDocument();
+      render(<Button variant="danger">Delete</Button>);
+      expect(screen.getByText('Delete')).toHaveClass('bg-danger');
     });
 
-    it('applies secondary variant by default', () => {
-      const { container } = render(<Button>Secondary</Button>);
-      expect(container.querySelector('.btn')).toBeInTheDocument();
-      expect(container.querySelector('.btn-primary')).not.toBeInTheDocument();
+    it('applies ghost variant by default', () => {
+      render(<Button>Secondary</Button>);
+      expect(screen.getByText('Secondary')).toHaveClass('bg-transparent');
+      expect(screen.getByText('Secondary')).not.toHaveClass('bg-primary');
     });
   });
 
   describe('Sizes', () => {
     it('applies small size class', () => {
-      const { container } = render(<Button size="sm">Small</Button>);
-      expect(container.querySelector('.btn-sm')).toBeInTheDocument();
+      render(<Button size="sm">Small</Button>);
+      expect(screen.getByText('Small')).toHaveClass('text-sm');
     });
 
     it('applies large size class', () => {
-      const { container } = render(<Button size="lg">Large</Button>);
-      expect(container.querySelector('.btn-lg')).toBeInTheDocument();
+      render(<Button size="lg">Large</Button>);
+      expect(screen.getByText('Large')).toHaveClass('text-lg');
     });
   });
 
@@ -114,8 +114,8 @@ describe('Button', () => {
 
   describe('Full Width', () => {
     it('applies full width class', () => {
-      const { container } = render(<Button fullWidth>Full Width</Button>);
-      expect(container.querySelector('.btn-full-width')).toBeInTheDocument();
+      render(<Button fullWidth>Full Width</Button>);
+      expect(screen.getByText('Full Width')).toHaveClass('w-full');
     });
   });
 });

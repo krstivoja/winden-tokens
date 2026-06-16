@@ -3,16 +3,22 @@
 import React, { useState, useCallback } from 'react';
 import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
 import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
+import { hexToRgb } from '../../utils/color';
+import { TextButton } from '../common/Button';
+import { InputTable } from './InputTable';
+import { ColorOptionsDropdown } from './ColorOptionsDropdown';
 
 interface ValueCellProps {
   variable: VariableData;
-  onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
+  modifierButton?: React.ReactNode;
 }
 
-export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
+export function ValueCell({ variable, modifierButton }: ValueCellProps) {
   const { collections, variables, selectedModeId } = useAppContext();
+  const { openColorPicker, openColorReference } = useModalContext();
 
   const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
 
@@ -39,6 +45,15 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
     setInputValue(currentValue);
   }, [currentValue]);
 
+  // Reusable input component
+  const valueInput = (
+    <InputTable
+      value={inputValue}
+      onChange={e => setInputValue(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+
   if (variable.resolvedType === 'COLOR') {
     // Check if this is a reference (format: {variableName})
     const refMatch = currentValue.match(/^\{(.+)\}$/);
@@ -54,56 +69,68 @@ export function ValueCell({ variable, onShowColorMenu }: ValueCellProps) {
       }
     }
 
+    const modeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
+
+    const handlePickColor = () => {
+      openColorPicker({
+        initialColor: currentValue,
+        onConfirm: (hex) => {
+          post({ type: 'update-variable-value', id: variable.id, value: hexToRgb(hex), modeId });
+        },
+      });
+    };
+
+    const handleReferenceColor = () => {
+      openColorReference({
+        currentVariableId: variable.id,
+        currentValue,
+        onSelect: (refName) => {
+          post({ type: 'update-variable-value', id: variable.id, value: `{${refName}}`, modeId });
+        },
+      });
+    };
+
     return (
-      <div className="color-value-cell">
-        <div
-          className="color-swatch"
-          onClick={(e) => onShowColorMenu(e, variable.id, currentValue)}
-        >
-          <div
-            className="color-swatch-inner"
-            style={{ background: displayColor }}
-          />
-        </div>
-        <input
-          className="cell-input mono"
-          value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          onBlur={handleBlur}
+      <div className="flex items-center gap-2 h-full">
+        <ColorOptionsDropdown
+          color={displayColor}
+          onPickColor={handlePickColor}
+          onReferenceColor={handleReferenceColor}
         />
+        {valueInput}
+        {modifierButton}
       </div>
     );
   }
 
   if (variable.resolvedType === 'BOOLEAN') {
     return (
-      <div className="cell">
-        <div className="bool-toggle">
-          <button
-            className={currentValue === 'true' ? 'active' : ''}
+      <div className="px-2.5 h-full flex items-center gap-2">
+        <div className="flex border border-border rounded overflow-hidden">
+          <TextButton
+            size="sm"
+            className={`rounded-none border-r border-border ${currentValue === 'true' ? 'bg-primary text-base' : 'bg-transparent'}`}
             onClick={() => handleValueChange('true')}
           >
             True
-          </button>
-          <button
-            className={currentValue === 'false' ? 'active' : ''}
+          </TextButton>
+          <TextButton
+            size="sm"
+            className={`rounded-none ${currentValue === 'false' ? 'bg-primary text-base' : 'bg-transparent'}`}
             onClick={() => handleValueChange('false')}
           >
             False
-          </button>
+          </TextButton>
         </div>
+        {modifierButton}
       </div>
     );
   }
 
   return (
-    <div className="value-cell">
-      <input
-        className="cell-input mono"
-        value={inputValue}
-        onChange={e => setInputValue(e.target.value)}
-        onBlur={handleBlur}
-      />
+    <div className="flex items-center h-full pl-2.5 gap-2">
+      {valueInput}
+      {modifierButton}
     </div>
   );
 }

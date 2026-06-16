@@ -2,11 +2,22 @@
 
 import React from 'react';
 import { RefreshIcon, ExpandIcon, CollapseIcon, UndoIcon, RedoIcon } from '../Icons';
+import { IconButton } from '../common/Button';
+import { TabButton } from './TabButton';
 import { post } from '../../hooks/usePluginMessages';
 
+const TABS = [
+  { id: 'table' as const, label: 'Table' },
+  { id: 'relationships' as const, label: 'Relationships' },
+  { id: 'json' as const, label: 'JSON' },
+  { id: 'settings' as const, label: 'Settings' },
+] as const;
+
+export type TabId = typeof TABS[number]['id'];
+
 interface TabBarProps {
-  activeTab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
-  onTabChange: (tab: 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings') => void;
+  activeTab: TabId;
+  onTabChange: (tab: TabId) => void;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -54,74 +65,53 @@ export function TabBar({ activeTab, onTabChange, canUndo, canRedo }: TabBarProps
   };
 
   return (
-    <div className="tabs">
-      <button
-        className={`tab ${activeTab === 'table' ? 'active' : ''}`}
-        onClick={() => onTabChange('table')}
-      >
-        Table
-      </button>
-      <button
-        className={`tab ${activeTab === 'node-colors' ? 'active' : ''}`}
-        onClick={() => onTabChange('node-colors')}
-      >
-        Node Colors
-      </button>
-      <button
-        className={`tab ${activeTab === 'node-numbers' ? 'active' : ''}`}
-        onClick={() => onTabChange('node-numbers')}
-      >
-        Node Numbers
-      </button>
-      <button
-        className={`tab ${activeTab === 'json' ? 'active' : ''}`}
-        onClick={() => onTabChange('json')}
-      >
-        JSON
-      </button>
-      <button
-        className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-        onClick={() => onTabChange('settings')}
-      >
-        Settings
-      </button>
-      <div className="spacer" />
-      <button
-        id="undo-btn"
-        className="btn btn-icon"
-        title="Undo (Ctrl/Cmd+Z)"
-        onClick={handleUndo}
-        disabled={!canUndo}
-      >
-        <span className="icon"><UndoIcon /></span>
-      </button>
-      <button
-        id="redo-btn"
-        className="btn btn-icon"
-        title="Redo (Ctrl/Cmd+Shift+Z)"
-        onClick={handleRedo}
-        disabled={!canRedo}
-      >
-        <span className="icon"><RedoIcon /></span>
-      </button>
-      <button
-        id="refresh-btn"
-        className="btn btn-icon"
-        title="Refresh"
-        onClick={handleRefresh}
-      >
-        <span className="icon"><RefreshIcon /></span>
-      </button>
-      <button
-        id="expand-btn"
-        className="btn btn-icon"
-        title={isExpanded ? 'Collapse' : 'Expand'}
-        onClick={handleToggleExpand}
-      >
-        <span className="icon">
-          {isExpanded ? <CollapseIcon /> : <ExpandIcon />}
-        </span>
-      </button>
+    <div className="tabs flex items-center justify-between border-b border-border">
+      <div>
+        {TABS.map((tab) => (
+          <TabButton
+            key={tab.id}
+            label={tab.label}
+            isActive={activeTab === tab.id}
+            onClick={() => onTabChange(tab.id)}
+          />
+        ))}
+
+      </div>
+
+      <div className="flex mr-4 gap-2">
+
+
+        <IconButton
+          id="undo-btn"
+          icon={<UndoIcon />}
+          onClick={handleUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/Cmd+Z)"
+          aria-label="Undo"
+        />
+        <IconButton
+          id="redo-btn"
+          icon={<RedoIcon />}
+          onClick={handleRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl/Cmd+Shift+Z)"
+          aria-label="Redo"
+        />
+        <IconButton
+          id="refresh-btn"
+          icon={<RefreshIcon />}
+          onClick={handleRefresh}
+          title="Refresh"
+          aria-label="Refresh"
+        />
+        <IconButton
+          id="expand-btn"
+          icon={isExpanded ? <CollapseIcon /> : <ExpandIcon />}
+          onClick={handleToggleExpand}
+          title={isExpanded ? 'Collapse' : 'Expand'}
+          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+        />
+      </div>
     </div>
   );
 }

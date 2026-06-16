@@ -3,35 +3,24 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
-import { TabBar } from './components/Tabs/TabBar';
-import { Toolbar } from './components/Toolbar/Toolbar';
-import { TableView } from './components/Table/TableView';
-import { JsonEditor } from './components/Tabs/JsonEditor';
+import { TabBar, type TabId } from './components/Tabs/TabBar';
+import { TabContent } from './components/Tabs/TabContent';
 import { ShadesModal } from './components/Modals/ShadesModal';
 import { StepsModal } from './components/Modals/StepsModal';
 import { InputModal } from './components/Modals/InputModal';
+import { AddVariableModal } from './components/Modals/AddVariableModal';
 import { ColorPickerModal } from './components/Modals/ColorPickerModal';
 import { ColorReferenceModal } from './components/Modals/ColorReferenceModal';
 import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
-import { RelationshipsView } from './components/Relationships/RelationshipsView';
-import { SettingsView } from './components/Tabs/SettingsView';
 
-export type ActiveTab = 'table' | 'json' | 'node-colors' | 'node-numbers' | 'settings';
-export type ThemeMode = 'figma' | 'light' | 'dark';
-
-const THEME_MODE_STORAGE_KEY = 'winden-theme-mode';
-function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'figma' || value === 'light' || value === 'dark';
-}
+export type ActiveTab = TabId;
 
 export function App() {
   const { setData } = useAppContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('table');
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: '', type: '' });
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
-  const [themeMode, setThemeMode] = useState<ThemeMode>('figma');
-  const [themeModeHydrated, setThemeModeHydrated] = useState(false);
 
   const showStatus = useCallback((message: string, type: string) => {
     setStatus({ message, type });
@@ -43,8 +32,6 @@ export function App() {
   // Handle plugin messages
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
-      console.log('[UI] data-loaded received:', msg.collections?.length, 'collections,', msg.variables?.length, 'variables');
-      console.log('[UI] Collections with modes:', msg.collections);
       setData(msg.collections || [], msg.variables || [], msg.shadeGroups || []);
       setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },
@@ -69,39 +56,13 @@ export function App() {
     'changes-detected': () => {
       showStatus('Changes detected - click Refresh', 'warning');
     },
-    'client-storage-data': (msg: any) => {
-      if (msg.key !== THEME_MODE_STORAGE_KEY) {
-        return;
-      }
-
-      setThemeMode(isThemeMode(msg.value) ? msg.value : 'figma');
-      setThemeModeHydrated(true);
-    },
   }), [setData, showStatus]);
 
   usePluginMessages(messageHandlers());
 
   useEffect(() => {
     post({ type: 'get-history-state' });
-    post({ type: 'get-client-storage', key: THEME_MODE_STORAGE_KEY });
   }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (themeMode === 'figma') {
-      root.removeAttribute('data-theme-mode');
-    } else {
-      root.setAttribute('data-theme-mode', themeMode);
-    }
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (!themeModeHydrated) {
-      return;
-    }
-
-    post({ type: 'set-client-storage', key: THEME_MODE_STORAGE_KEY, value: themeMode });
-  }, [themeMode, themeModeHydrated]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -149,44 +110,16 @@ export function App() {
         canRedo={historyState.canRedo}
       />
 
-      {activeTab === 'table' && (
-        <div id="table-tab" className="tab-content active">
-          <Toolbar status={status} />
-          <TableView />
-        </div>
-      )}
-
-      {activeTab === 'json' && (
-        <div id="json-tab" className="tab-content active">
-          <JsonEditor />
-        </div>
-      )}
-
-      {activeTab === 'node-colors' && (
-        <div id="node-colors-tab" className="tab-content active">
-          <RelationshipsView variableType="COLOR" />
-        </div>
-      )}
-
-      {activeTab === 'node-numbers' && (
-        <div id="node-numbers-tab" className="tab-content active">
-          <RelationshipsView variableType="FLOAT" />
-        </div>
-      )}
-
-      {activeTab === 'settings' && (
-        <div id="settings-tab" className="tab-content active">
-          <SettingsView
-            themeMode={themeMode}
-            onThemeModeChange={setThemeMode}
-          />
-        </div>
-      )}
+      <TabContent
+        activeTab={activeTab}
+        status={status}
+      />
 
       {/* Modals */}
       <ShadesModal />
       <StepsModal />
       <InputModal />
+      <AddVariableModal />
       <ColorPickerModal />
       <ColorReferenceModal />
       <BulkEditModal />

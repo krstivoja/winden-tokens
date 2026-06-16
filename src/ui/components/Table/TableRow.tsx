@@ -1,24 +1,31 @@
 // Table row component
 
-import React, { useState, useCallback, useMemo, useEffect, memo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { VariableData } from '../../types';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
-import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon } from '../Icons';
+import { TypeIcon, CopyIcon, TrashIcon, ShadesIcon, StepsIcon, ChevronDownIcon } from '../Icons';
+import { IconButton } from '../common/Button';
+import { IconTextButton } from '../common/Button/Button';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { ValueCell } from './ValueCell';
 import { CollectionCell } from './CollectionCell';
 import { ContrastPicker } from './ContrastPicker';
 import { parseColorToRgb, checkContrast } from '../../utils/color';
+import { getVariableValueForMode } from '../../utils/modes';
+import { InputTable } from './InputTable';
+import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 
 interface TableRowProps {
   variable: VariableData;
   isGrouped: boolean;
   isHidden?: boolean;
   groupName?: string;
-  onShowColorMenu: (e: React.MouseEvent, id: string, value: string) => void;
+  isLastInGroup?: boolean;
   contrastColor: string | null;
   colorVariables: VariableData[];
+  selectedModeId?: string | null;
 }
 
 export const TableRow = memo(function TableRow({
@@ -26,15 +33,13 @@ export const TableRow = memo(function TableRow({
   isGrouped,
   isHidden = false,
   groupName = '',
-  onShowColorMenu,
+  isLastInGroup = false,
   contrastColor,
   colorVariables,
 }: TableRowProps) {
-  const { setSingleContrastColor, getShadeGroupBySourceId } = useAppContext();
+  const { setSingleContrastColor, getShadeGroupBySourceId, collections, selectedModeId } = useAppContext();
   const { openColorPicker, openColorReference, openShadesModal, openStepsModal } = useModalContext();
   const [displayName, setDisplayName] = useState(variable.displayName || variable.name);
-  const [showContrastPicker, setShowContrastPicker] = useState(false);
-  const [contrastPickerPosition, setContrastPickerPosition] = useState({ top: 0, left: 0 });
 
   const shadeGroup = useMemo(() => {
     if (isGrouped || variable.resolvedType !== 'COLOR') return null;
@@ -44,11 +49,12 @@ export const TableRow = memo(function TableRow({
   // Calculate contrast for color variables
   const contrastResult = useMemo(() => {
     if (variable.resolvedType !== 'COLOR' || !contrastColor) return null;
-    const colorRgb = parseColorToRgb(variable.value);
+    const currentValue = getVariableValueForMode(collections, variable, selectedModeId);
+    const colorRgb = parseColorToRgb(currentValue);
     const contrastRgb = parseColorToRgb(contrastColor);
     if (!colorRgb || !contrastRgb) return null;
     return checkContrast(colorRgb, contrastRgb);
-  }, [variable.value, variable.resolvedType, contrastColor]);
+  }, [collections, variable, selectedModeId, variable.resolvedType, contrastColor]);
 
   const handleNameBlur = useCallback(() => {
     const parts = variable.name.split('/');
@@ -75,15 +81,7 @@ export const TableRow = memo(function TableRow({
   }, [variable.id]);
 
   // Contrast picker handlers for ungrouped color variables
-  const handleContrastClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setContrastPickerPosition({ top: rect.bottom + 4, left: rect.left });
-    setShowContrastPicker(true);
-  }, []);
-
   const handlePickContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorPicker({
       initialColor: contrastColor || '#ffffff',
       onConfirm: (color) => setSingleContrastColor(variable.id, color),
@@ -91,7 +89,6 @@ export const TableRow = memo(function TableRow({
   }, [openColorPicker, contrastColor, setSingleContrastColor, variable.id]);
 
   const handleReferenceContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     openColorReference({
       onConfirm: (variableId) => {
         const colorVar = colorVariables.find(v => v.id === variableId);
@@ -103,49 +100,67 @@ export const TableRow = memo(function TableRow({
   }, [openColorReference, colorVariables, setSingleContrastColor, variable.id]);
 
   const handleClearContrastColor = useCallback(() => {
-    setShowContrastPicker(false);
     setSingleContrastColor(variable.id, null);
   }, [setSingleContrastColor, variable.id]);
 
   const handleShadesClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    openShadesModal({ groupName: variable.name });
-  }, [openShadesModal, variable.name]);
+    openShadesModal({ groupName: variable.name, modeId: selectedModeId });
+  }, [openShadesModal, variable.name, selectedModeId]);
 
   const handleStepsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     openStepsModal({ groupName: variable.name, collectionId: variable.collectionId });
   }, [openStepsModal, variable.collectionId, variable.name]);
 
-  // Close picker when clicking outside
-  useEffect(() => {
-    if (!showContrastPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('#contrast-picker') && !target.closest('.single-contrast-trigger')) {
-        setShowContrastPicker(false);
-      }
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [showContrastPicker]);
-
-  const hiddenClass = isHidden ? 'hidden-by-group' : '';
+  const hiddenClass = isHidden ? 'hidden' : '';
   const groupedClass = isGrouped ? 'grouped-item' : '';
+
+  // Modifier button (Shades/Steps) to be displayed inside value cell
+  const modifierButton = !isGrouped && (
+    <>
+      {variable.resolvedType === 'COLOR' && (
+        <IconTextButton
+          icon={<ShadesIcon />}
+          onClick={handleShadesClick}
+          title={shadeGroup?.status === 'dirty' ? 'Managed shades need refresh' : 'Generate shades'}
+          className={shadeGroup?.status === 'dirty' ? 'dirty' : ''}
+        >
+          Shades
+        </IconTextButton>
+      )}
+      {variable.resolvedType === 'FLOAT' && (
+        <IconTextButton
+          icon={<StepsIcon />}
+          onClick={handleStepsClick}
+          title="Generate number steps"
+        >
+          Steps
+        </IconTextButton>
+      )}
+    </>
+  );
 
   return (
     <tr
       data-id={variable.id}
-      className={`${groupedClass} ${hiddenClass}`.trim()}
+      className={`group ${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
     >
-      <td>
-        <div className="name-cell">
+      <td className="border border-border px-3 py-2 relative">
+        <div className={`max-w-full overflow-hidden flex items-center gap-2 ${isGrouped ? 'pl-6' : ''}`}>
+          {isGrouped && (
+            <>
+              {/* Vertical line - full height for middle items, half for last item */}
+              <div className={`absolute left-5 top-0 w-px bg-text/30 ${isLastInGroup ? 'h-1/2' : 'h-full'}`}></div>
+              {/* Horizontal line to icon */}
+              <div className="absolute left-5 top-1/2 w-4 h-px bg-text/50"></div>
+            </>
+          )}
           <span className={`type-icon ${variable.resolvedType}`}>
             <TypeIcon type={variable.resolvedType} />
           </span>
-          <input
-            className="cell-input"
+          <InputTable
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
             onBlur={handleNameBlur}
@@ -153,106 +168,79 @@ export const TableRow = memo(function TableRow({
           />
         </div>
       </td>
-      <td>
+      <td className="border border-border px-3 py-2">
         <ValueCell
           variable={variable}
-          onShowColorMenu={onShowColorMenu}
+          modifierButton={modifierButton}
         />
       </td>
-      <td>
+      <td className="border border-border px-3 py-2">
         <CollectionCell variable={variable} />
       </td>
-      <td className="accessibility-cell">
+      <td className="border border-border px-3 py-2 text-xs">
         {contrastResult ? (
-          <>
-            <div
-              className="contrast-info"
-              onClick={handleContrastClick}
-              style={{ cursor: 'pointer' }}
-              title="Change contrast color"
+          <div className="flex items-center justify-between gap-2">
+            <OptionsDropdown
+              label={<span className="font-semibold mr-2">{contrastResult.ratio}:1</span>}
             >
-              <span className="contrast-ratio">{contrastResult.ratio}:1</span>
-              <span className={`contrast-badge ${contrastResult.aa ? 'pass' : 'fail'}`}>
+              <ContrastPicker
+                contrastColor={contrastColor}
+                onPickColor={handlePickContrastColor}
+                onReferenceColor={handleReferenceContrastColor}
+                onClear={handleClearContrastColor}
+              />
+            </OptionsDropdown>
+            <div className="flex gap-1">
+              <span
+                className={`inline-block px-1.5 py-0.5 rounded text-footnote ml-1 transition-all ${
+                  contrastResult.aa ? 'bg-badge-success' : 'bg-badge-danger'
+                }`}
+              >
                 {contrastResult.aa ? '✓' : '✗'}AA
               </span>
-              <span className={`contrast-badge ${contrastResult.aaa ? 'pass' : 'fail'}`}>
+              <span
+                className={`inline-block px-1.5 py-0.5 rounded text-footnote ml-1 transition-all ${
+                  contrastResult.aaa ? 'bg-badge-success' : 'bg-badge-danger'
+                }`}
+              >
                 {contrastResult.aaa ? '✓' : '✗'}AAA
               </span>
-              <span className="dropdown-arrow">▾</span>
             </div>
-            {showContrastPicker && (
-              <ContrastPicker
-                position={contrastPickerPosition}
-                contrastColor={contrastColor}
-                onPickColor={handlePickContrastColor}
-                onReferenceColor={handleReferenceContrastColor}
-                onClear={handleClearContrastColor}
-              />
-            )}
-          </>
+          </div>
         ) : !isGrouped && variable.resolvedType === 'COLOR' ? (
-          <>
-            <div
-              className="single-contrast-trigger"
-              onClick={handleContrastClick}
-              title="Set contrast color"
-            >
-              {contrastColor && (
-                <span className="contrast-swatch" style={{ background: contrastColor }} />
-              )}
-              <span className="contrast-label">Contrast</span>
-              <span className="dropdown-arrow">▾</span>
-            </div>
-            {showContrastPicker && (
-              <ContrastPicker
-                position={contrastPickerPosition}
-                contrastColor={contrastColor}
-                onPickColor={handlePickContrastColor}
-                onReferenceColor={handleReferenceContrastColor}
-                onClear={handleClearContrastColor}
-              />
-            )}
-          </>
+          <OptionsDropdown
+            label={
+              <>
+                {contrastColor && (
+                  <ColorSwatch color={contrastColor} className="mr-1" />
+                )}
+                Contrast
+              </>
+            }
+          >
+            <ContrastPicker
+              contrastColor={contrastColor}
+              onPickColor={handlePickContrastColor}
+              onReferenceColor={handleReferenceContrastColor}
+              onClear={handleClearContrastColor}
+            />
+          </OptionsDropdown>
         ) : null}
       </td>
-      <td className="modifier-cell">
-        {!isGrouped && variable.resolvedType === 'COLOR' && (
-          <button
-            className={`modifier-btn ${shadeGroup?.status === 'dirty' ? 'dirty' : ''}`.trim()}
-            onClick={handleShadesClick}
-            title={shadeGroup?.status === 'dirty' ? 'Managed shades need refresh' : 'Generate shades'}
-          >
-            <span className="icon"><ShadesIcon /></span>
-            Shades
-          </button>
-        )}
-        {!isGrouped && variable.resolvedType === 'FLOAT' && (
-          <button
-            className="modifier-btn"
-            onClick={handleStepsClick}
-            title="Generate number steps"
-          >
-            <span className="icon"><StepsIcon /></span>
-            Steps
-          </button>
-        )}
-      </td>
-      <td>
-        <div className="row-actions">
-          <button
-            className="row-action"
+      <td className="w-25 border border-border px-3 py-2">
+        <div className="row-actions flex gap-2">
+          <IconButton
+            icon={<CopyIcon />}
             onClick={handleDuplicate}
             title="Duplicate"
-          >
-            <CopyIcon />
-          </button>
-          <button
-            className="row-action danger"
+            aria-label="Duplicate"
+          />
+          <IconButton
+            icon={<TrashIcon />}
             onClick={handleDelete}
             title="Delete"
-          >
-            <TrashIcon />
-          </button>
+            aria-label="Delete"
+          />
         </div>
       </td>
     </tr>

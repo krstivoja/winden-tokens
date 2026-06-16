@@ -142,9 +142,9 @@ export const CollectionFilter: Story = {
     return (
       <Dropdown
         trigger={
-          <button className="btn">
+          <Button>
             Collections ({selected.size}/3) ▾
-          </button>
+          </Button>
         }
         isOpen={isOpen}
         onToggle={() => setIsOpen(!isOpen)}
@@ -202,9 +202,9 @@ export const TypeFilter: Story = {
     return (
       <Dropdown
         trigger={
-          <button className="btn">
+          <Button>
             Types ({selected.size}/{types.length}) ▾
-          </button>
+          </Button>
         }
         isOpen={isOpen}
         onToggle={() => setIsOpen(!isOpen)}

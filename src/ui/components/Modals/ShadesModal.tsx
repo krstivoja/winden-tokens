@@ -5,7 +5,12 @@ import { useModalContext } from './ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { ShadeCurveHandles, VariableData } from '../../types';
-import { CloseIcon, RefreshIcon } from '../Icons';
+import { RefreshIcon } from '../Icons';
+import { Input } from '../common/Input';
+import { TextButton } from '../common/Button';
+import { Select } from '../common/Select';
+import { SegmentedControl } from '../common/SegmentedControl';
+import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
 import {
   rgbObjToHex,
   parseColorToRgb,
@@ -37,7 +42,11 @@ type DragTarget =
   | 'rightHandle2'
   | 'startNode'
   | 'endNode';
-const CURVE_PROPERTIES: CurveProperty[] = ['lightness', 'saturation', 'hue'];
+const CURVE_PROPERTY_OPTIONS = [
+  { value: 'lightness' as const, label: 'Lightness' },
+  { value: 'saturation' as const, label: 'Saturation' },
+  { value: 'hue' as const, label: 'Hue' },
+];
 
 const CURVE_EDITOR_HEIGHT = 200;
 const CURVE_PADDING_Y = 12;
@@ -70,10 +79,6 @@ function curveYToValue(y: number, property: CurveProperty, minY: number, maxY: n
   const clampedY = clamp(y, minY, maxY);
   const normalized = (clampedY - minY) / (maxY - minY);
   return clamp(min + normalized * (max - min), min, max);
-}
-
-function getCurvePropertyLabel(property: CurveProperty): string {
-  return property.charAt(0).toUpperCase() + property.slice(1);
 }
 
 function isDefaultCurve(curve: ShadeCurveHandles, count: number, baseIndex: number): boolean {
@@ -125,6 +130,7 @@ export function ShadesModal() {
   } = useAppContext();
   const isOpen = !!modals.shadesModal;
   const preSelectedGroup = modals.shadesModal?.groupName || '';
+  const targetModeId = modals.shadesModal?.modeId || null;
 
   const [sourceColorId, setSourceColorId] = useState('');
   const [groupName, setGroupName] = useState('');
@@ -435,11 +441,12 @@ export function ShadesModal() {
 
   // Handle generation
   const handleGenerate = () => {
-    if (!groupName || !baseColor || !selectedCollectionId || generatedShades.length === 0) return;
+    if (!groupName || !baseColor || !selectedCollectionId || !targetModeId || generatedShades.length === 0) return;
 
     post({
       type: 'update-shades',
       collectionId: selectedCollectionId,
+      modeId: targetModeId,
       deleteIds: existingShadeIds,
       shades: generatedShades,
       source: {
@@ -462,11 +469,12 @@ export function ShadesModal() {
   };
 
   const handleRemove = () => {
-    if (!groupName || existingShadeIds.length === 0 || !selectedCollectionId) return;
+    if (!groupName || existingShadeIds.length === 0 || !selectedCollectionId || !targetModeId) return;
 
     post({
       type: 'remove-shades',
       collectionId: selectedCollectionId,
+      modeId: targetModeId,
       deleteIds: existingShadeIds,
       source: {
         id: selectedSourceVariable?.id,
@@ -682,8 +690,8 @@ export function ShadesModal() {
           y={y - handleRadius}
           width={handleRadius * 2}
           height={handleRadius * 2}
-          fill="var(--accent)"
-          stroke="var(--bg)"
+          fill="var(--color-text)"
+          stroke="var(--color-base)"
           strokeWidth={2}
           rx={2}
           style={{ cursor: 'move', pointerEvents: 'none' }}
@@ -707,7 +715,7 @@ export function ShadesModal() {
             y1={0}
             x2={i * swatchWidth}
             y2={CURVE_EDITOR_HEIGHT}
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1}
             opacity={0.35}
           />
@@ -717,7 +725,7 @@ export function ShadesModal() {
           <path
             d={basePathD}
             fill="none"
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1.5}
             strokeDasharray="4,4"
             opacity={0.8}
@@ -728,7 +736,7 @@ export function ShadesModal() {
             y1={zeroY}
             x2={containerWidth}
             y2={zeroY}
-            stroke="var(--border)"
+            stroke="var(--color-border)"
             strokeWidth={1}
             strokeDasharray="4,4"
             opacity={0.3}
@@ -736,7 +744,7 @@ export function ShadesModal() {
         )}
 
         {/* Curve path */}
-        <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        <path d={pathD} fill="none" stroke="var(--color-text)" strokeWidth={2} />
 
         {/* Handle lines */}
         <line
@@ -744,7 +752,7 @@ export function ShadesModal() {
           y1={startNode.y}
           x2={leftHandle1X}
           y2={leftHandle1Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -753,7 +761,7 @@ export function ShadesModal() {
           y1={baseNode.y}
           x2={leftHandle2X}
           y2={leftHandle2Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -762,7 +770,7 @@ export function ShadesModal() {
           y1={baseNode.y}
           x2={rightHandle1X}
           y2={rightHandle1Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -771,7 +779,7 @@ export function ShadesModal() {
           y1={endNode.y}
           x2={rightHandle2X}
           y2={rightHandle2Y}
-          stroke="var(--text)"
+          stroke="var(--color-text)"
           strokeWidth={1.5}
           opacity={0.6}
         />
@@ -785,7 +793,7 @@ export function ShadesModal() {
         {nodePositions.map((np, i) => {
           const isFirstOrLast = i === 0 || i === nodePositions.length - 1;
           const isBaseNode = i === normalizedBaseIndex;
-          const fillColor = shadeColors[i] || 'var(--bg)';
+          const fillColor = shadeColors[i] || 'var(--color-base)';
           return (
             <circle
               key={`node-${i}`}
@@ -793,7 +801,7 @@ export function ShadesModal() {
               cy={np.y}
               r={isBaseNode ? baseNodeRadius : nodeRadius}
               fill={fillColor}
-              stroke={isBaseNode ? 'var(--text)' : 'var(--accent)'}
+              stroke="var(--color-text)"
               strokeWidth={isBaseNode ? 3 : 2}
               className={isBaseNode ? 'curve-node curve-node-base' : 'curve-node'}
               style={isFirstOrLast ? { cursor: 'ns-resize' } : undefined}
@@ -808,148 +816,129 @@ export function ShadesModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && closeShadesModal()}>
-      <div className="modal modal-wide">
-        <div className="modal-header">
-          <h3>Generate Color Shades</h3>
-          <button className="modal-close" onClick={closeShadesModal}>
-            <span className="icon"><CloseIcon /></span>
-          </button>
-        </div>
-        <div className="modal-body">
+    <ModalOverlay isOpen={isOpen} onClose={closeShadesModal}>
+      <ModalContainer width={800}>
+        <ModalHeader title="Generate Color Shades" onClose={closeShadesModal} />
+        <ModalBody>
           {!preSelectedGroup && (
-            <div className="form-group">
-              <label>Select Color Group</label>
-              <select
-                className="form-input"
+            <div className="flex flex-col gap-2 mb-4">
+              <label className="text-xs font-medium text-text">Select Color Group</label>
+              <Select
                 value={sourceColorId}
                 onChange={handleSourceChange}
               >
-                <option value="">-- Select a group --</option>
+                <Select.Option value="">-- Select a group --</Select.Option>
                 {sourceColors.map(variable => (
-                  <option key={variable.id} value={variable.id}>{variable.name}</option>
+                  <Select.Option key={variable.id} value={variable.id}>{variable.name}</Select.Option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
 
           {groupName && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Base Color</label>
-                  <div className="color-input-wrapper">
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-4 items-end">
+                <div className="flex flex-col gap-2 flex-1">
+                  <label className="text-xs font-medium text-text">Base Color</label>
+                  <div className="flex gap-2 items-center">
                     <div
-                      className="color-input-preview"
-                      style={{ cursor: 'pointer' }}
+                      className="w-8 h-8 rounded border border-border bg-checkerboard cursor-pointer relative overflow-hidden flex-shrink-0"
                       onClick={() => openColorPicker({
                         initialColor: baseColor,
                         onConfirm: setBaseColor,
                       })}
                     >
-                      <div className="color-fill" style={{ background: baseColor }} />
+                      <div className="absolute inset-0" style={{ background: baseColor }} />
                     </div>
-                    <input
+                    <Input
                       type="text"
-                      className="form-input mono"
+                      className="font-mono text-xs"
                       value={baseColor}
                       onChange={e => setBaseColor(e.target.value)}
                       placeholder="#000000"
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label>Shades</label>
-                  <input
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-text">Shades</label>
+                  <Input
                     type="number"
-                    className="form-input"
+                    className="w-16"
                     value={shadeCount}
                     onChange={handleShadeCountChange}
                     min={2}
                     max={20}
-                    style={{ width: 60 }}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Curve Property</label>
-                  <div className="curve-property-toggle" role="tablist" aria-label="Curve Property">
-                    {CURVE_PROPERTIES.map(property => {
-                      const label = getCurvePropertyLabel(property);
-                      const isActive = activeProperty === property;
-                      const isEdited = curveResetState[property];
-
-                      return (
-                        <div
-                          key={property}
-                          className={`curve-property-item ${isActive ? 'active' : ''} ${isEdited ? 'has-reset' : ''}`}
-                        >
-                          <button
-                            type="button"
-                            className={`curve-property-btn ${isActive ? 'active' : ''}`}
-                            onClick={() => setActiveProperty(property)}
-                            aria-pressed={isActive}
-                          >
-                            {label}
-                          </button>
-                          {isEdited && (
-                            <button
-                              type="button"
-                              className="curve-property-reset"
-                              onClick={() => handleResetCurve(property)}
-                              aria-label={`Reset ${label}`}
-                              title={`Reset ${label}`}
-                            >
-                              <RefreshIcon />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="flex flex-col gap-2 flex-1">
+                  <label className="text-xs font-medium text-text">Curve Property</label>
+                  <SegmentedControl
+                    options={CURVE_PROPERTY_OPTIONS.map(option => ({
+                      ...option,
+                      badge: curveResetState[option.value] ? <RefreshIcon /> : undefined,
+                      onBadgeClick: curveResetState[option.value] ? () => handleResetCurve(option.value) : undefined,
+                    }))}
+                    value={activeProperty}
+                    onChange={setActiveProperty}
+                    variant="bordered"
+                    fullWidth
+                  />
                 </div>
               </div>
 
-	              {/* Curve Editor + Preview Combined */}
-	              <div className="form-group">
-		                <div className="curve-preview-combined">
-	                  <div
-	                    ref={containerRef}
-                    className="curve-editor-container"
+              {/* Curve Editor + Preview Combined */}
+              <div className="flex flex-col gap-3">
+                <div className="bg-base rounded-lg border border-border">
+                  <div
+                    ref={containerRef}
+                    className="w-full overflow-visible"
+                    style={{ height: '200px' }}
                   >
                     {renderCurve()}
                   </div>
-                  <div className="shades-preview">
+                  <div className="flex h-8 relative border border-border rounded overflow-hidden mt-2">
                     {shadeColors.map((color, i) => (
                       <div
                         key={i}
-                        className={`shades-preview-item ${i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? 'is-base-shade' : ''}`.trim()}
-                        style={{ background: color }}
+                        className="flex-1 relative"
+                        style={{
+                          background: color
+                        }}
                         title={i === normalizeShadeBaseIndex(baseIndex, shadeCount) ? `${color} (Base)` : color}
-                      />
+                      >
+                        {i === normalizeShadeBaseIndex(baseIndex, shadeCount) && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full border-2 border-text" style={{ backgroundColor: 'var(--color-base)' }}></div>
+                          </div>
+                        )}
+                        {i < shadeColors.length - 1 && (
+                          <div className="absolute right-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'var(--color-text)', opacity: 0.2 }}></div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
-        <div className="modal-footer">
+        </ModalBody>
+        <ModalFooter>
           {existingGroup && (
-            <button className="btn btn-danger" onClick={handleRemove}>
+            <TextButton variant="danger" onClick={handleRemove}>
               Remove Shades
-            </button>
+            </TextButton>
           )}
-          <div className="spacer" />
-          <button className="btn" onClick={closeShadesModal}>Cancel</button>
-          <button
-            className="btn btn-primary"
+          <div className="flex-1" />
+          <TextButton onClick={closeShadesModal}>Cancel</TextButton>
+          <TextButton
+            variant="primary"
             onClick={handleGenerate}
             disabled={!groupName || generatedShades.length === 0}
           >
             {existingGroup ? 'Update' : 'Generate'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </TextButton>
+        </ModalFooter>
+      </ModalContainer>
+    </ModalOverlay>
   );
 }

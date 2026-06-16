@@ -3,7 +3,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { PlusIcon, SearchIcon } from '../Icons';
+import { PlusIcon } from '../Icons';
+import { IconTextButton, IconButton } from '../common/Button';
+import { Search } from '../common/Search';
 import { AddMenu } from './AddMenu';
 import { CollectionFilters } from './CollectionFilters';
 import { VariableTypeFilters } from './VariableTypeFilters';
@@ -38,17 +40,6 @@ export function Toolbar({ status }: ToolbarProps) {
     setShowAddMenu(true);
   };
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      setSearchQuery('');
-      (e.target as HTMLInputElement).value = '';
-    }
-  };
-
   const { shown, total } = getFilteredCount();
 
   // Close add menu when clicking outside
@@ -64,58 +55,48 @@ export function Toolbar({ status }: ToolbarProps) {
   }, []);
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group">
-        <VariableTypeFilters />
-        <button
+    <div className="toolbar flex justify-between gap-4 p-4">
+      <div className="flex gap-4">
+        <IconTextButton
           id="add-variable-btn"
           ref={addBtnRef}
-          className="btn btn-primary"
+          variant="primary"
+          icon={<PlusIcon />}
           onClick={handleAddVariable}
         >
-          <span className="icon"><PlusIcon /></span>
           Add Variable
-        </button>
+        </IconTextButton>
+
+        <VariableTypeFilters />
+
       </div>
 
-      <div className="spacer" />
-
-      <div className="toolbar-group">
+      <div className="flex gap-4">
         <CollectionFilters />
-        <button
+        <IconButton
           id="add-collection-btn"
-          className="btn btn-icon"
-          title="New Collection"
+          icon={<PlusIcon />}
           onClick={handleAddCollection}
-        >
-          <span className="icon"><PlusIcon /></span>
-        </button>
+          title="New Collection"
+          aria-label="New Collection"
+        />
         <ModeSelector />
       </div>
 
-      <div className="toolbar-divider" />
 
-      <div className="search-wrapper">
-        <span className="search-icon"><SearchIcon /></span>
-        <input
-          type="text"
-          id="search-input"
-          className="search-input"
-          placeholder="Search..."
-          onChange={handleSearchChange}
-          onKeyDown={handleSearchKeyDown}
-        />
-        <span id="search-count" className="search-count">
-          {searchQuery ? `${shown}/${total}` : ''}
-        </span>
-      </div>
+      <Search
+        id="search-input"
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search..."
+        count={searchQuery ? `${shown}/${total}` : ''}
+      />
 
       {status.message && (
         <span
           id="status"
           className={`status ${status.type} ${status.type === 'warning' ? 'clickable' : ''}`}
           onClick={status.type === 'warning' ? () => {
-            console.log('[UI] Refresh clicked from status message');
             post({ type: 'refresh' });
           } : undefined}
           style={status.type === 'warning' ? { cursor: 'pointer' } : undefined}

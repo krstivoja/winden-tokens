@@ -5,6 +5,7 @@ import { TypeIcons, VariableType } from '../Icons';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { useModalContext } from '../Modals/ModalContext';
+import { IconTextButton } from '../common/Button';
 
 interface AddMenuProps {
   position: { top: number; left: number };
@@ -51,10 +52,13 @@ export function AddMenu({ position, onClose }: AddMenuProps) {
       style={{ top: position.top, left: position.left }}
     >
       {variableTypes.map(({ type, label }) => (
-        <button key={type} onClick={() => handleAddVariable(type)}>
-          <span className="icon">{TypeIcons[type]}</span>
+        <IconTextButton
+          key={type}
+          icon={TypeIcons[type]}
+          onClick={() => handleAddVariable(type)}
+        >
           {label}
-        </button>
+        </IconTextButton>
       ))}
     </div>
   );

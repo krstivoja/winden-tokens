@@ -3,11 +3,8 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
-  Handle,
-  Position,
   useNodesState,
   useEdgesState,
-  getBezierPath,
   useReactFlow,
   ReactFlowProvider,
 } from '@xyflow/react';
@@ -17,786 +14,66 @@ import type {
   NodeTypes,
   EdgeTypes,
   OnConnect,
-  NodeProps,
-  EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CollectionData, ShadeGroupData, VariableData } from '../../types';
-import { parseColorToRgb, rgbObjToHex } from '../../utils/color';
-import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
+import { resolveModeIdForCollection } from '../../utils/modes';
+import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
+import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { ColorValueMenu } from '../Table/ColorValueMenu';
-import { CollectionFilters } from '../Toolbar/CollectionFilters';
-import { ModeSelector } from '../Toolbar/ModeSelector';
-
-// ── Constants ──────────────────────────────────────────────────────
-const GROUP_WIDTH = 260;
-const ROW_HEIGHT = 32;
-const HEADER_HEIGHT = 36;
-const GROUP_PADDING = 8;
-const GROUP_GAP_X = 180;
-const GROUP_GAP_Y = 40;
-const GENERATED_CONNECTION_COLOR = 'var(--graph-edge-generated)';
-const REFERENCE_CONNECTION_COLOR = 'var(--graph-edge-reference)';
-const IDLE_HANDLE_BORDER_COLOR = 'var(--graph-handle-idle)';
-const IDLE_HANDLE_FILL_COLOR = 'var(--graph-card-body-bg)';
-const STANDARD_GROUP_HEADER_FILL = 'var(--graph-card-header-bg)';
-const SHADER_GROUP_HEADER_FILL = 'var(--graph-card-header-shader-bg)';
-const DEFAULT_GROUP_CHILD_NAME = 'base';
-
-// ── Interfaces ─────────────────────────────────────────────────────
-interface GroupedGraphProps {
-  collections: CollectionData[];
-  variables: VariableData[];
-  selectedCollectionIds: Set<string>;
-  variableType: 'COLOR' | 'FLOAT';
-  shadeGroups: ShadeGroupData[];
-  selectedModeId: string | null;
-}
-
-interface VariableNode {
-  id: string;
-  name: string;
-  shortName: string;
-  displayName: string;
-  color: string;
-  value: string;
-  resolvedValue: string;
-  isReference: boolean;
-  referenceName: string | null;
-  isVirtual?: boolean;
-  virtualType?: 'shader' | 'palette';
-  connectionsDisabled?: boolean;
-}
-
-interface GroupData {
-  key: string;
-  title: string;
-  variables: VariableNode[];
-  x: number;
-  y: number;
-  initialX: number;
-  initialY: number;
-  kind: 'standard' | 'source' | 'shader' | 'shades';
-  sourceGroupName?: string;
-  headerFill: string;
-  collectionId: string;
-}
-
-interface ManagedNumberStepGroup {
-  sourceVariable: VariableData;
-  stepVariables: VariableData[];
-}
-
-interface ConnectionRecord {
-  id: string;
-  kind: 'reference' | 'generated';
-  fromGroup: string;
-  fromVar: string;
-  toGroup: string;
-  toVar: string;
-}
-
-interface GridLayoutSettings {
-  gapX: number;
-  gapY: number;
-}
-
-interface GridLayoutDraft {
-  gapX: string;
-  gapY: string;
-}
-
-interface ConnectionFlags {
-  hasInput: boolean;
-  hasOutput: boolean;
-  inputKind: 'reference' | 'generated' | null;
-  outputKind: 'reference' | 'generated' | null;
-}
-
-// ── Node data type for React Flow ──────────────────────────────────
-type GroupNodeData = {
-  group: GroupData;
-  isColorType: boolean;
-  variableType: 'COLOR' | 'FLOAT';
-  connectedVars: Map<string, ConnectionFlags>;
-  onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
-  onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;
-  onAddVariable: (group: GroupData) => void;
-  onRenameGroup: (group: GroupData) => void;
-  onDuplicateGroup: (group: GroupData) => void;
-  onDeleteGroup: (group: GroupData) => void;
-  onRenameVariable: (node: VariableNode) => void;
-  onDeleteVariable: (node: VariableNode) => void;
-  onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
-};
-
-// ── Edge data type ─────────────────────────────────────────────────
-type CustomEdgeData = {
-  kind: 'reference' | 'generated';
-  receiverName: string;
-  receiverShortName: string;
-  resolvedValue: string;
-  onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
-};
-
-// ── Utility functions ──────────────────────────────────────────────
-
-function getDefaultVariableValue(type: 'COLOR' | 'FLOAT'): string {
-  return type === 'COLOR' ? 'rgb(0, 0, 0)' : '0';
-}
-
-function normalizePathSegment(value: string): string {
-  return value.trim().replace(/^\/+|\/+$/g, '');
-}
-
-function getGroupHeight(group: GroupData): number {
-  return HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
-}
-
-function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
-  const candidate = (value && typeof value === 'object') ? value as Partial<GridLayoutSettings> : {};
-  const gapX = typeof candidate.gapX === 'number' && candidate.gapX >= 0 ? candidate.gapX : GROUP_GAP_X;
-  const gapY = typeof candidate.gapY === 'number' && candidate.gapY >= 0 ? candidate.gapY : GROUP_GAP_Y;
-  return { gapX, gapY };
-}
-
-function sortGroupsByPosition(a: GroupData, b: GroupData): number {
-  if (a.y !== b.y) return a.y - b.y;
-  return a.x - b.x;
-}
-
-function getManagedLane(group: GroupData): number | null {
-  if (!group.sourceGroupName) return null;
-
-  switch (group.kind) {
-    case 'source':
-      return 0;
-    case 'shader':
-      return 1;
-    case 'shades':
-      return 2;
-    default:
-      return null;
-  }
-}
-
-function getStandaloneLane(depth: number, reserveGeneratorLane: boolean): number {
-  if (!reserveGeneratorLane) return depth;
-  return depth === 0 ? 0 : Math.max(depth, 2);
-}
-
-function extractShadeNumber(name: string): number {
-  const match = name.match(/\/(\d+)$/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-function formatVariableNode(
-  variable: VariableData,
-  varsByName: Map<string, VariableData>,
-  isColorType: boolean,
-  collections: CollectionData[],
-  selectedModeId: string | null
-): VariableNode {
-  const refPattern = /^\{(.+)\}$/;
-
-  const modeValue = getVariableValueForMode(collections, variable, selectedModeId);
-
-  const refMatch = modeValue.match(refPattern);
-  const isReference = !!refMatch;
-  const referenceName = refMatch ? refMatch[1] : null;
-
-  let resolvedValue = modeValue;
-  if (isReference && referenceName) {
-    const refVar = varsByName.get(referenceName);
-    if (refVar) {
-      const refVarModeValue = getVariableValueForMode(collections, refVar, selectedModeId);
-      const refRefMatch = refVarModeValue.match(refPattern);
-      if (refRefMatch) {
-        const deepRef = varsByName.get(refRefMatch[1]);
-        if (deepRef) {
-          resolvedValue = getVariableValueForMode(collections, deepRef, selectedModeId);
-        }
-      } else {
-        resolvedValue = refVarModeValue;
-      }
-    }
-  }
-
-  let displayColor = '#888888';
-  let displayValue = resolvedValue;
-  if (isColorType) {
-    const rgb = parseColorToRgb(resolvedValue);
-    displayColor = rgb ? rgbObjToHex(rgb) : '#888888';
-    displayValue = isReference ? `{${referenceName}}` : displayColor.toUpperCase();
-  } else {
-    displayValue = isReference && referenceName
-      ? `{${referenceName}:${resolvedValue}}`
-      : resolvedValue;
-  }
-
-  const parts = variable.name.split('/');
-  return {
-    id: variable.id,
-    name: variable.name,
-    shortName: parts[parts.length - 1],
-    displayName: displayValue,
-    color: displayColor,
-    value: modeValue,
-    resolvedValue: isColorType ? displayColor : resolvedValue,
-    isReference,
-    referenceName,
-  };
-}
-
-function createShaderNode(shadeGroup: ShadeGroupData, color: string): VariableNode {
-  return {
-    id: `shader:${shadeGroup.sourceVariableId}`,
-    name: `shader:${shadeGroup.sourceVariableId}`,
-    shortName: 'shader',
-    displayName: `${shadeGroup.config.shadeCount} shades`,
-    color,
-    value: '', resolvedValue: '',
-    isReference: false, referenceName: null,
-    isVirtual: true, virtualType: 'shader',
-    connectionsDisabled: true,
-  };
-}
-
-function createStepsNode(sourceVariableId: string, stepCount: number): VariableNode {
-  return {
-    id: `shader:${sourceVariableId}`,
-    name: `shader:${sourceVariableId}`,
-    shortName: 'steps',
-    displayName: `${stepCount} steps`,
-    color: GENERATED_CONNECTION_COLOR,
-    value: '', resolvedValue: '',
-    isReference: false, referenceName: null,
-    isVirtual: true, virtualType: 'shader',
-    connectionsDisabled: true,
-  };
-}
-
-function createPaletteNode(shadeGroup: ShadeGroupData, shadeCount: number, color: string): VariableNode {
-  return {
-    id: `palette:${shadeGroup.sourceVariableId}`,
-    name: `palette:${shadeGroup.sourceVariableId}`,
-    shortName: 'generated',
-    displayName: `${shadeCount} outputs`,
-    color, value: '', resolvedValue: '',
-    isReference: false, referenceName: null,
-    isVirtual: true, virtualType: 'palette',
-    connectionsDisabled: true,
-  };
-}
-
-function detectManagedNumberStepGroups(variables: VariableData[]): ManagedNumberStepGroup[] {
-  const groups = variables.map(sourceVariable => ({
-    sourceVariable,
-    stepVariables: [] as VariableData[],
-  }));
-  const groupsBySourceId = new Map(groups.map(group => [group.sourceVariable.id, group]));
-  const prefixes = variables.map(variable => ({ variable, prefix: `${variable.name}/` }));
-
-  variables.forEach(variable => {
-    let bestSource: VariableData | null = null;
-    prefixes.forEach(candidate => {
-      if (candidate.variable.id === variable.id) return;
-      if (!variable.name.startsWith(candidate.prefix)) return;
-      if (!bestSource || candidate.variable.name.length > bestSource.name.length) {
-        bestSource = candidate.variable;
-      }
-    });
-    if (bestSource) {
-      groupsBySourceId.get((bestSource as VariableData).id)?.stepVariables.push(variable);
-    }
-  });
-
-  return groups.filter(group => group.stepVariables.length > 0);
-}
-
-function arrangeGroupsByConnectedBlocks(
-  groups: GroupData[],
-  connections: ConnectionRecord[],
-  gapX: number,
-  gapY: number
-): Map<string, { x: number; y: number }> {
-  const columnStep = GROUP_WIDTH + gapX;
-  const positions = new Map<string, { x: number; y: number }>();
-  const groupMap = new Map(groups.map(group => [group.key, group]));
-
-  // Build directed graph: fromGroup → toGroup (connection flows left to right)
-  const outgoing = new Map<string, Set<string>>();
-  const incoming = new Map<string, Set<string>>();
-  groups.forEach(group => {
-    outgoing.set(group.key, new Set());
-    incoming.set(group.key, new Set());
-  });
-
-  connections.forEach(conn => {
-    if (!groupMap.has(conn.fromGroup) || !groupMap.has(conn.toGroup)) return;
-    if (conn.fromGroup === conn.toGroup) return;
-    outgoing.get(conn.fromGroup)?.add(conn.toGroup);
-    incoming.get(conn.toGroup)?.add(conn.fromGroup);
-  });
-
-  // Also build undirected adjacency for finding connected components
-  const adjacency = new Map<string, Set<string>>();
-  groups.forEach(group => adjacency.set(group.key, new Set()));
-  connections.forEach(conn => {
-    if (!groupMap.has(conn.fromGroup) || !groupMap.has(conn.toGroup)) return;
-    adjacency.get(conn.fromGroup)?.add(conn.toGroup);
-    adjacency.get(conn.toGroup)?.add(conn.fromGroup);
-  });
-
-  // Find connected components (blocks)
-  const visited = new Set<string>();
-  const blocks: GroupData[][] = [];
-
-  groups.slice().sort(sortGroupsByPosition).forEach(group => {
-    if (visited.has(group.key)) return;
-    const stack = [group.key];
-    const block: GroupData[] = [];
-    visited.add(group.key);
-
-    while (stack.length > 0) {
-      const currentKey = stack.pop();
-      if (!currentKey) continue;
-      const currentGroup = groupMap.get(currentKey);
-      if (currentGroup) block.push(currentGroup);
-      adjacency.get(currentKey)?.forEach(nextKey => {
-        if (visited.has(nextKey)) return;
-        visited.add(nextKey);
-        stack.push(nextKey);
-      });
-    }
-    blocks.push(block);
-  });
-
-  blocks.sort((a, b) => {
-    const topA = Math.min(...a.map(g => g.y));
-    const topB = Math.min(...b.map(g => g.y));
-    if (topA !== topB) return topA - topB;
-    return Math.min(...a.map(g => g.x)) - Math.min(...b.map(g => g.x));
-  });
-
-  // Per-group topological depth (each group is its own unit)
-  const groupDepth = new Map<string, number>();
-  const indegreeCount = new Map<string, number>();
-
-  groups.forEach(group => {
-    groupDepth.set(group.key, 0);
-    indegreeCount.set(group.key, incoming.get(group.key)?.size || 0);
-  });
-
-  // Kahn's algorithm for topological depth
-  const queue = groups
-    .filter(g => (indegreeCount.get(g.key) || 0) === 0)
-    .map(g => g.key);
-  const processed = new Set<string>();
-
-  while (queue.length > 0) {
-    queue.sort((a, b) => {
-      const gA = groupMap.get(a);
-      const gB = groupMap.get(b);
-      if (!gA || !gB) return 0;
-      return sortGroupsByPosition(gA, gB);
-    });
-    const currentKey = queue.shift();
-    if (!currentKey || processed.has(currentKey)) continue;
-    processed.add(currentKey);
-    const currentDepth = groupDepth.get(currentKey) || 0;
-
-    outgoing.get(currentKey)?.forEach(nextKey => {
-      groupDepth.set(nextKey, Math.max(groupDepth.get(nextKey) || 0, currentDepth + 1));
-      indegreeCount.set(nextKey, (indegreeCount.get(nextKey) || 0) - 1);
-      if ((indegreeCount.get(nextKey) || 0) === 0) queue.push(nextKey);
-    });
-  }
-
-  // Handle cycles: assign remaining groups a fallback depth
-  if (processed.size !== groups.length) {
-    const maxProcessedDepth = processed.size > 0
-      ? Math.max(...Array.from(processed).map(key => groupDepth.get(key) || 0))
-      : -1;
-    groups.forEach(group => {
-      if (!processed.has(group.key)) {
-        groupDepth.set(group.key, maxProcessedDepth + 1);
-      }
-    });
-  }
-
-  // Identify managed chains: groups linked by sourceGroupName (source → shader → shades)
-  // Each chain is laid out as a horizontal row with aligned Y positions
-  const chainSourceNames = new Set<string>();
-  const groupToChain = new Map<string, string>(); // group.key → sourceGroupName
-  groups.forEach(group => {
-    if (getManagedLane(group) !== null && group.sourceGroupName) {
-      chainSourceNames.add(group.sourceGroupName);
-      groupToChain.set(group.key, group.sourceGroupName);
-    }
-  });
-
-  // Group chains and standalone groups
-  const chains = new Map<string, GroupData[]>(); // sourceGroupName → groups in chain
-  const standaloneGroups: GroupData[] = [];
-
-  groups.forEach(group => {
-    const chainName = groupToChain.get(group.key);
-    if (chainName) {
-      const chain = chains.get(chainName) || [];
-      chain.push(group);
-      chains.set(chainName, chain);
-    } else {
-      standaloneGroups.push(group);
-    }
-  });
-
-  // Sort chains by their source group position
-  const sortedChains = Array.from(chains.entries()).sort((a, b) => {
-    const aSource = a[1].find(g => getManagedLane(g) === 0) || a[1][0];
-    const bSource = b[1].find(g => getManagedLane(g) === 0) || b[1][0];
-    if (!aSource || !bSource) return 0;
-    return sortGroupsByPosition(aSource, bSource);
-  });
-
-  // Layout: managed chains first as horizontal rows, then standalone groups by depth
-  let nextBlockY = 0;
-  const reserveGeneratorLane = sortedChains.length > 0;
-  const laneBottoms = new Map<number, number>();
-
-  // Layout managed chains - each chain on its own row
-  sortedChains.forEach(([, chainGroups]) => {
-    // Managed chains always occupy fixed lanes regardless of extra references.
-    chainGroups.sort((a, b) => {
-      const laneA = getManagedLane(a) ?? Number.MAX_SAFE_INTEGER;
-      const laneB = getManagedLane(b) ?? Number.MAX_SAFE_INTEGER;
-      if (laneA !== laneB) return laneA - laneB;
-      return sortGroupsByPosition(a, b);
-    });
-    let rowHeight = 0;
-    const rowLanes = new Set<number>();
-    chainGroups.forEach(group => {
-      const lane = getManagedLane(group) ?? 0;
-      positions.set(group.key, { x: lane * columnStep, y: nextBlockY });
-      rowLanes.add(lane);
-      rowHeight = Math.max(rowHeight, getGroupHeight(group));
-    });
-    nextBlockY += rowHeight + gapY;
-    rowLanes.forEach(lane => {
-      laneBottoms.set(lane, nextBlockY);
-    });
-  });
-
-  // Layout standalone groups by depth columns.
-  // When shaders/steps are present, reserve column 1 for them and place
-  // other dependent groups starting at column 2. Each column stacks
-  // beneath items already occupying that same lane, not beneath the full graph.
-  if (standaloneGroups.length > 0) {
-    const standaloneColumns = new Map<number, GroupData[]>();
-    standaloneGroups.forEach(group => {
-      const depth = groupDepth.get(group.key) || 0;
-      const lane = getStandaloneLane(depth, reserveGeneratorLane);
-      const col = standaloneColumns.get(lane) || [];
-      col.push(group);
-      standaloneColumns.set(lane, col);
-    });
-
-    const sortedLanes = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
-
-    sortedLanes.forEach((lane, compressedCol) => {
-      const columnGroups = standaloneColumns.get(lane) || [];
-      let nextColumnY = laneBottoms.get(lane) ?? 0;
-      columnGroups.sort(sortGroupsByPosition).forEach(group => {
-        const xLane = reserveGeneratorLane ? lane : compressedCol;
-        positions.set(group.key, { x: xLane * columnStep, y: nextColumnY });
-        nextColumnY += getGroupHeight(group) + gapY;
-      });
-      laneBottoms.set(lane, nextColumnY);
-    });
-  }
-
-  return positions;
-}
-
-// ── Custom Node Component ──────────────────────────────────────────
-
-function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
-  const {
-    group,
-    isColorType,
-    connectedVars,
-    onGeneratorOpen,
-    onShowColorMenu,
-    onAddVariable,
-    onRenameGroup,
-    onDuplicateGroup,
-    onDeleteGroup,
-    onRenameVariable,
-    onDeleteVariable,
-  } = data;
-  const height = getGroupHeight(group);
-  const canManageGroupVariables = group.kind === 'standard';
-  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
-  const groupMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isGroupMenuOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (groupMenuRef.current?.contains(event.target as globalThis.Node)) return;
-      setIsGroupMenuOpen(false);
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
-  }, [isGroupMenuOpen]);
-
-  return (
-    <div
-      className={`rf-group-box ${group.kind}`}
-      style={{ width: GROUP_WIDTH, height, padding: 2 }}
-    >
-      {/* Header */}
-      <div
-        className="rf-group-header"
-        style={{ background: group.headerFill, height: HEADER_HEIGHT }}
-      >
-        <span className="rf-group-title">{group.title}</span>
-        {canManageGroupVariables && (
-          <div className="rf-group-header-actions">
-            <button
-              type="button"
-              className="rf-group-add-btn"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
-            >
-              +
-            </button>
-            <div className="rf-group-menu" ref={groupMenuRef}>
-              <button
-                type="button"
-                className="rf-group-menu-btn"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsGroupMenuOpen(open => !open);
-                }}
-                aria-label={`Open actions for ${group.title}`}
-              >
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M3 4.5h10M3 8h10M3 11.5h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
-                </svg>
-              </button>
-              {isGroupMenuOpen && (
-                <div
-                  className="rf-group-menu-popover"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    className="rf-group-menu-item"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onRenameGroup(group);
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="rf-group-menu-item"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onDuplicateGroup(group);
-                    }}
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="rf-group-menu-item danger"
-                    onClick={() => {
-                      setIsGroupMenuOpen(false);
-                      onDeleteGroup(group);
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Variable rows */}
-      <div className="rf-group-body" style={{ padding: `${GROUP_PADDING}px 0` }}>
-        {group.variables.map((node, idx) => {
-          const flags = connectedVars.get(node.name);
-          const hasInput = flags?.hasInput || false;
-          const hasOutput = flags?.hasOutput || false;
-          const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
-          const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
-          const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
-          const canRenameVariable = !node.isVirtual && (group.kind === 'standard' || group.kind === 'source');
-          const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
-          const showOutputHandle = !node.connectionsDisabled || node.virtualType === 'shader';
-
-          return (
-            <div
-              key={node.id}
-              className={`rf-variable-row ${rowInteractive ? 'shader-row' : ''}`}
-              style={{ height: ROW_HEIGHT, position: 'relative' }}
-              onClick={rowInteractive ? () => onGeneratorOpen(group, node) : undefined}
-            >
-              {/* Left handle (target) */}
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={`${node.name}::in`}
-                className={`rf-handle ${hasInput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
-                isConnectable={!node.connectionsDisabled}
-                style={{
-                  top: ROW_HEIGHT / 2,
-                  background: hasInput ? inputColor : IDLE_HANDLE_FILL_COLOR,
-                  borderColor: hasInput ? inputColor : IDLE_HANDLE_BORDER_COLOR,
-                }}
-              />
-
-              {/* Color swatch */}
-              {isColorType && !node.isVirtual && (
-                <div
-                  className="rf-color-swatch"
-                  style={{ background: node.color }}
-                  onClick={(e) => onShowColorMenu(e, node)}
-                  title="Edit color"
-                />
-              )}
-
-              {/* Virtual badge */}
-              {node.isVirtual && (
-                <span className={`rf-virtual-badge ${node.virtualType}`}>
-                  {node.virtualType === 'shader' ? 'fx' : 'out'}
-                </span>
-              )}
-
-              {/* Name */}
-              <span
-                className={`rf-var-name ${canRenameVariable ? 'editable' : ''}`}
-                style={{ left: node.isVirtual ? 52 : (isColorType ? 42 : 14) }}
-                onDoubleClick={canRenameVariable ? (e) => {
-                  e.stopPropagation();
-                  onRenameVariable(node);
-                } : undefined}
-                title={canRenameVariable ? 'Double-click to rename' : undefined}
-              >
-                {node.shortName}
-              </span>
-
-              {/* Value */}
-              <span
-                className="rf-var-value"
-                style={{
-                  right: showDeleteAction ? 42 : 16,
-                  color: node.isReference ? 'var(--text-secondary)' : 'var(--text-muted)',
-                }}
-              >
-                {node.displayName}
-              </span>
-
-              {/* Delete button */}
-              {showDeleteAction && (
-                <button
-                  type="button"
-                  className="rf-delete-btn"
-                  onClick={(e) => { e.stopPropagation(); onDeleteVariable(node); }}
-                >
-                  &times;
-                </button>
-              )}
-
-              {/* Right handle (source) */}
-              {showOutputHandle && (
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={`${node.name}::out`}
-                  className={`rf-handle ${hasOutput ? 'connected' : ''} ${node.connectionsDisabled ? 'disabled' : ''}`}
-                  isConnectable={!node.connectionsDisabled}
-                  style={{
-                    top: ROW_HEIGHT / 2,
-                    background: hasOutput ? outputColor : IDLE_HANDLE_FILL_COLOR,
-                    borderColor: hasOutput ? outputColor : IDLE_HANDLE_BORDER_COLOR,
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Custom Edge Component ──────────────────────────────────────────
-
-function CustomEdge({
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  data,
-}: EdgeProps<Edge<CustomEdgeData>>) {
-  const [edgePath] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
-
-  const kind = data?.kind || 'reference';
-  const stroke = kind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
-  const strokeDasharray = kind === 'generated' ? '7 5' : undefined;
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (kind !== 'reference' || !data) return;
-    if (confirm(`Disconnect ${data.receiverShortName}?`)) {
-      data.onDisconnect(data.receiverName, data.resolvedValue);
-    }
-  };
-
-  return (
-    <g className={`connection-group ${kind}`}>
-      {kind === 'reference' && (
-        <path
-          d={edgePath}
-          fill="none"
-          stroke="transparent"
-          strokeWidth={12}
-          style={{ cursor: 'pointer' }}
-          onClick={handleClick}
-        />
-      )}
-      <path
-        d={edgePath}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={kind === 'generated' ? 2.5 : 2}
-        strokeDasharray={strokeDasharray}
-        className="connection-line"
-        style={{ pointerEvents: 'none' }}
-      />
-    </g>
-  );
-}
+import { SidebarFilter } from '../Table/SidebarFilter';
+import { Icon } from '../icons/Icon';
+import { IconButton } from '../common/Button/IconButton/IconButton';
+import { TextButton } from '../common/Button/Button';
+import { Dropdown } from '../common/Dropdown/Dropdown';
+import { Input } from '../common/Input/Input';
+
+// Import from extracted files
+import {
+  GroupNodeData,
+  CustomEdgeData,
+  GroupData,
+  VariableNode,
+  ConnectionRecord,
+  ConnectionFlags,
+  GridLayoutSettings,
+  GridLayoutDraft,
+} from './GroupedGraph/types';
+import {
+  GROUP_WIDTH,
+  ROW_HEIGHT,
+  HEADER_HEIGHT,
+  GROUP_PADDING,
+  GROUP_GAP_X,
+  GROUP_GAP_Y,
+  DEFAULT_GROUP_CHILD_NAME,
+  GENERATED_CONNECTION_COLOR,
+  REFERENCE_CONNECTION_COLOR,
+  IDLE_HANDLE_BORDER_COLOR,
+  IDLE_HANDLE_FILL_COLOR,
+  STANDARD_GROUP_HEADER_FILL,
+  SHADER_GROUP_HEADER_FILL,
+} from './GroupedGraph/constants';
+import { GroupNodeComponent } from './GroupedGraph/GraphNode';
+import { CustomEdge } from './GroupedGraph/GraphEdge';
+import {
+  getDefaultVariableValue,
+  normalizePathSegment,
+  getGroupHeight,
+  normalizeGridLayoutSettings,
+  sortGroupsByPosition,
+  getManagedLane,
+  getStandaloneLane,
+  extractShadeNumber,
+  formatVariableNode,
+  createShaderNode,
+  createStepsNode,
+  createPaletteNode,
+  detectManagedNumberStepGroups,
+  arrangeGroupsByConnectedBlocks,
+} from './GroupedGraph/utils';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -805,23 +82,24 @@ const nodeTypes: NodeTypes = {
 };
 
 const edgeTypes: EdgeTypes = {
-  custom: CustomEdge,
+  customEdge: CustomEdge,
 };
 
 // ── Inner component (needs ReactFlowProvider context) ──────────────
 
-function GroupedGraphInner({
-  collections,
-  variables,
-  selectedCollectionIds,
-  variableType,
-  shadeGroups,
-  selectedModeId,
-}: GroupedGraphProps) {
-  const { openShadesModal, openStepsModal, openInputModal } = useModalContext();
-  const isColorType = variableType === 'COLOR';
+function GroupedGraphInner() {
+  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
+  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
-  const gridSettingsRef = useRef<HTMLDivElement>(null);
+
+  // Support both COLOR and FLOAT variables - groups are typed individually based on their variables
+  // Storage keys are now type-independent since we show all types together
+  // Default to COLOR type for backwards compatibility with color-specific features (can be mixed now)
+  const hasColorVars = variables.some(v => v.resolvedType === 'COLOR');
+  const hasNumberVars = variables.some(v => v.resolvedType === 'FLOAT');
+  // For features that need a type, prefer COLOR if available (for color menu, shades, etc.)
+  const variableType: 'COLOR' | 'FLOAT' = hasColorVars ? 'COLOR' : 'FLOAT';
+  const isColorType = variableType === 'COLOR';
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
     gapX: GROUP_GAP_X,
@@ -831,9 +109,19 @@ function GroupedGraphInner({
     gapX: String(GROUP_GAP_X),
     gapY: String(GROUP_GAP_Y),
   });
-  const [isGridSettingsOpen, setIsGridSettingsOpen] = useState(false);
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   const reactFlowInstance = useReactFlow();
+
+  // Get filter state from context
+  const {
+    setSelectedModeId: setGlobalModeId,
+    selectedVariableTypes: selectedTypes,
+    selectedCollectionIds: localSelectedCollections,
+    selectedGroups,
+    toggleVariableType,
+    toggleCollection,
+    toggleSelectedGroup,
+  } = useAppContext();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<GroupNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<CustomEdgeData>>([]);
@@ -851,6 +139,23 @@ function GroupedGraphInner({
   const hideColorMenu = useCallback(() => {
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
+
+  // Sidebar handlers
+  const handleModeChange = useCallback((modeId: string) => {
+    setGlobalModeId(modeId);
+  }, [setGlobalModeId]);
+
+  const handleCollectionToggle = useCallback((collectionId: string) => {
+    toggleCollection(collectionId);
+  }, [toggleCollection]);
+
+  const handleTypeToggle = useCallback((type: string) => {
+    toggleVariableType(type);
+  }, [toggleVariableType]);
+
+  const handleGroupToggle = useCallback((groupName: string) => {
+    toggleSelectedGroup(groupName);
+  }, [toggleSelectedGroup]);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
     event.stopPropagation();
@@ -872,7 +177,7 @@ function GroupedGraphInner({
 
   // Load saved positions on mount
   useEffect(() => {
-    const storageKey = `graph-positions-${variableType}`;
+    const storageKey = `graph-positions`;
     setSavedPositions({});
     setPositionsHydrated(false);
     post({ type: 'get-client-storage', key: storageKey });
@@ -885,12 +190,20 @@ function GroupedGraphInner({
       }
     };
 
+    // Fallback for browser mode: if no storage response within 100ms, hydrate anyway
+    const fallbackTimeout = setTimeout(() => {
+      setPositionsHydrated(true);
+    }, 100);
+
     window.addEventListener('message', handleStorage);
-    return () => window.removeEventListener('message', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleStorage);
+      clearTimeout(fallbackTimeout);
+    };
   }, [variableType]);
 
   useEffect(() => {
-    const storageKey = `graph-layout-settings-${variableType}`;
+    const storageKey = `graph-layout-settings`;
     setGridLayoutSettings({ gapX: GROUP_GAP_X, gapY: GROUP_GAP_Y });
     post({ type: 'get-client-storage', key: storageKey });
 
@@ -905,30 +218,6 @@ function GroupedGraphInner({
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
 
-  useEffect(() => {
-    if (isGridSettingsOpen) return;
-    setGridLayoutDraft({
-      gapX: String(gridLayoutSettings.gapX),
-      gapY: String(gridLayoutSettings.gapY),
-    });
-  }, [gridLayoutSettings, isGridSettingsOpen]);
-
-  useEffect(() => {
-    if (!isGridSettingsOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (gridSettingsRef.current?.contains(event.target as globalThis.Node)) return;
-      setIsGridSettingsOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsGridSettingsOpen(false);
-    };
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [isGridSettingsOpen]);
 
   useEffect(() => {
     if (!colorMenu.show) return;
@@ -948,33 +237,32 @@ function GroupedGraphInner({
   const handleGeneratorOpen = useCallback((group: GroupData, node: VariableNode) => {
     if (group.kind === 'shader' && node.virtualType === 'shader' && group.sourceGroupName) {
       if (isColorType) {
-        openShadesModal({ groupName: group.sourceGroupName });
+        openShadesModal({ groupName: group.sourceGroupName, modeId: selectedModeId });
       } else {
         openStepsModal({ groupName: group.sourceGroupName, collectionId: group.collectionId });
       }
     }
-  }, [isColorType, openShadesModal, openStepsModal]);
+  }, [isColorType, openShadesModal, openStepsModal, selectedModeId]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
 
-    openInputModal({
+    openAddVariableModal({
       title: `New Variable in ${group.sourceGroupName}`,
-      label: 'Variable name',
       confirmText: 'Add',
-      onConfirm: value => {
-        const variableName = normalizePathSegment(value);
+      onConfirm: (name, type) => {
+        const variableName = normalizePathSegment(name);
         if (!variableName) return;
         post({
           type: 'create-variable',
           collectionId: group.collectionId,
           name: `${group.sourceGroupName}/${variableName}`,
-          varType: variableType,
-          value: getDefaultVariableValue(variableType),
+          varType: type,
+          value: getDefaultVariableValue(type),
         });
       },
     });
-  }, [openInputModal, variableType]);
+  }, [openAddVariableModal]);
 
   const handleRenameGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
@@ -1059,7 +347,7 @@ function GroupedGraphInner({
   }, [collections, selectedModeId, variablesById]);
 
   const handleCreateGroup = useCallback(() => {
-    const firstCollectionId = Array.from(selectedCollectionIds)[0];
+    const firstCollectionId = Array.from(localSelectedCollections)[0];
     if (!firstCollectionId) return;
 
     openInputModal({
@@ -1078,11 +366,12 @@ function GroupedGraphInner({
         });
       },
     });
-  }, [isColorType, openInputModal, selectedCollectionIds, variableType]);
+  }, [isColorType, openInputModal, localSelectedCollections, variableType]);
 
-  // Compute groups and connections from ALL variables (collection filter is applied at render time)
+  // Compute groups and connections from ALL variables (filtering applied at render time)
   const { groupsData, connectionData, variableMap } = useMemo(() => {
-    const typeVars = variables.filter(variable => variable.resolvedType === variableType);
+    // Use ALL variables - no filtering here
+    const typeVars = variables;
     const varsByName = new Map<string, VariableData>();
     typeVars.forEach(variable => varsByName.set(variable.name, variable));
 
@@ -1117,6 +406,7 @@ function GroupedGraphInner({
       const managedShades = typeVars
         .filter(v => shadeGroup.deleteIds.includes(v.id) && v.id !== sourceVariable.id)
         .sort((a, b) => extractShadeNumber(a.name) - extractShadeNumber(b.name));
+
       const shadeNodes = managedShades.map(v => formatVariableNode(v, varsByName, true, collections, selectedModeId));
       const shaderNode = createShaderNode(shadeGroup, sourceColor);
       const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
@@ -1243,7 +533,9 @@ function GroupedGraphInner({
       const parts = variable.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
       const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      existing.nodes.push(formatVariableNode(variable, varsByName, isColorType, collections, selectedModeId));
+      // Use the actual variable's type instead of global isColorType
+      const varIsColorType = variable.resolvedType === 'COLOR';
+      existing.nodes.push(formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId));
       unmanagedGroupsMap.set(groupName, existing);
     });
 
@@ -1382,22 +674,64 @@ function GroupedGraphInner({
     return connected;
   }, [connectionData]);
 
-  // Build React Flow nodes/edges when data changes, hiding by selected collections
+  // Build React Flow nodes/edges when data changes
+  // Note: Filtering applied here to hide nodes/edges without removing connections
   useEffect(() => {
     if (!positionsHydrated) return;
-
-    // Determine which groups are visible based on collection filter
-    const visibleGroupKeys = new Set<string>();
-    groupsData.forEach(group => {
-      if (selectedCollectionIds.has(group.collectionId)) {
-        visibleGroupKeys.add(group.key);
-      }
-    });
 
     const newNodes: Node<GroupNodeData>[] = groupsData.map(group => {
       const savedPos = savedPositions[group.key];
       const position = savedPos || { x: group.initialX, y: group.initialY };
-      const isHidden = !visibleGroupKeys.has(group.key);
+
+      // Apply filters to determine visibility
+      let isHidden = false;
+
+      // Collection filter
+      if (!localSelectedCollections.has(group.collectionId)) {
+        isHidden = true;
+      }
+
+      // Type filter - check if any variable in group matches selected types
+      if (!isHidden) {
+        const hasMatchingType = group.variables.some(v => {
+          if (v.isVirtual) return true; // Virtual nodes (shader, palette) always pass type filter
+          const sourceVar = variablesById.get(v.id);
+          return sourceVar && selectedTypes.has(sourceVar.resolvedType);
+        });
+        if (!hasMatchingType) {
+          isHidden = true;
+        }
+      }
+
+      // Group filter - check if group belongs to a selected group prefix
+      if (!isHidden) {
+        let hasMatchingGroup = false;
+
+        if (group.kind === 'shader' || group.kind === 'shades') {
+          if (group.sourceGroupName) {
+            hasMatchingGroup = selectedGroups.has(
+              getCollectionGroupKey(group.collectionId, group.sourceGroupName)
+            );
+          }
+        } else {
+          hasMatchingGroup = group.variables.some(v => {
+            if (v.isVirtual) return false;
+            return isVariableVisibleForGroupFilters(
+              { collectionId: group.collectionId, name: v.name },
+              selectedGroups
+            );
+          });
+        }
+
+        if (!hasMatchingGroup) {
+          isHidden = true;
+        }
+      }
+      // Determine type based on first non-virtual variable in the group
+      const firstRealVar = group.variables.find(v => !v.isVirtual);
+      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
+      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
+      const groupVariableType = groupIsColorType ? 'COLOR' : 'FLOAT';
       return {
         id: group.key,
         type: 'groupNode',
@@ -1405,8 +739,8 @@ function GroupedGraphInner({
         hidden: isHidden,
         data: {
           group,
-          isColorType,
-          variableType,
+          isColorType: groupIsColorType,
+          variableType: groupVariableType,
           connectedVars,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
@@ -1418,23 +752,32 @@ function GroupedGraphInner({
           onDeleteVariable: handleDeleteGraphVariable,
           onDisconnect: handleDisconnect,
         },
-        dragHandle: '.rf-group-header',
+        dragHandle: '.group-header',
       };
     });
 
-    // Hide edges where either source or target group is hidden
+    // Create visibility map for groups
+    const groupVisibility = new Map<string, boolean>();
+    newNodes.forEach(node => {
+      groupVisibility.set(node.id, !node.hidden);
+    });
+
+    // Hide edges if either source or target node is hidden
     const newEdges: Edge<CustomEdgeData>[] = connectionData
       .map(conn => {
         const toVarInfo = variableMap.get(conn.toVar);
-        const isHidden = !visibleGroupKeys.has(conn.fromGroup) || !visibleGroupKeys.has(conn.toGroup);
+        const sourceVisible = groupVisibility.get(conn.fromGroup) ?? false;
+        const targetVisible = groupVisibility.get(conn.toGroup) ?? false;
+        const edgeHidden = !sourceVisible || !targetVisible;
+
         return {
           id: conn.id,
           source: conn.fromGroup,
           target: conn.toGroup,
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
-          type: 'custom',
-          hidden: isHidden,
+          type: 'customEdge',
+          hidden: edgeHidden,
           data: {
             kind: conn.kind,
             receiverName: toVarInfo?.node.id || '',
@@ -1448,7 +791,8 @@ function GroupedGraphInner({
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
-      selectedCollectionIds, isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
+      localSelectedCollections, selectedTypes, selectedGroups, variablesById,
+      isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
@@ -1467,7 +811,7 @@ function GroupedGraphInner({
         currentNodes.forEach(n => {
           positionsObj[n.id] = { x: n.position.x, y: n.position.y };
         });
-        const storageKey = `graph-positions-${variableType}`;
+        const storageKey = `graph-positions`;
         post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
       }, 300);
     }
@@ -1519,7 +863,7 @@ function GroupedGraphInner({
     const positionsObj: Record<string, { x: number; y: number }> = {};
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
     setSavedPositions(positionsObj);
-    post({ type: 'set-client-storage', key: `graph-positions-${variableType}`, value: positionsObj });
+    post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
   }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, setNodes, variableType]);
 
   const handleApplyGridSettings = useCallback(() => {
@@ -1529,93 +873,108 @@ function GroupedGraphInner({
     });
     setGridLayoutSettings(settings);
     setGridLayoutDraft({ gapX: String(settings.gapX), gapY: String(settings.gapY) });
-    setIsGridSettingsOpen(false);
     post({
       type: 'set-client-storage',
-      key: `graph-layout-settings-${variableType}`,
+      key: `graph-layout-settings`,
       value: settings,
     });
     handleArrangeGrid(settings);
   }, [gridLayoutDraft, variableType, handleArrangeGrid]);
 
   return (
-    <div className="grouped-graph" style={{ width: '100%', height: '100%' }} ref={groupedGraphRef}>
-      <div className="graph-top-controls" onMouseDown={e => e.stopPropagation()}>
-        <div className="toolbar-group">
-          <button
-            type="button"
-            className="graph-action-btn"
+    <div className="flex flex-col w-full h-full" ref={groupedGraphRef}>
+      <div className="flex items-center gap-3 p-3 bg-base border-b border-border shrink-0" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <TextButton
+            variant="secondary"
             onClick={handleCreateGroup}
-            disabled={selectedCollectionIds.size === 0}
+            disabled={localSelectedCollections.size === 0}
           >
             New Group
-          </button>
-          <button type="button" className="graph-action-btn" onClick={() => handleArrangeGrid()}>
+          </TextButton>
+          <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
-          </button>
-          <div ref={gridSettingsRef} className="graph-settings-menu" onMouseDown={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className="graph-action-btn"
-              onClick={() => {
-                if (isGridSettingsOpen) { setIsGridSettingsOpen(false); return; }
+          </TextButton>
+          <Dropdown
+            position="bottom-right"
+            onOpenChange={(open) => {
+              if (open) {
                 setGridLayoutDraft({
                   gapX: String(gridLayoutSettings.gapX),
                   gapY: String(gridLayoutSettings.gapY),
                 });
-                setIsGridSettingsOpen(true);
-              }}
-            >
-              Grid Settings
-            </button>
-            {isGridSettingsOpen && (
-              <div className="graph-settings-popover">
-                <div className="graph-settings-title">Grid Layout</div>
-                <div className="form-group">
-                  <label htmlFor="grid-gap-x">Horizontal gap</label>
-                  <input
-                    id="grid-gap-x" type="number" min="0" className="form-input"
-                    value={gridLayoutDraft.gapX}
-                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="grid-gap-y">Vertical gap</label>
-                  <input
-                    id="grid-gap-y" type="number" min="0" className="form-input"
-                    value={gridLayoutDraft.gapY}
-                    onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
-                  />
-                </div>
-                <div className="graph-settings-actions">
-                  <button
-                    type="button" className="graph-action-btn"
-                    onClick={() => {
-                      setGridLayoutDraft({
-                        gapX: String(gridLayoutSettings.gapX),
-                        gapY: String(gridLayoutSettings.gapY),
-                      });
-                      setIsGridSettingsOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button type="button" className="graph-action-btn" onClick={handleApplyGridSettings}>
-                    Apply
-                  </button>
-                </div>
+              }
+            }}
+          >
+            <Dropdown.Trigger asChild>
+              <TextButton variant="secondary">
+                Grid Settings
+              </TextButton>
+            </Dropdown.Trigger>
+            <Dropdown.Menu className="min-w-50 p-3">
+              <div className="font-semibold mb-3 text-sm">Grid Layout</div>
+              <div className="mb-3">
+                <label htmlFor="grid-gap-x" className="block text-[11px] mb-1 opacity-70">
+                  Horizontal gap
+                </label>
+                <Input
+                  id="grid-gap-x"
+                  type="number"
+                  min="0"
+                  value={gridLayoutDraft.gapX}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
+                />
               </div>
-            )}
-          </div>
-        </div>
-        <div className="spacer" />
-        <div className="toolbar-group">
-          <CollectionFilters />
-          <ModeSelector />
+              <div className="mb-4">
+                <label htmlFor="grid-gap-y" className="block text-[11px] mb-1 opacity-70">
+                  Vertical gap
+                </label>
+                <Input
+                  id="grid-gap-y"
+                  type="number"
+                  min="0"
+                  value={gridLayoutDraft.gapY}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <TextButton
+                  variant="ghost"
+                  onClick={() => {
+                    setGridLayoutDraft({
+                      gapX: String(gridLayoutSettings.gapX),
+                      gapY: String(gridLayoutSettings.gapY),
+                    });
+                  }}
+                >
+                  Cancel
+                </TextButton>
+                <TextButton variant="primary" onClick={handleApplyGridSettings}>
+                  Apply
+                </TextButton>
+              </div>
+            </Dropdown.Menu>
+          </Dropdown>
         </div>
       </div>
-      <ReactFlow
-        nodes={nodes}
+      <div className="relative flex-1 w-full flex">
+        {/* Sidebar */}
+        <SidebarFilter
+          selectedModeId={selectedModeId}
+          onModeChange={handleModeChange}
+          selectedTypes={selectedTypes}
+          onTypeToggle={handleTypeToggle}
+          selectedCollections={localSelectedCollections}
+          onCollectionToggle={handleCollectionToggle}
+          selectedGroups={selectedGroups}
+          onGroupToggle={handleGroupToggle}
+          showTypeFilters={true}
+        />
+
+        {/* Graph content */}
+        <div className="flex-1 relative">
+          <ReactFlow
+          nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChangeWrapped}
         onEdgesChange={onEdgesChange}
@@ -1628,7 +987,11 @@ function GroupedGraphInner({
         defaultViewport={{ x: 50, y: 50, zoom: 1 }}
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
+        className="w-full h-full bg-base-2!"
       />
+        </div>
+      </div>
+
       {colorMenu.show && (
         <ColorValueMenu
           position={colorMenu.position}
@@ -1643,10 +1006,10 @@ function GroupedGraphInner({
 
 // ── Exported component with ReactFlowProvider ──────────────────────
 
-export function GroupedGraph(props: GroupedGraphProps) {
+export function GroupedGraph() {
   return (
     <ReactFlowProvider>
-      <GroupedGraphInner {...props} />
+      <GroupedGraphInner />
     </ReactFlowProvider>
   );
 }

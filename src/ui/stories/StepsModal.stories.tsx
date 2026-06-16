@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { StepsModal } from '../components/Modals/StepsModal';
 import { ModalProvider, useModalContext } from '../components/Modals/ModalContext';
 import { AppProvider, useAppContext } from '../context/AppContext';
+import { Button } from '../components/common/Button';
 import { mockCollections, mockVariables, mockShadeGroups } from './mockData';
 
 // Wrapper with mock data
@@ -29,14 +30,14 @@ function StepsModalTrigger({ groupName }: { groupName?: string }) {
       <p style={{ marginBottom: '16px', color: 'var(--text-dim)' }}>
         The Steps Generator modal should open automatically{groupName && ` for group: ${groupName}`}.
       </p>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="primary"
         onClick={() => {
           openStepsModal({ groupName: groupName || '' });
         }}
       >
         Reopen Steps Generator {groupName && `(${groupName})`}
-      </button>
+      </Button>
       <StepsModal />
     </div>
   );

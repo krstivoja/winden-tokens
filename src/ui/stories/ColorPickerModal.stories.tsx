@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { ColorPickerModal } from '../components/Modals/ColorPickerModal';
 import { ModalProvider, useModalContext } from '../components/Modals/ModalContext';
 import { AppProvider, useAppContext } from '../context/AppContext';
+import { Button } from '../components/common/Button';
 import { mockCollections, mockVariables, mockShadeGroups } from './mockData';
 
 // Wrapper with mock data
@@ -35,8 +36,8 @@ function ColorPickerTrigger({ initialColor }: { initialColor: string }) {
       <p style={{ marginBottom: '16px', color: 'var(--text-dim)' }}>
         The modal should open automatically with color: {initialColor}
       </p>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="primary"
         onClick={() => {
           openColorPicker({
             initialColor,
@@ -48,7 +49,7 @@ function ColorPickerTrigger({ initialColor }: { initialColor: string }) {
         }}
       >
         Reopen Color Picker ({initialColor})
-      </button>
+      </Button>
       <ColorPickerModal />
     </div>
   );

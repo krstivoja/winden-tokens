@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/* Module CSS imports */
+@import "./react-area.css";
+@import "./json-editor.css";
+
+/* Light mode theme (default) */
+@theme {
+
+    --color-primary: var(--color-blue-500);
+    --color-secondary: var(--color-purple-500);
+    --color-danger: var(--color-red-500);
+    --color-success: var(--color-green-500);
+    --color-highlight: white;
+
+    --color-text: black;
+    --color-base: white;
+    --color-base-2: var(--color-zinc-100);
+    --color-base-3: var(--color-zinc-200);
+
+    --color-border: var(--color-zinc-200);
+    --color-bg-input: var(--color-zinc-100);
+
+    /* Accessibility badge backgrounds */
+    --color-badge-success: rgba(34, 197, 94, 0.15);
+    --color-badge-danger: rgba(239, 68, 68, 0.15);
+
+    /* Typography scale */
+    --font-size-footnote: 10px;
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-base: 14px;
+    --font-size-lg: 16px;
+}
+
+/* Dark mode theme (system preference) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-primary: var(--color-blue-600);
+        --color-secondary: var(--color-purple-600);
+        --color-danger: var(--color-red-600);
+        --color-success: var(--color-green-600);
+
+        --color-text: var(--color-zinc-100);
+        --color-base: var(--color-zinc-950);
+        --color-base-2: var(--color-zinc-900);
+        --color-base-3: var(--color-zinc-800);
+
+        --color-border: var(--color-zinc-700);
+        --color-bg-input: var(--color-zinc-900);
+
+        /* Accessibility badge backgrounds - increased opacity for dark mode */
+        --color-badge-success: rgba(34, 197, 94, 0.2);
+        --color-badge-danger: rgba(239, 68, 68, 0.2);
+    }
+}
+
+html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--color-base);
+    color: var(--color-text);
+    line-height: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#root {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Reset fonts */ 
+
+body, input, button, table, span, div {
+    font-size: 12px;
+}
+
+
+
+/* Checkerboard background for color transparency visualization */
+.bg-checkerboard {
+    background-image:
+        linear-gradient(45deg, #e5e5e5 25%, transparent 25%),
+        linear-gradient(-45deg, #e5e5e5 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e5e5e5 75%),
+        linear-gradient(-45deg, transparent 75%, #e5e5e5 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+}
+
+/* Checkbox checked state - show checkmark icon */
+input[type="checkbox"]:checked {
+    background-size: 12px 10px !important;
+}
