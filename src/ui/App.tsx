@@ -58,6 +58,7 @@ export function App() {
   usePluginMessages(messageHandlers());
 
   useEffect(() => {
+    post({ type: 'ui-ready' });
     post({ type: 'get-history-state' });
   }, []);
 

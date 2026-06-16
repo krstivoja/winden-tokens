@@ -3965,6 +3965,13 @@ figma.ui.onmessage = async (msg: any) => {
       postHistoryState();
       break;
 
+    case 'ui-ready':
+      // UI may finish mounting after the initial fetch already posted its
+      // message, in which case that postMessage is dropped silently. Resend
+      // current data once the UI confirms its listener is attached.
+      await fetchData();
+      break;
+
     case 'get-client-storage':
       try {
         const value = await figma.clientStorage.getAsync(msg.key);
