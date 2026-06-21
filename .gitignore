@@ -5,3 +5,5 @@ dist/
 code.js
 ui.html
 .claude/
+docs/_site/
+specs/.conversations/
