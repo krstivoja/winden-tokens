@@ -812,10 +812,11 @@ function GroupedGraphInner() {
           positionsObj[n.id] = { x: n.position.x, y: n.position.y };
         });
         const storageKey = `graph-positions`;
+        setSavedPositions(positionsObj);
         post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
       }, 300);
     }
-  }, [onNodesChange, reactFlowInstance, variableType]);
+  }, [onNodesChange, reactFlowInstance, variableType, setSavedPositions]);
 
   // Handle new connections (drag from handle to handle)
   const handleConnect: OnConnect = useCallback((connection) => {
