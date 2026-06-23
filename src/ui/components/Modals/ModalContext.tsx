@@ -8,6 +8,7 @@ interface InputModalConfig {
   confirmText: string;
   onConfirm: (value: string) => void;
   initialValue?: string;
+  suggestions?: string[];
 }
 
 interface ColorPickerConfig {

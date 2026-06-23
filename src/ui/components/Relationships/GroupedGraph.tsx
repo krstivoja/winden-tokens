@@ -18,7 +18,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { CollectionData, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
-import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
+import { getCollectionGroupKey, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -350,10 +350,18 @@ function GroupedGraphInner() {
     const firstCollectionId = Array.from(localSelectedCollections)[0];
     if (!firstCollectionId) return;
 
+    const existingGroups = new Set<string>();
+    variables.forEach(v => {
+      if (v.collectionId !== firstCollectionId) return;
+      const groupName = getVariableGroupName(v.name);
+      if (groupName) existingGroups.add(groupName);
+    });
+
     openInputModal({
       title: `New ${isColorType ? 'Color' : 'Number'} Group`,
       label: 'Group name',
       confirmText: 'Create',
+      suggestions: Array.from(existingGroups).sort((a, b) => a.localeCompare(b)),
       onConfirm: value => {
         const groupName = normalizePathSegment(value);
         if (!groupName) return;
@@ -366,7 +374,7 @@ function GroupedGraphInner() {
         });
       },
     });
-  }, [isColorType, openInputModal, localSelectedCollections, variableType]);
+  }, [isColorType, openInputModal, localSelectedCollections, variableType, variables]);
 
   // Compute groups and connections from ALL variables (filtering applied at render time)
   const { groupsData, connectionData, variableMap } = useMemo(() => {
