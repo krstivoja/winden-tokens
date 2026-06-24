@@ -89,7 +89,7 @@ const edgeTypes: EdgeTypes = {
 
 function GroupedGraphInner() {
   const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
-  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal } = useModalContext();
+  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
 
   // Support both COLOR and FLOAT variables - groups are typed individually based on their variables
@@ -295,6 +295,11 @@ function GroupedGraphInner() {
       groupName: group.sourceGroupName,
     });
   }, []);
+
+  const handleEditGroupAsText = useCallback((group: GroupData) => {
+    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+    openBulkEdit({ groupName: group.sourceGroupName, collectionId: group.collectionId });
+  }, [openBulkEdit]);
 
   const handleDeleteGraphGroup = useCallback((group: GroupData) => {
     if (group.kind !== 'standard' || !group.sourceGroupName) return;
@@ -755,6 +760,7 @@ function GroupedGraphInner() {
           onAddVariable: handleAddVariableToGroup,
           onRenameGroup: handleRenameGroup,
           onDuplicateGroup: handleDuplicateGroup,
+          onEditAsText: handleEditGroupAsText,
           onDeleteGroup: handleDeleteGraphGroup,
           onRenameVariable: handleRenameGraphVariable,
           onDeleteVariable: handleDeleteGraphVariable,
@@ -801,7 +807,7 @@ function GroupedGraphInner() {
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
       localSelectedCollections, selectedTypes, selectedGroups, variablesById,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
-      handleRenameGroup, handleDuplicateGroup, handleDeleteGraphGroup, handleRenameGraphVariable,
+      handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
   // Save positions when nodes are dragged

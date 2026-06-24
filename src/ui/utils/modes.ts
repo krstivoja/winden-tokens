@@ -53,3 +53,26 @@ export function getVariableValueForMode(
 
   return variable.value;
 }
+
+// Follow {alias} references across variables until a concrete (non-alias)
+// value is reached. Handles chained aliases (a -> b -> #hex), unlike a
+// single-hop lookup. Returns the last value seen if a reference can't be
+// resolved or the chain is too deep (cycle guard).
+export function resolveAliasValue(
+  collections: CollectionData[],
+  variables: VariableData[],
+  startValue: string,
+  preferredModeId?: string | null,
+  maxDepth = 10
+): string {
+  const refPattern = /^\{(.+)\}$/;
+  let value = startValue;
+  for (let i = 0; i < maxDepth; i++) {
+    const match = value.match(refPattern);
+    if (!match) return value;
+    const refVar = variables.find(v => v.name === match[1]);
+    if (!refVar) return value;
+    value = getVariableValueForMode(collections, refVar, preferredModeId);
+  }
+  return value;
+}

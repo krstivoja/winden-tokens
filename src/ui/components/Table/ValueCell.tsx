@@ -5,8 +5,8 @@ import { VariableData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { post } from '../../hooks/usePluginMessages';
-import { getVariableValueForMode, resolveModeIdForCollection } from '../../utils/modes';
-import { hexToRgb } from '../../utils/color';
+import { getVariableValueForMode, resolveModeIdForCollection, resolveAliasValue } from '../../utils/modes';
+import { hexToRgb, parseColorToRgb, rgbObjToHex } from '../../utils/color';
 import { TextButton } from '../common/Button';
 import { InputTable } from './InputTable';
 import { ColorOptionsDropdown } from './ColorOptionsDropdown';
@@ -55,19 +55,13 @@ export function ValueCell({ variable, modifierButton }: ValueCellProps) {
   );
 
   if (variable.resolvedType === 'COLOR') {
-    // Check if this is a reference (format: {variableName})
-    const refMatch = currentValue.match(/^\{(.+)\}$/);
-    let displayColor = currentValue;
-
-    if (refMatch) {
-      const refName = refMatch[1];
-      const refVariable = variables.find(rv => rv.name === refName);
-      if (refVariable && refVariable.resolvedType === 'COLOR') {
-        displayColor = getVariableValueForMode(collections, refVariable, selectedModeId);
-      } else {
-        displayColor = '#888888';
-      }
-    }
+    // Resolve references recursively (handles chained aliases a -> b -> #hex)
+    const isReference = /^\{(.+)\}$/.test(currentValue);
+    const resolved = resolveAliasValue(collections, variables, currentValue, selectedModeId);
+    const resolvedRgb = parseColorToRgb(resolved);
+    const displayColor = resolvedRgb
+      ? rgbObjToHex(resolvedRgb)
+      : (isReference ? '#888888' : resolved);
 
     const modeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
 

@@ -96,6 +96,7 @@ export type GroupNodeData = {
   onAddVariable: (group: GroupData) => void;
   onRenameGroup: (group: GroupData) => void;
   onDuplicateGroup: (group: GroupData) => void;
+  onEditAsText: (group: GroupData) => void;
   onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;

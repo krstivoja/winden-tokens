@@ -33,6 +33,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
     onAddVariable,
     onRenameGroup,
     onDuplicateGroup,
+    onEditAsText,
     onDeleteGroup,
     onRenameVariable,
     onDeleteVariable,
@@ -81,6 +82,9 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 </Dropdown.Item>
                 <Dropdown.Item onClick={() => onDuplicateGroup(group)}>
                   Duplicate
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => onEditAsText(group)}>
+                  Edit as Text
                 </Dropdown.Item>
                 <Dropdown.Divider />
                 <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
