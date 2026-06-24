@@ -25,6 +25,7 @@ interface ColorReferenceConfig {
 
 interface BulkEditConfig {
   groupName: string;
+  collectionId?: string;
 }
 
 interface ShadesModalConfig {

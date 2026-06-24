@@ -15,13 +15,18 @@ export function BulkEditModal() {
   const config = modals.bulkEdit;
   const [textValue, setTextValue] = useState('');
 
+  // Group may live in a different collection than the globally selected one
+  // (table shows groups across collections), so prefer the collection the
+  // group was opened from.
+  const collectionId = config?.collectionId ?? selectedCollectionId;
+
   const groupVars = useMemo(() => {
     if (!config) return [];
     return variables.filter(v =>
-      v.collectionId === selectedCollectionId &&
+      v.collectionId === collectionId &&
       v.name.startsWith(config.groupName + '/')
     );
-  }, [variables, selectedCollectionId, config]);
+  }, [variables, collectionId, config]);
 
   useEffect(() => {
     if (config && groupVars.length > 0) {
@@ -85,7 +90,7 @@ export function BulkEditModal() {
     if (updates.length > 0) {
       post({
         type: 'bulk-update-group',
-        collectionId: selectedCollectionId,
+        collectionId,
         groupName: config.groupName,
         updates,
       });

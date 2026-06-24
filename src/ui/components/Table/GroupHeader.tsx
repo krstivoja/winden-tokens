@@ -52,8 +52,8 @@ export function GroupHeader({ groupName, variables, isCollapsed }: GroupHeaderPr
 
   const handleBulkEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    openBulkEdit({ groupName });
-  }, [openBulkEdit, groupName]);
+    openBulkEdit({ groupName, collectionId: variables[0]?.collectionId });
+  }, [openBulkEdit, groupName, variables]);
 
   const handleDeleteGroup = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
