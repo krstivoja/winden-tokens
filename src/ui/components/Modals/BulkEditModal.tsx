@@ -8,6 +8,7 @@ import { TextButton } from '../common/Button';
 import { Textarea } from '../common/Textarea';
 import { ColorSwatch } from '../common/ColorSwatch/ColorSwatch';
 import { ModalOverlay, ModalContainer, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { getVariableGroupName } from '../../utils/groupFilters';
 
 export function BulkEditModal() {
   const { modals, closeBulkEdit } = useModalContext();
@@ -22,9 +23,10 @@ export function BulkEditModal() {
 
   const groupVars = useMemo(() => {
     if (!config) return [];
+    // Exact-group match only: direct children, not nested subgroups.
     return variables.filter(v =>
       v.collectionId === collectionId &&
-      v.name.startsWith(config.groupName + '/')
+      getVariableGroupName(v.name) === config.groupName
     );
   }, [variables, collectionId, config]);
 
