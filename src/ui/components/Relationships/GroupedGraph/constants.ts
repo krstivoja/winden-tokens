@@ -10,6 +10,11 @@ export const GROUP_GAP_X = 180;
 export const GROUP_GAP_Y = 40;
 export const DEFAULT_GROUP_CHILD_NAME = 'base';
 
+// ── Wrapper (expanded group frame) constants ───────────────────────
+export const WRAPPER_HEADER_HEIGHT = 36;
+export const WRAPPER_PADDING = 16;
+export const WRAPPER_GAP = 28;
+
 // ── Color Constants ────────────────────────────────────────────────
 
 export const GENERATED_CONNECTION_COLOR = 'var(--color-secondary)';

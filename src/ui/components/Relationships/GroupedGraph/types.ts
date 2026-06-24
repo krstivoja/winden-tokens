@@ -45,6 +45,9 @@ export interface GroupData {
   sourceGroupName?: string;
   headerFill: string;
   collectionId: string;
+  // True when this card has a parent path it can be grouped under a wrapper
+  // frame ("level up"; standard groups only).
+  canGroup?: boolean;
 }
 
 // ── Managed Groups ─────────────────────────────────────────────────
@@ -97,10 +100,20 @@ export type GroupNodeData = {
   onRenameGroup: (group: GroupData) => void;
   onDuplicateGroup: (group: GroupData) => void;
   onEditAsText: (group: GroupData) => void;
+  onLevelUp: (path: string) => void;
   onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
+};
+
+// ── Wrapper Node Data Type ─────────────────────────────────────────
+
+export type WrapperNodeData = {
+  path: string;
+  title: string;
+  onLevelUp: (path: string) => void;
+  onUngroup: (path: string) => void;
 };
 
 // ── Edge Data Type ─────────────────────────────────────────────────

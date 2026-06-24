@@ -34,6 +34,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
     onRenameGroup,
     onDuplicateGroup,
     onEditAsText,
+    onLevelUp,
     onDeleteGroup,
     onRenameVariable,
     onDeleteVariable,
@@ -57,6 +58,17 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
         </span>
         {canManageGroupVariables && (
           <div className="flex gap-1 items-center">
+            {group.canGroup && group.sourceGroupName && (
+              <IconButton
+                icon={<Icon name="collapse-all" size={18} />}
+                size="sm"
+                variant="ghost"
+                aria-label={`Group ${group.title} with its siblings`}
+                title="Group with siblings (level up)"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onLevelUp(group.sourceGroupName!); }}
+              />
+            )}
             <IconButton
               icon={<Icon name="plus" size={20} />}
               size="sm"

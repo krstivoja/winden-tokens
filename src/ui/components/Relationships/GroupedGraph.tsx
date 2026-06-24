@@ -32,7 +32,6 @@ import { Input } from '../common/Input/Input';
 
 // Import from extracted files
 import {
-  GroupNodeData,
   CustomEdgeData,
   GroupData,
   VariableNode,
@@ -57,6 +56,8 @@ import {
   SHADER_GROUP_HEADER_FILL,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
+import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
+import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
 import {
   getDefaultVariableValue,
@@ -79,6 +80,7 @@ import {
 
 const nodeTypes: NodeTypes = {
   groupNode: GroupNodeComponent,
+  groupWrapper: GroupWrapperComponent,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -110,6 +112,9 @@ function GroupedGraphInner() {
     gapY: String(GROUP_GAP_Y),
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
+  // Parent paths the user has wrapped into a group frame. Empty = flat leaf
+  // cards. A path here draws a wrapper around all cards sharing that parent.
+  const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
   const reactFlowInstance = useReactFlow();
 
   // Get filter state from context
@@ -123,7 +128,7 @@ function GroupedGraphInner() {
     toggleSelectedGroup,
   } = useAppContext();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<GroupNodeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<CustomEdgeData>>([]);
   const variablesById = useMemo(
     () => new Map(variables.map(variable => [variable.id, variable])),
@@ -218,6 +223,54 @@ function GroupedGraphInner() {
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
 
+  // Load grouped-path state (per variable type)
+  useEffect(() => {
+    const storageKey = `graph-grouped-paths`;
+    setGroupedPaths(new Set());
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setGroupedPaths(new Set(Array.isArray(msg.value) ? msg.value : []));
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, [variableType]);
+
+  // Mutate + persist grouped-path state in one step.
+  const persistGroupedPaths = useCallback((updater: (prev: Set<string>) => Set<string>) => {
+    setGroupedPaths(prev => {
+      const next = updater(prev);
+      post({ type: 'set-client-storage', key: `graph-grouped-paths`, value: Array.from(next) });
+      return next;
+    });
+  }, []);
+
+  // "Level up": wrap a card/wrapper together with its siblings into a frame
+  // for their shared parent path.
+  const handleLevelUp = useCallback((path: string) => {
+    if (!path || !path.includes('/')) return;
+    const parent = path.split('/').slice(0, -1).join('/');
+    if (!parent) return;
+    persistGroupedPaths(prev => {
+      const next = new Set(prev);
+      next.add(parent);
+      return next;
+    });
+  }, [persistGroupedPaths]);
+
+  // Remove a wrapper frame (its cards/sub-wrappers pop back out).
+  const handleUngroup = useCallback((path: string) => {
+    if (!path) return;
+    persistGroupedPaths(prev => {
+      const next = new Set(prev);
+      next.delete(path);
+      return next;
+    });
+  }, [persistGroupedPaths]);
 
   useEffect(() => {
     if (!colorMenu.show) return;
@@ -543,6 +596,8 @@ function GroupedGraphInner() {
     const unmanagedGroupsMap = new Map<string, { nodes: VariableNode[]; collectionId: string }>();
 
     unmanagedVars.forEach(variable => {
+      // Cards are leaf groups (one per parent path) — wrappers group cards
+      // visually without merging their variables.
       const parts = variable.name.split('/');
       const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
       const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
@@ -580,6 +635,7 @@ function GroupedGraphInner() {
         x: 0, y: 0, initialX: 0, initialY: primitiveY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
+        canGroup: entry.groupName.includes('/'),
       };
       groupsArray.push(groupData);
       entry.groupVariables.forEach((vNode, variableIndex) => {
@@ -599,6 +655,7 @@ function GroupedGraphInner() {
         x: 0, y: 0, initialX: 0, initialY: semanticY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
+        canGroup: entry.groupName.includes('/'),
       };
       groupsArray.push(groupData);
       semanticGroups.push(groupData);
@@ -692,55 +749,41 @@ function GroupedGraphInner() {
   useEffect(() => {
     if (!positionsHydrated) return;
 
-    const newNodes: Node<GroupNodeData>[] = groupsData.map(group => {
-      const savedPos = savedPositions[group.key];
-      const position = savedPos || { x: group.initialX, y: group.initialY };
+    // Determine whether a card is hidden by the active filters.
+    const isCardHidden = (group: GroupData): boolean => {
+      if (!localSelectedCollections.has(group.collectionId)) return true;
 
-      // Apply filters to determine visibility
-      let isHidden = false;
+      const hasMatchingType = group.variables.some(v => {
+        if (v.isVirtual) return true;
+        const sourceVar = variablesById.get(v.id);
+        return sourceVar && selectedTypes.has(sourceVar.resolvedType);
+      });
+      if (!hasMatchingType) return true;
 
-      // Collection filter
-      if (!localSelectedCollections.has(group.collectionId)) {
-        isHidden = true;
-      }
-
-      // Type filter - check if any variable in group matches selected types
-      if (!isHidden) {
-        const hasMatchingType = group.variables.some(v => {
-          if (v.isVirtual) return true; // Virtual nodes (shader, palette) always pass type filter
-          const sourceVar = variablesById.get(v.id);
-          return sourceVar && selectedTypes.has(sourceVar.resolvedType);
+      let hasMatchingGroup = false;
+      if (group.kind === 'shader' || group.kind === 'shades') {
+        if (group.sourceGroupName) {
+          hasMatchingGroup = selectedGroups.has(
+            getCollectionGroupKey(group.collectionId, group.sourceGroupName)
+          );
+        }
+      } else {
+        hasMatchingGroup = group.variables.some(v => {
+          if (v.isVirtual) return false;
+          return isVariableVisibleForGroupFilters(
+            { collectionId: group.collectionId, name: v.name },
+            selectedGroups
+          );
         });
-        if (!hasMatchingType) {
-          isHidden = true;
-        }
       }
+      return !hasMatchingGroup;
+    };
 
-      // Group filter - check if group belongs to a selected group prefix
-      if (!isHidden) {
-        let hasMatchingGroup = false;
-
-        if (group.kind === 'shader' || group.kind === 'shades') {
-          if (group.sourceGroupName) {
-            hasMatchingGroup = selectedGroups.has(
-              getCollectionGroupKey(group.collectionId, group.sourceGroupName)
-            );
-          }
-        } else {
-          hasMatchingGroup = group.variables.some(v => {
-            if (v.isVirtual) return false;
-            return isVariableVisibleForGroupFilters(
-              { collectionId: group.collectionId, name: v.name },
-              selectedGroups
-            );
-          });
-        }
-
-        if (!hasMatchingGroup) {
-          isHidden = true;
-        }
-      }
-      // Determine type based on first non-virtual variable in the group
+    const buildCardNode = (
+      group: GroupData,
+      position: { x: number; y: number },
+      parentId: string | null
+    ): Node => {
       const firstRealVar = group.variables.find(v => !v.isVirtual);
       const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
       const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
@@ -749,7 +792,8 @@ function GroupedGraphInner() {
         id: group.key,
         type: 'groupNode',
         position,
-        hidden: isHidden,
+        hidden: isCardHidden(group),
+        ...(parentId ? { parentId, extent: 'parent' as const } : {}),
         data: {
           group,
           isColorType: groupIsColorType,
@@ -761,6 +805,7 @@ function GroupedGraphInner() {
           onRenameGroup: handleRenameGroup,
           onDuplicateGroup: handleDuplicateGroup,
           onEditAsText: handleEditGroupAsText,
+          onLevelUp: handleLevelUp,
           onDeleteGroup: handleDeleteGraphGroup,
           onRenameVariable: handleRenameGraphVariable,
           onDeleteVariable: handleDeleteGraphVariable,
@@ -768,12 +813,52 @@ function GroupedGraphInner() {
         },
         dragHandle: '.group-header',
       };
+    };
+
+    const standardCards = groupsData.filter(g => g.kind === 'standard');
+    const managedGroups = groupsData.filter(g => g.kind !== 'standard');
+
+    const newNodes: Node[] = [];
+
+    // Managed groups (shader/steps/source) stay top-level and absolute.
+    managedGroups.forEach(group => {
+      const position = savedPositions[group.key] || { x: group.initialX, y: group.initialY };
+      newNodes.push(buildCardNode(group, position, null));
     });
 
-    // Create visibility map for groups
+    // Standard cards, nested inside wrapper frames for expanded groups.
+    const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
+    const cardHiddenByKey = new Map<string, boolean>();
+    standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g)));
+
+    placements.forEach(p => {
+      if (p.kind === 'card') {
+        newNodes.push(buildCardNode(p.group, p.position, p.parentId));
+      } else {
+        // Wrapper hidden when every card it contains is filtered out.
+        const hasVisibleChild = standardCards.some(g => {
+          const path = g.sourceGroupName || '';
+          const within = path === p.path || path.startsWith(p.path + '/');
+          return within && !cardHiddenByKey.get(g.key);
+        });
+        newNodes.push({
+          id: p.id,
+          type: 'groupWrapper',
+          position: p.position,
+          ...(p.parentId ? { parentId: p.parentId, extent: 'parent' as const } : {}),
+          hidden: !hasVisibleChild,
+          selectable: false,
+          style: { width: p.width, height: p.height },
+          data: { path: p.path, title: p.path, onLevelUp: handleLevelUp, onUngroup: handleUngroup },
+          dragHandle: '.group-header',
+        });
+      }
+    });
+
+    // Create visibility map for groups (cards only; edges connect cards).
     const groupVisibility = new Map<string, boolean>();
     newNodes.forEach(node => {
-      groupVisibility.set(node.id, !node.hidden);
+      if (node.type === 'groupNode') groupVisibility.set(node.id, !node.hidden);
     });
 
     // Hide edges if either source or target node is hidden
@@ -804,10 +889,10 @@ function GroupedGraphInner() {
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions,
+  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
       localSelectedCollections, selectedTypes, selectedGroups, variablesById,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
-      handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleDeleteGraphGroup, handleRenameGraphVariable,
+      handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
 
   // Save positions when nodes are dragged
@@ -823,6 +908,9 @@ function GroupedGraphInner() {
         const currentNodes = reactFlowInstance.getNodes();
         const positionsObj: Record<string, { x: number; y: number }> = {};
         currentNodes.forEach(n => {
+          // Only persist top-level nodes; nested cards/wrappers are auto-laid
+          // out relative to their parent each render.
+          if (n.parentId) return;
           positionsObj[n.id] = { x: n.position.x, y: n.position.y };
         });
         const storageKey = `graph-positions`;
