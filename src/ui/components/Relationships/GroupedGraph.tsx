@@ -1060,7 +1060,7 @@ function GroupedGraphInner() {
           </Dropdown>
         </div>
       </div>
-      <div className="relative flex-1 w-full flex">
+      <div className="relative flex-1 w-full flex min-h-0">
         {/* Sidebar */}
         <SidebarFilter
           selectedModeId={selectedModeId}

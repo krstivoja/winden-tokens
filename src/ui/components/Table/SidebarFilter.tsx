@@ -177,14 +177,14 @@ export function SidebarFilter({
       )}
 
       {/* Collections Tree */}
-      <div className="flex-1 overflow-auto p-3 flex flex-col min-h-0">
+      <div className="flex-1 p-3 flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-semibold">Collections</label>
           <TextButton onClick={handleToggleAllCollections} size="sm">
             {allCollectionsSelected ? 'Deselect All' : 'Select All'}
           </TextButton>
         </div>
-        <div className="space-y-1 overflow-auto">
+        <div className="space-y-1 overflow-auto flex-1 min-h-0">
           {collections.map(collection => {
             const variableCount = variables.filter(v => v.collectionId === collection.id).length;
             const groups = groupsByCollection.get(collection.id);
