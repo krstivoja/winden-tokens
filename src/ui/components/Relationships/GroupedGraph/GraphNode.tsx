@@ -28,6 +28,9 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
   const {
     group,
     connectedVars,
+    isHighlighted,
+    isDimmed,
+    onHighlightPath,
     onGeneratorOpen,
     onShowColorMenu,
     onAddVariable,
@@ -45,7 +48,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
   return (
     <div
-      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-md w-65 p-0.5 ${group.kind}`}
+      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-md w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
       style={{ height }}
     >
       {/* Header */}
@@ -89,6 +92,9 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 />
               </Dropdown.Trigger>
               <Dropdown.Menu>
+                <Dropdown.Item onClick={() => onHighlightPath(group)}>
+                  Highlight path
+                </Dropdown.Item>
                 <Dropdown.Item onClick={() => onRenameGroup(group)}>
                   Rename
                 </Dropdown.Item>

@@ -112,6 +112,8 @@ function GroupedGraphInner() {
     gapY: String(GROUP_GAP_Y),
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
+  // Group key whose connected chain is highlighted (null = nothing highlighted)
+  const [highlightedGroupKey, setHighlightedGroupKey] = useState<string | null>(null);
   // Parent paths the user has wrapped into a group frame. Empty = flat leaf
   // cards. A path here draws a wrapper around all cards sharing that parent.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
@@ -415,6 +417,18 @@ function GroupedGraphInner() {
       : selectedModeId;
     post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId });
   }, [collections, selectedModeId, variablesById]);
+
+  // Highlight the full connected chain of a group (toggle off if re-selected)
+  const handleHighlightPath = useCallback((group: GroupData) => {
+    setHighlightedGroupKey(prev => (prev === group.key ? null : group.key));
+  }, []);
+
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    if (node.type !== 'groupNode') return;
+    setHighlightedGroupKey(prev => (prev === node.id ? null : node.id));
+  }, []);
+
+  const clearHighlight = useCallback(() => setHighlightedGroupKey(null), []);
 
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(localSelectedCollections)[0];
@@ -761,6 +775,35 @@ function GroupedGraphInner() {
   useEffect(() => {
     if (!positionsHydrated) return;
 
+    // Resolve the highlighted chain: every group + edge reachable (either
+    // direction) from the selected group. Empty when nothing is highlighted.
+    const highlightedGroups = new Set<string>();
+    const highlightedEdgeIds = new Set<string>();
+    if (highlightedGroupKey) {
+      const adjacency = new Map<string, Array<{ edgeId: string; other: string }>>();
+      const link = (from: string, to: string, edgeId: string) => {
+        if (!adjacency.has(from)) adjacency.set(from, []);
+        adjacency.get(from)!.push({ edgeId, other: to });
+      };
+      connectionData.forEach(conn => {
+        link(conn.fromGroup, conn.toGroup, conn.id);
+        link(conn.toGroup, conn.fromGroup, conn.id);
+      });
+      const stack = [highlightedGroupKey];
+      highlightedGroups.add(highlightedGroupKey);
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        (adjacency.get(current) || []).forEach(({ edgeId, other }) => {
+          highlightedEdgeIds.add(edgeId);
+          if (!highlightedGroups.has(other)) {
+            highlightedGroups.add(other);
+            stack.push(other);
+          }
+        });
+      }
+    }
+    const hasHighlight = highlightedGroupKey !== null;
+
     // Determine whether a card is hidden by the active filters.
     const isCardHidden = (group: GroupData): boolean => {
       if (!localSelectedCollections.has(group.collectionId)) return true;
@@ -811,6 +854,9 @@ function GroupedGraphInner() {
           isColorType: groupIsColorType,
           variableType: groupVariableType,
           connectedVars,
+          isHighlighted: hasHighlight && highlightedGroups.has(group.key),
+          isDimmed: hasHighlight && !highlightedGroups.has(group.key),
+          onHighlightPath: handleHighlightPath,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
           onAddVariable: handleAddVariableToGroup,
@@ -894,6 +940,8 @@ function GroupedGraphInner() {
             receiverName: toVarInfo?.node.id || '',
             receiverShortName: toVarInfo?.node.shortName || '',
             resolvedValue: toVarInfo?.node.resolvedValue || '',
+            isHighlighted: hasHighlight && highlightedEdgeIds.has(conn.id),
+            isDimmed: hasHighlight && !highlightedEdgeIds.has(conn.id),
             onDisconnect: handleDisconnect,
           },
         };
@@ -905,7 +953,8 @@ function GroupedGraphInner() {
       localSelectedCollections, selectedTypes, selectedGroups, variablesById,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
-      handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, setNodes, setEdges]);
+      handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
+      highlightedGroupKey, setNodes, setEdges]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1102,6 +1151,8 @@ function GroupedGraphInner() {
         onNodesChange={handleNodesChangeWrapped}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
+        onNodeClick={handleNodeClick}
+        onPaneClick={clearHighlight}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView={false}

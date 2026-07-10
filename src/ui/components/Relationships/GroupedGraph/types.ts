@@ -94,6 +94,10 @@ export type GroupNodeData = {
   isColorType: boolean;
   variableType: 'COLOR' | 'FLOAT';
   connectedVars: Map<string, ConnectionFlags>;
+  // Path-highlight state: set when a node's connected chain is highlighted.
+  isHighlighted?: boolean;
+  isDimmed?: boolean;
+  onHighlightPath: (group: GroupData) => void;
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
   onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;
   onAddVariable: (group: GroupData) => void;
@@ -123,6 +127,9 @@ export type CustomEdgeData = {
   receiverName: string;
   receiverShortName: string;
   resolvedValue: string;
+  // Path-highlight state.
+  isHighlighted?: boolean;
+  isDimmed?: boolean;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
 };
 

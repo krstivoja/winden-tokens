@@ -19,6 +19,8 @@ export const WRAPPER_GAP = 28;
 
 export const GENERATED_CONNECTION_COLOR = 'var(--color-secondary)';
 export const REFERENCE_CONNECTION_COLOR = 'var(--color-primary)';
+// Path-highlight accent (pink) — used when tracing a connected chain
+export const HIGHLIGHT_COLOR = '#EC4899';
 export const IDLE_HANDLE_BORDER_COLOR = 'var(--color-border)';
 export const IDLE_HANDLE_FILL_COLOR = 'var(--color-base)';
 export const STANDARD_GROUP_HEADER_FILL = 'var(--color-base-2)';
