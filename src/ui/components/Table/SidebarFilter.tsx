@@ -116,15 +116,34 @@ export function SidebarFilter({
     }
   };
 
-  // Select all / deselect all for collections
+  // All group keys across every collection (for tri-state / select-all)
+  const allGroupKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    groupsByCollection.forEach((groups, collectionId) => {
+      groups.forEach(groupName => keys.push(getCollectionGroupKey(collectionId, groupName)));
+    });
+    return keys;
+  }, [groupsByCollection]);
+
+  // Select all / deselect all for collections (drives nested groups too)
   const allCollectionsSelected = collections.every(c => selectedCollections.has(c.id));
   const handleToggleAllCollections = () => {
     if (allCollectionsSelected) {
       collections.forEach(c => onCollectionToggle(c.id));
+      if (selectedGroups && onGroupToggle) {
+        allGroupKeys.forEach(key => {
+          if (selectedGroups.has(key)) onGroupToggle(key);
+        });
+      }
     } else {
       collections.forEach(c => {
         if (!selectedCollections.has(c.id)) onCollectionToggle(c.id);
       });
+      if (selectedGroups && onGroupToggle) {
+        allGroupKeys.forEach(key => {
+          if (!selectedGroups.has(key)) onGroupToggle(key);
+        });
+      }
     }
   };
 
@@ -190,6 +209,36 @@ export function SidebarFilter({
             const groups = groupsByCollection.get(collection.id);
             const hasGroups = groups && groups.size > 0;
             const isExpanded = expandedCollections.has(collection.id);
+            const collSelected = selectedCollections.has(collection.id);
+            const canFilterGroups = !!hasGroups && !!selectedGroups && !!onGroupToggle;
+
+            // Tri-state parent: derived from collection + its nested group checkboxes
+            const groupKeys = canFilterGroups
+              ? Array.from(groups!).map(g => getCollectionGroupKey(collection.id, g))
+              : [];
+            const allGroupsSelected =
+              groupKeys.length > 0 && groupKeys.every(k => selectedGroups!.has(k));
+            const parentChecked = canFilterGroups ? collSelected && allGroupsSelected : collSelected;
+            const parentIndeterminate = canFilterGroups && collSelected && !allGroupsSelected;
+
+            // One click: fully-on -> off (collection + all groups), otherwise -> on
+            const handleParentToggle = () => {
+              if (!canFilterGroups) {
+                onCollectionToggle(collection.id);
+                return;
+              }
+              if (parentChecked) {
+                onCollectionToggle(collection.id);
+                groupKeys.forEach(k => {
+                  if (selectedGroups!.has(k)) onGroupToggle!(k);
+                });
+              } else {
+                if (!collSelected) onCollectionToggle(collection.id);
+                groupKeys.forEach(k => {
+                  if (!selectedGroups!.has(k)) onGroupToggle!(k);
+                });
+              }
+            };
 
             return (
               <div key={collection.id} className="space-y-0.5">
@@ -219,8 +268,11 @@ export function SidebarFilter({
                   <label className="flex items-center gap-2 cursor-pointer flex-1">
                     <input
                       type="checkbox"
-                      checked={selectedCollections.has(collection.id)}
-                      onChange={() => onCollectionToggle(collection.id)}
+                      ref={el => {
+                        if (el) el.indeterminate = parentIndeterminate;
+                      }}
+                      checked={parentChecked}
+                      onChange={handleParentToggle}
                       className="w-4 h-4"
                     />
                     <span className="text-sm flex-1">{collection.name}</span>
@@ -249,6 +301,10 @@ export function SidebarFilter({
                             onChange={(e) => {
                               e.stopPropagation();
                               onGroupToggle(groupKey);
+                              // Enabling a group must also enable its collection, else nothing shows
+                              if (!isChecked && !selectedCollections.has(collection.id)) {
+                                onCollectionToggle(collection.id);
+                              }
                             }}
                             className="w-3.5 h-3.5"
                           />
