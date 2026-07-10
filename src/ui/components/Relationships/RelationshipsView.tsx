@@ -7,27 +7,12 @@ import { GroupedGraph } from './GroupedGraph';
 export function RelationshipsView() {
   const { variables, selectedCollectionIds } = useAppContext();
 
-  // Count stats - filter by selected collections (all types)
+  // Filter by selected collections (used for empty state)
   const filteredVars = variables.filter(v => selectedCollectionIds.has(v.collectionId));
-
-  const refPattern = /^\{(.+)\}$/;
-  const refCount = filteredVars.filter(v => refPattern.test(v.value)).length;
-
-  // Count by type
-  const colorCount = filteredVars.filter(v => v.resolvedType === 'COLOR').length;
-  const numberCount = filteredVars.filter(v => v.resolvedType === 'FLOAT').length;
 
   return (
     <div className="relative w-full h-full">
       <GroupedGraph />
-
-      {/* Stats overlay */}
-      <div className="absolute bottom-3 left-3 z-[5] flex gap-3 px-3 py-2 bg-base border border-border rounded text-[11px] opacity-80">
-        <span>{filteredVars.length} variables</span>
-        <span>{colorCount} colors</span>
-        <span>{numberCount} numbers</span>
-        <span>{refCount} references</span>
-      </div>
 
       {/* Instructions */}
       <div className="absolute bottom-3 right-3 z-[5] px-3 py-2 bg-base border border-border rounded text-[11px] opacity-70">

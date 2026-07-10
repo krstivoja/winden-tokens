@@ -134,6 +134,18 @@ function GroupedGraphInner() {
     () => new Map(variables.map(variable => [variable.id, variable])),
     [variables]
   );
+
+  // Stats for the sidebar footer (based on currently selected collections)
+  const sidebarStats = useMemo(() => {
+    const filtered = variables.filter(v => localSelectedCollections.has(v.collectionId));
+    const refPattern = /^\{(.+)\}$/;
+    return {
+      total: filtered.length,
+      colors: filtered.filter(v => v.resolvedType === 'COLOR').length,
+      numbers: filtered.filter(v => v.resolvedType === 'FLOAT').length,
+      references: filtered.filter(v => refPattern.test(v.value)).length,
+    };
+  }, [variables, localSelectedCollections]);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
     position: { top: number; left: number };
@@ -1072,6 +1084,14 @@ function GroupedGraphInner() {
           selectedGroups={selectedGroups}
           onGroupToggle={handleGroupToggle}
           showTypeFilters={true}
+          footer={
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-70">
+              <span>{sidebarStats.total} variables</span>
+              <span>{sidebarStats.colors} colors</span>
+              <span>{sidebarStats.numbers} numbers</span>
+              <span>{sidebarStats.references} references</span>
+            </div>
+          }
         />
 
         {/* Graph content */}

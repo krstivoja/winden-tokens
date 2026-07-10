@@ -18,6 +18,7 @@ interface SidebarFilterProps {
   selectedGroups?: Set<string>;
   onGroupToggle?: (groupName: string) => void;
   showTypeFilters?: boolean;
+  footer?: React.ReactNode;
 }
 
 export function SidebarFilter({
@@ -30,6 +31,7 @@ export function SidebarFilter({
   selectedGroups,
   onGroupToggle,
   showTypeFilters = true,
+  footer,
 }: SidebarFilterProps) {
   const { collections, variables } = useAppContext();
   const { openInputModal } = useModalContext();
@@ -332,6 +334,13 @@ export function SidebarFilter({
           </IconTextButton>
         </div>
       </div>
+
+      {/* Optional footer (e.g. stats info) */}
+      {footer && (
+        <div className="p-3 border-t border-border">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }
