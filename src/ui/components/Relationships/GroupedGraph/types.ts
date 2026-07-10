@@ -97,6 +97,10 @@ export type GroupNodeData = {
   // Path-highlight state: set when a node's connected chain is highlighted.
   isHighlighted?: boolean;
   isDimmed?: boolean;
+  // True while any chain is highlighted; highlightedVars holds the variable
+  // names on the chain so individual rows can be dimmed.
+  highlightActive?: boolean;
+  highlightedVars?: Set<string>;
   onHighlightPath: (group: GroupData) => void;
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
   onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;

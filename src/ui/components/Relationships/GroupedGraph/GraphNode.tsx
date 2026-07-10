@@ -30,6 +30,8 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
     connectedVars,
     isHighlighted,
     isDimmed,
+    highlightActive,
+    highlightedVars,
     onHighlightPath,
     onGeneratorOpen,
     onShowColorMenu,
@@ -126,11 +128,14 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           const canRenameVariable = !node.isVirtual && (group.kind === 'standard' || group.kind === 'source');
           const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
           const showOutputHandle = !node.connectionsDisabled || node.virtualType === 'shader';
+          // Dim off-chain rows only within a card that's on the chain; fully
+          // off-chain cards are already dimmed as a whole.
+          const rowDimmed = highlightActive && isHighlighted && !highlightedVars?.has(node.name);
 
           return (
             <div
               key={node.id}
-              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background] duration-150 ${rowInteractive ? 'cursor-pointer bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''}`}
+              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background,opacity] duration-150 ${rowInteractive ? 'cursor-pointer bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${rowDimmed ? 'opacity-30' : ''}`}
               onClick={rowInteractive ? () => onGeneratorOpen(group, node) : undefined}
             >
               {/* Left handle (target) */}

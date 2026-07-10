@@ -775,32 +775,55 @@ function GroupedGraphInner() {
   useEffect(() => {
     if (!positionsHydrated) return;
 
-    // Resolve the highlighted chain: every group + edge reachable (either
-    // direction) from the selected group. Empty when nothing is highlighted.
+    // Resolve the highlighted lineage of the selected card. References are
+    // per-variable (row), so we trace the chain at the VARIABLE level using
+    // fromVar/toVar — otherwise passing through an intermediate card would fan
+    // out to every row's provider instead of staying on the one chain.
+    // Walk upstream (providers, follow edges backward) and downstream
+    // (dependents, forward) independently so siblings are never picked up.
     const highlightedGroups = new Set<string>();
+    const highlightedVars = new Set<string>();
     const highlightedEdgeIds = new Set<string>();
     if (highlightedGroupKey) {
-      const adjacency = new Map<string, Array<{ edgeId: string; other: string }>>();
-      const link = (from: string, to: string, edgeId: string) => {
-        if (!adjacency.has(from)) adjacency.set(from, []);
-        adjacency.get(from)!.push({ edgeId, other: to });
-      };
+      const varOutgoing = new Map<string, Array<{ edgeId: string; varName: string }>>();
+      const varIncoming = new Map<string, Array<{ edgeId: string; varName: string }>>();
       connectionData.forEach(conn => {
-        link(conn.fromGroup, conn.toGroup, conn.id);
-        link(conn.toGroup, conn.fromGroup, conn.id);
+        if (!varOutgoing.has(conn.fromVar)) varOutgoing.set(conn.fromVar, []);
+        varOutgoing.get(conn.fromVar)!.push({ edgeId: conn.id, varName: conn.toVar });
+        if (!varIncoming.has(conn.toVar)) varIncoming.set(conn.toVar, []);
+        varIncoming.get(conn.toVar)!.push({ edgeId: conn.id, varName: conn.fromVar });
       });
-      const stack = [highlightedGroupKey];
+
+      // Seed with every variable in the selected card.
+      const selectedGroup = groupsData.find(g => g.key === highlightedGroupKey);
+      const seedVars = (selectedGroup?.variables || []).map(v => v.name);
+      seedVars.forEach(v => highlightedVars.add(v));
+
+      const walk = (adjacency: Map<string, Array<{ edgeId: string; varName: string }>>) => {
+        const visited = new Set<string>(seedVars);
+        const stack = [...seedVars];
+        while (stack.length > 0) {
+          const current = stack.pop()!;
+          (adjacency.get(current) || []).forEach(({ edgeId, varName }) => {
+            highlightedEdgeIds.add(edgeId);
+            highlightedVars.add(varName);
+            if (!visited.has(varName)) {
+              visited.add(varName);
+              stack.push(varName);
+            }
+          });
+        }
+      };
+
+      walk(varIncoming); // upstream providers (where it comes from)
+      walk(varOutgoing); // downstream dependents (what uses it)
+
+      // Cards containing any highlighted variable get emphasized.
+      highlightedVars.forEach(varName => {
+        const info = variableMap.get(varName);
+        if (info) highlightedGroups.add(info.group);
+      });
       highlightedGroups.add(highlightedGroupKey);
-      while (stack.length > 0) {
-        const current = stack.pop()!;
-        (adjacency.get(current) || []).forEach(({ edgeId, other }) => {
-          highlightedEdgeIds.add(edgeId);
-          if (!highlightedGroups.has(other)) {
-            highlightedGroups.add(other);
-            stack.push(other);
-          }
-        });
-      }
     }
     const hasHighlight = highlightedGroupKey !== null;
 
@@ -856,6 +879,8 @@ function GroupedGraphInner() {
           connectedVars,
           isHighlighted: hasHighlight && highlightedGroups.has(group.key),
           isDimmed: hasHighlight && !highlightedGroups.has(group.key),
+          highlightActive: hasHighlight,
+          highlightedVars,
           onHighlightPath: handleHighlightPath,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
