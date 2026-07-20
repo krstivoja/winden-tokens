@@ -430,6 +430,24 @@ function GroupedGraphInner() {
 
   const clearHighlight = useCallback(() => setHighlightedGroupKey(null), []);
 
+  // Sidebar label click — same toggle behavior as clicking the card in the graph,
+  // plus panning the canvas to it since (unlike a card click) it may be off-screen.
+  const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
+    setHighlightedGroupKey(prev => {
+      const next = prev === graphGroupKey ? null : graphGroupKey;
+      if (next) {
+        requestAnimationFrame(() => {
+          try {
+            reactFlowInstance.fitView({ nodes: [{ id: graphGroupKey }], duration: 400, padding: 0.5, maxZoom: 1 });
+          } catch {
+            // Node may not be rendered (filtered out) — highlight state still applies.
+          }
+        });
+      }
+      return next;
+    });
+  }, [reactFlowInstance]);
+
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(localSelectedCollections)[0];
     if (!firstCollectionId) return;
@@ -1157,6 +1175,8 @@ function GroupedGraphInner() {
           onCollectionToggle={handleCollectionToggle}
           selectedGroups={selectedGroups}
           onGroupToggle={handleGroupToggle}
+          highlightedGroupKey={highlightedGroupKey}
+          onHighlightGroup={handleHighlightFromSidebar}
           showTypeFilters={true}
           footer={
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-70">

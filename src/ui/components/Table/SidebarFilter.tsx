@@ -7,6 +7,202 @@ import { TypeIcon, PlusIcon } from '../Icons';
 import { TextButton, IconTextButton } from '../common/Button';
 import { useModalContext } from '../Modals/ModalContext';
 import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
+import { VariableData } from '../../types';
+import { Search } from '../common/Search';
+
+// A group name like "color/on-surface/1" is split into a nested tree so
+// siblings sharing a prefix (on-surface/1, /2, /accent, ...) collapse together.
+interface GroupTreeNode {
+  path: string;
+  label: string;
+  isGroup: boolean; // true if `path` itself is a real group (has its own graph card)
+  children: GroupTreeNode[];
+}
+
+function buildGroupTree(groupNames: string[]): GroupTreeNode[] {
+  interface MutableNode {
+    path: string;
+    label: string;
+    isGroup: boolean;
+    childrenMap: Map<string, MutableNode>;
+  }
+  const rootMap = new Map<string, MutableNode>();
+
+  groupNames.forEach(name => {
+    const parts = name.split('/');
+    let map = rootMap;
+    let prefix = '';
+    parts.forEach((seg, i) => {
+      prefix = prefix ? `${prefix}/${seg}` : seg;
+      if (!map.has(seg)) {
+        map.set(seg, { path: prefix, label: seg, isGroup: false, childrenMap: new Map() });
+      }
+      const node = map.get(seg)!;
+      if (i === parts.length - 1) {
+        node.isGroup = true;
+      }
+      map = node.childrenMap;
+    });
+  });
+
+  const toArray = (map: Map<string, MutableNode>): GroupTreeNode[] =>
+    Array.from(map.values())
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map(n => ({ path: n.path, label: n.label, isGroup: n.isGroup, children: toArray(n.childrenMap) }));
+
+  return toArray(rootMap);
+}
+
+// All real group keys (this node + every descendant) — used for select-all/collapse cascades.
+function collectGroupKeys(node: GroupTreeNode, collectionId: string): string[] {
+  const own = node.isGroup ? [getCollectionGroupKey(collectionId, node.path)] : [];
+  return [...own, ...node.children.flatMap(child => collectGroupKeys(child, collectionId))];
+}
+
+interface GroupNodeRowProps {
+  node: GroupTreeNode;
+  depth: number;
+  collectionId: string;
+  variables: VariableData[];
+  selectedGroups: Set<string>;
+  onGroupToggle: (groupKey: string) => void;
+  selectedCollections: Set<string>;
+  onCollectionToggle: (collectionId: string) => void;
+  collapsedGroups: Set<string>;
+  setCollapsedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
+  highlightedGroupKey?: string | null;
+  onHighlightGroup?: (graphGroupKey: string) => void;
+  forceExpanded?: boolean;
+}
+
+function GroupNodeRow({
+  node,
+  depth,
+  collectionId,
+  variables,
+  selectedGroups,
+  onGroupToggle,
+  selectedCollections,
+  onCollectionToggle,
+  collapsedGroups,
+  setCollapsedGroups,
+  highlightedGroupKey,
+  onHighlightGroup,
+  forceExpanded = false,
+}: GroupNodeRowProps) {
+  const nodeKey = `${collectionId}::${node.path}`;
+  const hasChildren = node.children.length > 0;
+  const isCollapsed = forceExpanded ? false : collapsedGroups.has(nodeKey);
+  // Graph cards are keyed `group:<groupName>` (see GroupedGraph) — no collectionId scoping there.
+  const graphGroupKey = `group:${node.path}`;
+  const isHighlighted = node.isGroup && highlightedGroupKey === graphGroupKey;
+
+  const count = variables.filter(
+    v => v.collectionId === collectionId && v.name.startsWith(`${node.path}/`)
+  ).length;
+
+  const descendantGroupKeys = React.useMemo(
+    () => collectGroupKeys(node, collectionId),
+    [node, collectionId]
+  );
+  const allChecked = descendantGroupKeys.every(k => selectedGroups.has(k));
+  const someChecked = descendantGroupKeys.some(k => selectedGroups.has(k));
+  const indeterminate = someChecked && !allChecked;
+
+  const handleToggle = () => {
+    const collSelected = selectedCollections.has(collectionId);
+    if (allChecked) {
+      descendantGroupKeys.forEach(k => {
+        if (selectedGroups.has(k)) onGroupToggle(k);
+      });
+    } else {
+      descendantGroupKeys.forEach(k => {
+        if (!selectedGroups.has(k)) onGroupToggle(k);
+      });
+      if (!collSelected) onCollectionToggle(collectionId);
+    }
+  };
+
+  return (
+    <div className="space-y-0.5">
+      <div
+        className={`flex items-center gap-2 px-2 py-1 rounded transition-colors ${
+          isHighlighted ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-base-2'
+        }`}
+        style={{ marginLeft: depth * 16 }}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsedGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(nodeKey)) {
+                  next.delete(nodeKey);
+                } else {
+                  next.add(nodeKey);
+                }
+                return next;
+              });
+            }}
+            className="w-4 h-4 flex items-center justify-center text-text-muted hover:text-text transition-colors"
+          >
+            {isCollapsed ? '▶' : '▼'}
+          </button>
+        ) : (
+          <div className="w-4 shrink-0" />
+        )}
+        <input
+          type="checkbox"
+          ref={el => {
+            if (el) el.indeterminate = indeterminate;
+          }}
+          checked={allChecked}
+          onChange={handleToggle}
+          className="w-3.5 h-3.5 cursor-pointer"
+        />
+        <span
+          onClick={
+            node.isGroup && onHighlightGroup
+              ? () => onHighlightGroup(graphGroupKey)
+              : undefined
+          }
+          title={node.isGroup ? 'Click to find in graph' : undefined}
+          className={`text-xs flex-1 ${
+            node.isGroup && onHighlightGroup ? 'cursor-pointer hover:underline' : ''
+          }`}
+        >
+          {node.label}
+        </span>
+        <span className="text-xs opacity-60">{count}</span>
+      </div>
+
+      {hasChildren && !isCollapsed && (
+        <div>
+          {node.children.map(child => (
+            <GroupNodeRow
+              key={child.path}
+              node={child}
+              depth={depth + 1}
+              collectionId={collectionId}
+              variables={variables}
+              selectedGroups={selectedGroups}
+              onGroupToggle={onGroupToggle}
+              selectedCollections={selectedCollections}
+              onCollectionToggle={onCollectionToggle}
+              collapsedGroups={collapsedGroups}
+              setCollapsedGroups={setCollapsedGroups}
+              highlightedGroupKey={highlightedGroupKey}
+              onHighlightGroup={onHighlightGroup}
+              forceExpanded={forceExpanded}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface SidebarFilterProps {
   selectedModeId: string | null;
@@ -17,6 +213,8 @@ interface SidebarFilterProps {
   onCollectionToggle: (collectionId: string) => void;
   selectedGroups?: Set<string>;
   onGroupToggle?: (groupName: string) => void;
+  highlightedGroupKey?: string | null;
+  onHighlightGroup?: (graphGroupKey: string) => void;
   showTypeFilters?: boolean;
   footer?: React.ReactNode;
 }
@@ -30,13 +228,81 @@ export function SidebarFilter({
   onCollectionToggle,
   selectedGroups,
   onGroupToggle,
+  highlightedGroupKey,
+  onHighlightGroup,
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
   const { collections, variables } = useAppContext();
   const { openInputModal } = useModalContext();
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
   const hasInitializedExpanded = React.useRef(false);
+
+  // Sidebar width — draggable via the handle on the right edge, persisted across sessions.
+  const SIDEBAR_MIN_WIDTH = 200;
+  const SIDEBAR_MAX_WIDTH = 560;
+  const SIDEBAR_WIDTH_STORAGE_KEY = 'sidebar-filter-width';
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const isResizingRef = React.useRef(false);
+  const resizeStartRef = React.useRef({ x: 0, width: 256 });
+
+  React.useEffect(() => {
+    post({ type: 'get-client-storage', key: SIDEBAR_WIDTH_STORAGE_KEY });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === SIDEBAR_WIDTH_STORAGE_KEY) {
+        if (typeof msg.value === 'number') {
+          setSidebarWidth(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, msg.value)));
+        }
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, []);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = e.clientX - resizeStartRef.current.x;
+      const next = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, resizeStartRef.current.width + delta)
+      );
+      setSidebarWidth(next);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setSidebarWidth(current => {
+        post({ type: 'set-client-storage', key: SIDEBAR_WIDTH_STORAGE_KEY, value: current });
+        return current;
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    resizeStartRef.current = { x: e.clientX, width: sidebarWidth };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   // Auto-expand collections with groups when group filtering is enabled (only on first render)
   React.useEffect(() => {
@@ -150,7 +416,10 @@ export function SidebarFilter({
   };
 
   return (
-    <div className="flex flex-col h-full border-r border-border bg-base w-64">
+    <div
+      className="relative flex flex-col h-full border-r border-border bg-base shrink-0"
+      style={{ width: sidebarWidth }}
+    >
       {/* Mode Selector */}
       <div className="p-3 border-b border-border">
         <label className="block text-xs font-semibold mb-2">Mode</label>
@@ -205,12 +474,46 @@ export function SidebarFilter({
             {allCollectionsSelected ? 'Deselect All' : 'Select All'}
           </TextButton>
         </div>
+        <Search
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search collections & groups..."
+          className="mb-2"
+          fullWidth
+        />
         <div className="space-y-1 overflow-auto flex-1 min-h-0">
           {collections.map(collection => {
             const variableCount = variables.filter(v => v.collectionId === collection.id).length;
             const groups = groupsByCollection.get(collection.id);
             const hasGroups = groups && groups.size > 0;
-            const isExpanded = expandedCollections.has(collection.id);
+
+            // While searching: only show groups that match by name, or that contain a
+            // matching variable, and force the whole matched path open regardless of
+            // manual collapse state.
+            const visibleGroupNames = isSearching
+              ? Array.from(groups ?? []).filter(groupName =>
+                  groupName.toLowerCase().includes(normalizedQuery) ||
+                  variables.some(v =>
+                    v.collectionId === collection.id &&
+                    v.name.startsWith(`${groupName}/`) &&
+                    v.name.toLowerCase().includes(normalizedQuery)
+                  )
+                )
+              : Array.from(groups ?? []);
+
+            const collectionMatches =
+              !isSearching ||
+              collection.name.toLowerCase().includes(normalizedQuery) ||
+              visibleGroupNames.length > 0 ||
+              variables.some(v =>
+                v.collectionId === collection.id &&
+                !getVariableGroupName(v.name) &&
+                v.name.toLowerCase().includes(normalizedQuery)
+              );
+
+            if (!collectionMatches) return null;
+
+            const isExpanded = isSearching ? true : expandedCollections.has(collection.id);
             const collSelected = selectedCollections.has(collection.id);
             const canFilterGroups = !!hasGroups && !!selectedGroups && !!onGroupToggle;
 
@@ -282,39 +585,27 @@ export function SidebarFilter({
                   </label>
                 </div>
 
-                {/* Groups (nested) */}
+                {/* Groups (nested, collapsible subgroups) */}
                 {hasGroups && isExpanded && selectedGroups && onGroupToggle && (
                   <div className="ml-8 space-y-0.5">
-                    {Array.from(groups).sort().map(groupName => {
-                      const groupVariableCount = variables.filter(
-                        v => v.collectionId === collection.id && v.name.startsWith(`${groupName}/`)
-                      ).length;
-                      const groupKey = getCollectionGroupKey(collection.id, groupName);
-                      const isChecked = selectedGroups.has(groupKey);
-
-                      return (
-                        <label
-                          key={groupKey}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              onGroupToggle(groupKey);
-                              // Enabling a group must also enable its collection, else nothing shows
-                              if (!isChecked && !selectedCollections.has(collection.id)) {
-                                onCollectionToggle(collection.id);
-                              }
-                            }}
-                            className="w-3.5 h-3.5"
-                          />
-                          <span className="text-xs flex-1">{groupName}</span>
-                          <span className="text-xs opacity-60">{groupVariableCount}</span>
-                        </label>
-                      );
-                    })}
+                    {buildGroupTree(visibleGroupNames).map(node => (
+                      <GroupNodeRow
+                        key={node.path}
+                        node={node}
+                        depth={0}
+                        collectionId={collection.id}
+                        variables={variables}
+                        selectedGroups={selectedGroups}
+                        onGroupToggle={onGroupToggle}
+                        selectedCollections={selectedCollections}
+                        onCollectionToggle={onCollectionToggle}
+                        collapsedGroups={collapsedGroups}
+                        setCollapsedGroups={setCollapsedGroups}
+                        highlightedGroupKey={highlightedGroupKey}
+                        onHighlightGroup={onHighlightGroup}
+                        forceExpanded={isSearching}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -341,6 +632,12 @@ export function SidebarFilter({
           {footer}
         </div>
       )}
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleResizeMouseDown}
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-brand/50 active:bg-brand transition-colors z-10"
+      />
     </div>
   );
 }
