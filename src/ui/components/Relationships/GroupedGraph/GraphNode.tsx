@@ -58,7 +58,10 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
         className="group-header flex items-center justify-between px-3 cursor-move select-none h-9"
         style={{ background: group.headerFill }}
       >
-        <span className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">
+        <span
+          className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap"
+          title={group.title}
+        >
           {group.title}
         </span>
         {canManageGroupVariables && (
@@ -178,7 +181,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                   e.stopPropagation();
                   onRenameVariable(node);
                 } : undefined}
-                title={canRenameVariable ? 'Double-click to rename' : undefined}
+                title={canRenameVariable ? `${node.name} (double-click to rename)` : node.name}
               >
                 {node.shortName}
               </span>
@@ -187,6 +190,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
               <span
                 className={`absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 ${node.isReference ? 'text-text-secondary' : 'text-text-muted'}`}
                 style={{ right: showDeleteAction ? 42 : 16 }}
+                title={node.displayName}
               >
                 {node.displayName}
               </span>

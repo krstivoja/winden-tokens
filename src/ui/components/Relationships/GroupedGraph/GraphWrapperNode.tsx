@@ -11,7 +11,10 @@ export function GroupWrapperComponent({ data }: NodeProps<Node<WrapperNodeData>>
   return (
     <div className="rf-group-wrapper w-full h-full rounded-md border border-dashed border-text/30 bg-text/[0.03]">
       <div className="group-header flex items-center justify-between px-3 cursor-move select-none h-9 rounded-t-md bg-base-2/60">
-        <span className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap">
+        <span
+          className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap"
+          title={data.title}
+        >
           {data.title}
         </span>
         <div className="flex gap-1 items-center">
