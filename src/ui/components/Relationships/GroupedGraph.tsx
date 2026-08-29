@@ -8,6 +8,11 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
   ReactFlowProvider,
+  MiniMap,
+  Controls,
+  Background,
+  BackgroundVariant,
+  SelectionMode,
 } from '@xyflow/react';
 import type {
   Node,
@@ -1493,7 +1498,17 @@ function GroupedGraphInner() {
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
         className="w-full h-full bg-base-2!"
-      />
+        snapToGrid
+        snapGrid={[8, 8]}
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
+        panOnDrag={[1, 2]}
+        panOnScroll
+      >
+            <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+            <MiniMap pannable zoomable />
+            <Controls showInteractive={false} />
+          </ReactFlow>
         </div>
       </div>
 

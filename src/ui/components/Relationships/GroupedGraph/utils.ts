@@ -254,7 +254,7 @@ function arrangeGroupsByConnectedBlocks(
   const visited = new Set<string>();
   const blocks: GroupData[][] = [];
 
-  groups.slice().sort(sortGroupsByPosition).forEach(group => {
+  groups.slice().sort((a, b) => a.title.localeCompare(b.title)).forEach(group => {
     if (visited.has(group.key)) return;
     const stack = [group.key];
     const block: GroupData[] = [];
@@ -274,11 +274,12 @@ function arrangeGroupsByConnectedBlocks(
     blocks.push(block);
   });
 
+  // Deterministic block order: by minimum group title, larger blocks first as tiebreak
   blocks.sort((a, b) => {
-    const topA = Math.min(...a.map(g => g.y));
-    const topB = Math.min(...b.map(g => g.y));
-    if (topA !== topB) return topA - topB;
-    return Math.min(...a.map(g => g.x)) - Math.min(...b.map(g => g.x));
+    const minTitleA = a.reduce((min, g) => (g.title < min ? g.title : min), a[0]?.title || '');
+    const minTitleB = b.reduce((min, g) => (g.title < min ? g.title : min), b[0]?.title || '');
+    if (minTitleA !== minTitleB) return minTitleA.localeCompare(minTitleB);
+    return b.length - a.length;
   });
 
   // Per-group topological depth (each group is its own unit)
@@ -405,10 +406,56 @@ function arrangeGroupsByConnectedBlocks(
 
     const sortedLanes = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
 
+    // Initial within-column order: by title (position-independent, deterministic)
+    const laneOrder = new Map<number, string[]>();
+    sortedLanes.forEach(lane => {
+      const columnGroups = (standaloneColumns.get(lane) || [])
+        .slice()
+        .sort((a, b) => a.title.localeCompare(b.title));
+      laneOrder.set(lane, columnGroups.map(group => group.key));
+    });
+
+    // Barycenter sweeps: reduce edge crossings by reordering each column
+    // according to the average index of its connected neighbors in the
+    // adjacent (already-visited) column, sweeping left-to-right then
+    // right-to-left. Groups without neighbors in that column keep their
+    // relative order (stable sort on original index).
+    const barycenterSweepCount = 4;
+    for (let sweep = 0; sweep < barycenterSweepCount; sweep++) {
+      const leftToRight = sweep % 2 === 0;
+      const laneSequence = leftToRight ? sortedLanes : sortedLanes.slice().reverse();
+      const neighborSets = leftToRight ? incoming : outgoing;
+
+      laneSequence.forEach((lane, seqIndex) => {
+        if (seqIndex === 0) return; // first column in this sweep direction stays fixed
+        const adjacentLane = laneSequence[seqIndex - 1];
+        const adjacentOrder = laneOrder.get(adjacentLane) || [];
+        const adjacentIndex = new Map(adjacentOrder.map((key, index) => [key, index]));
+        const currentOrder = laneOrder.get(lane) || [];
+
+        const withBarycenter = currentOrder.map((key, originalIndex) => {
+          const neighborKeys = Array.from(neighborSets.get(key) || []).filter(n => adjacentIndex.has(n));
+          const barycenter = neighborKeys.length > 0
+            ? neighborKeys.reduce((sum, n) => sum + (adjacentIndex.get(n) || 0), 0) / neighborKeys.length
+            : originalIndex;
+          return { key, barycenter, originalIndex };
+        });
+
+        withBarycenter.sort((a, b) => {
+          if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
+          return a.originalIndex - b.originalIndex;
+        });
+
+        laneOrder.set(lane, withBarycenter.map(item => item.key));
+      });
+    }
+
     sortedLanes.forEach((lane, compressedCol) => {
-      const columnGroups = standaloneColumns.get(lane) || [];
+      const orderedKeys = laneOrder.get(lane) || [];
       let nextColumnY = laneBottoms.get(lane) ?? 0;
-      columnGroups.sort(sortGroupsByPosition).forEach(group => {
+      orderedKeys.forEach(key => {
+        const group = groupMap.get(key);
+        if (!group) return;
         const xLane = reserveGeneratorLane ? lane : compressedCol;
         positions.set(group.key, { x: xLane * columnStep, y: nextColumnY });
         nextColumnY += getGroupHeight(group) + gapY;
