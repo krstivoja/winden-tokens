@@ -438,7 +438,7 @@ export function SidebarFilter({
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {collections.map(collection => {
             const isActive = collection.id === activePickerCollectionId;
             return (
@@ -458,11 +458,11 @@ export function SidebarFilter({
           })}
         </div>
         {activePickerCollection && activePickerCollection.modes.length > 0 && (
-          <div className="ml-2 mt-1 pt-2 border-t border-border">
-            <label className="block text-[11px] font-semibold text-text-muted mb-1">
+          <div className="ml-2 mt-2 pt-3 border-t border-border">
+            <label className="block text-[11px] font-semibold text-text-muted mb-1.5">
               {activePickerCollection.name} {activePickerCollection.modes.length > 1 ? 'modes' : 'mode'}
             </label>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {activePickerCollection.modes.map(mode => {
                 const isExactPick = mode.modeId === selectedModeId;
                 // Shown via same-name cascade or default fallback, not picked.
