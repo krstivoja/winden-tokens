@@ -458,7 +458,7 @@ export function SidebarFilter({
           })}
         </div>
         {activePickerCollection && activePickerCollection.modes.length > 0 && (
-          <div className="ml-1.5 pl-2 border-l-2 border-primary/40">
+          <div className="ml-2 mt-1 pt-2 border-t border-border">
             <label className="block text-[11px] font-semibold text-text-muted mb-1">
               {activePickerCollection.name} mode
             </label>
