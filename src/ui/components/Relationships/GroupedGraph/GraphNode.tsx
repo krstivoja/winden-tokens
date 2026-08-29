@@ -49,6 +49,9 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
 
   const height = getGroupHeight(group.variables.length);
   const canManageGroupVariables = group.kind === 'standard';
+  // True when the row-level highlight seed lives in THIS card — its sibling
+  // rows get a faded highlight marker to show group membership.
+  const seedInCard = !!highlightedVarSeed && group.variables.some(v => v.name === highlightedVarSeed);
 
   return (
     <div
@@ -137,11 +140,12 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           // off-chain cards are already dimmed as a whole.
           const rowDimmed = highlightActive && isHighlighted && !highlightedVars?.has(node.name);
           const isSeedRow = highlightActive && isHighlighted && highlightedVarSeed === node.name;
+          const isSiblingRow = rowDimmed && seedInCard;
 
           return (
             <div
               key={node.id}
-              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background,opacity] duration-150 cursor-pointer ${rowInteractive ? 'bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${rowDimmed ? 'opacity-30' : ''} ${isSeedRow ? 'bg-base-2 shadow-[inset_2px_0_0_#EC4899]' : ''}`}
+              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background,opacity] duration-150 cursor-pointer ${rowInteractive ? 'bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${isSiblingRow ? 'opacity-45 shadow-[inset_2px_0_0_rgba(236,72,153,0.45)]' : rowDimmed ? 'opacity-30' : ''} ${isSeedRow ? 'bg-base-2 shadow-[inset_2px_0_0_#EC4899]' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 if (rowInteractive) onGeneratorOpen(group, node);

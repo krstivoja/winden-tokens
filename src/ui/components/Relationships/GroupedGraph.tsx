@@ -864,6 +864,9 @@ function GroupedGraphInner() {
     const highlightedGroups = new Set<string>();
     const highlightedVars = new Set<string>();
     const highlightedEdgeIds = new Set<string>();
+    // All variables in the selected card — used to tint its off-chain edges
+    // in a faded highlight color (group membership vs. actual selection).
+    const selectedCardVars = new Set<string>();
     if (highlightedGroupKey) {
       const varOutgoing = new Map<string, Array<{ edgeId: string; varName: string }>>();
       const varIncoming = new Map<string, Array<{ edgeId: string; varName: string }>>();
@@ -876,6 +879,7 @@ function GroupedGraphInner() {
 
       // Seed with the single selected row, or every variable in the card.
       const selectedGroup = groupsData.find(g => g.key === highlightedGroupKey);
+      selectedGroup?.variables.forEach(v => selectedCardVars.add(v.name));
       const seedVars = highlightedVarName
         ? [highlightedVarName]
         : (selectedGroup?.variables || []).map(v => v.name);
@@ -1169,6 +1173,8 @@ function GroupedGraphInner() {
             resolvedValue: toVarInfo?.node.resolvedValue || '',
             isHighlighted: hasHighlight && highlightedEdgeIds.has(conn.id),
             isDimmed: hasHighlight && !highlightedEdgeIds.has(conn.id),
+            isGroupSibling: hasHighlight && !highlightedEdgeIds.has(conn.id)
+              && (selectedCardVars.has(conn.fromVar) || selectedCardVars.has(conn.toVar)),
             onDisconnect: handleDisconnect,
           },
         };
