@@ -5,6 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TextButton } from '../common/Button';
 import { highlightJsonToHtml } from '../../utils/jsonHighlight';
+import { buildNestedTokensJson, parseTokensJson } from '../../utils/tokensJson';
 
 export function JsonEditor() {
   const { collections, variables } = useAppContext();
@@ -15,16 +16,7 @@ export function JsonEditor() {
 
   // Update JSON when data changes from outside (plugin updates)
   useEffect(() => {
-    const json = JSON.stringify({
-      collections,
-      variables: variables.map(v => ({
-        id: v.id,
-        collectionId: v.collectionId,
-        name: v.name,
-        type: v.resolvedType,
-        value: v.value,
-      })),
-    }, null, 2);
+    const json = buildNestedTokensJson(collections, variables);
     setJsonValue(json);
     setHasError(false);
     setIsEdited(false);
@@ -44,7 +36,13 @@ export function JsonEditor() {
     setIsEdited(true);
 
     try {
-      const data = JSON.parse(newValue);
+      const parsed = JSON.parse(newValue);
+      // Nested tree (or legacy flat shape) → the flat payload the plugin expects.
+      const data = parseTokensJson(parsed, collections);
+      if (!data) {
+        setHasError(true);
+        return;
+      }
       post({ type: 'update-from-json', data });
       setHasError(false);
 
@@ -55,7 +53,7 @@ export function JsonEditor() {
     } catch {
       setHasError(true);
     }
-  }, []);
+  }, [collections]);
 
   const handleFormat = useCallback(() => {
     try {

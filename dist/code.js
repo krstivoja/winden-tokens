@@ -2125,41 +2125,165 @@ async function duplicateGroup(variableIds, groupName) {
         figma.ui.postMessage({ type: 'update-error', error: error.message });
     }
 }
+// ── Safe cross-collection move ─────────────────────────────────────
+// Figma has no native "move variable to another collection", so a move is
+// necessarily create + delete. Everything here happens while BOTH copies
+// still exist: every mode value is copied (modes matched by name, then
+// position, then first), aliases inside the moved set and across the rest
+// of the document are rewired to the new ids, and canvas bindings are
+// re-bound — only then are the originals removed. Deleting first (the old
+// implementation) left dangling id-based aliases and bindings.
+function isVariableAliasValue(value) {
+    return typeof value === 'object' && value !== null && 'type' in value
+        && value.type === 'VARIABLE_ALIAS';
+}
+async function rebindMovedVariablesOnCanvas(oldToNew) {
+    // documentAccess is dynamic-page: pages must be loaded before walking.
+    await figma.loadAllPagesAsync();
+    const rebindNode = (node) => {
+        const anyNode = node;
+        const bound = anyNode.boundVariables;
+        if (bound) {
+            for (const [key, binding] of Object.entries(bound)) {
+                if (Array.isArray(binding)) {
+                    // Indexed bindings: paints on fills/strokes, effect colors.
+                    binding.forEach((alias, index) => {
+                        const replacement = alias && oldToNew.get(alias.id);
+                        if (!replacement)
+                            return;
+                        try {
+                            if (key === 'fills' || key === 'strokes') {
+                                const paints = anyNode[key];
+                                if (Array.isArray(paints) && paints[index]) {
+                                    const next = paints.slice();
+                                    next[index] = figma.variables.setBoundVariableForPaint(next[index], 'color', replacement);
+                                    anyNode[key] = next;
+                                }
+                            }
+                            else if (key === 'effects') {
+                                const effects = anyNode.effects;
+                                if (Array.isArray(effects) && effects[index]) {
+                                    const next = effects.slice();
+                                    next[index] = figma.variables.setBoundVariableForEffect(next[index], 'color', replacement);
+                                    anyNode.effects = next;
+                                }
+                            }
+                        }
+                        catch (_a) {
+                            // Unsupported binding shape — the original keeps working until
+                            // deletion; better a detached binding than a failed move.
+                        }
+                    });
+                }
+                else if (binding && oldToNew.has(binding.id)) {
+                    try {
+                        anyNode.setBoundVariable(key, oldToNew.get(binding.id));
+                    }
+                    catch (_a) {
+                        // Field not rebindable on this node type — see above.
+                    }
+                }
+            }
+        }
+        if ('children' in node) {
+            node.children.forEach(child => rebindNode(child));
+        }
+    };
+    figma.root.children.forEach(page => page.children.forEach(node => rebindNode(node)));
+}
+async function safeMoveVariablesToCollection(variableIds, targetCollectionId) {
+    const targetCollection = await figma.variables.getVariableCollectionByIdAsync(targetCollectionId);
+    if (!targetCollection) {
+        throw new Error('Target collection not found');
+    }
+    const allVariables = await figma.variables.getLocalVariablesAsync();
+    const variablesById = new Map(allVariables.map(v => [v.id, v]));
+    const toMove = variableIds
+        .map(id => variablesById.get(id))
+        .filter((v) => !!v && v.variableCollectionId !== targetCollectionId);
+    if (toMove.length === 0)
+        return;
+    const existingNames = new Set(allVariables
+        .filter(v => v.variableCollectionId === targetCollectionId)
+        .map(v => v.name));
+    const sourceCollections = new Map();
+    for (const variable of toMove) {
+        if (!sourceCollections.has(variable.variableCollectionId)) {
+            const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+            if (collection)
+                sourceCollections.set(variable.variableCollectionId, collection);
+        }
+    }
+    // Target mode → source mode: same name first (Desktop→Desktop), then same
+    // position, then the source's first mode.
+    const modeMapFor = (source) => {
+        const map = new Map();
+        targetCollection.modes.forEach((targetMode, index) => {
+            const byName = source.modes.find(m => m.name.toLowerCase() === targetMode.name.toLowerCase());
+            const sourceMode = byName || source.modes[index] || source.modes[0];
+            map.set(targetMode.modeId, sourceMode.modeId);
+        });
+        return map;
+    };
+    // Step 1: create replacements while the originals still exist.
+    const oldToNew = new Map();
+    for (const oldVar of toMove) {
+        let name = oldVar.name;
+        let suffix = 2;
+        while (existingNames.has(name)) {
+            name = `${oldVar.name}-${suffix}`;
+            suffix++;
+        }
+        existingNames.add(name);
+        const newVar = figma.variables.createVariable(name, targetCollection, oldVar.resolvedType);
+        newVar.description = oldVar.description;
+        newVar.hiddenFromPublishing = oldVar.hiddenFromPublishing;
+        newVar.scopes = oldVar.scopes;
+        const source = sourceCollections.get(oldVar.variableCollectionId);
+        const modeMap = source ? modeMapFor(source) : new Map();
+        for (const mode of targetCollection.modes) {
+            const sourceModeId = modeMap.get(mode.modeId);
+            const value = sourceModeId !== undefined ? oldVar.valuesByMode[sourceModeId] : undefined;
+            if (value !== undefined) {
+                newVar.setValueForMode(mode.modeId, value);
+            }
+        }
+        oldToNew.set(oldVar.id, newVar);
+    }
+    // Step 2: aliases among the moved variables point at the new copies.
+    oldToNew.forEach(newVar => {
+        for (const mode of targetCollection.modes) {
+            const value = newVar.valuesByMode[mode.modeId];
+            if (isVariableAliasValue(value)) {
+                const replacement = oldToNew.get(value.id);
+                if (replacement) {
+                    newVar.setValueForMode(mode.modeId, { type: 'VARIABLE_ALIAS', id: replacement.id });
+                }
+            }
+        }
+    });
+    // Step 3: every other variable referencing a moved one is rewired.
+    for (const variable of allVariables) {
+        if (oldToNew.has(variable.id))
+            continue;
+        for (const [modeId, value] of Object.entries(variable.valuesByMode)) {
+            if (isVariableAliasValue(value)) {
+                const replacement = oldToNew.get(value.id);
+                if (replacement) {
+                    variable.setValueForMode(modeId, { type: 'VARIABLE_ALIAS', id: replacement.id });
+                }
+            }
+        }
+    }
+    // Step 4: canvas bindings move to the new ids.
+    await rebindMovedVariablesOnCanvas(oldToNew);
+    // Step 5: only now is it safe to delete the originals.
+    toMove.forEach(v => v.remove());
+}
 // Move variable to different collection
 async function moveVariableToCollection(variableId, targetCollectionId) {
     try {
-        const variable = await figma.variables.getVariableByIdAsync(variableId);
-        const targetCollection = await figma.variables.getVariableCollectionByIdAsync(targetCollectionId);
-        if (!variable || !targetCollection) {
-            figma.ui.postMessage({ type: 'update-error', error: 'Variable or collection not found' });
-            return;
-        }
-        // Get source collection
-        const sourceCollection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
-        if (!sourceCollection) {
-            figma.ui.postMessage({ type: 'update-error', error: 'Source collection not found' });
-            return;
-        }
-        // Store variable data before deletion
-        const variableName = variable.name;
-        const variableType = variable.resolvedType;
-        const valuesByMode = {};
-        // Get all mode values from source collection
-        for (const modeId of Object.keys(variable.valuesByMode)) {
-            valuesByMode[modeId] = variable.valuesByMode[modeId];
-        }
-        // Delete the variable from source collection
-        variable.remove();
-        // Create new variable in target collection
-        const newVariable = figma.variables.createVariable(variableName, targetCollection, variableType);
-        // Map modes from source to target collection
-        // Use first mode of target collection if modes don't match
-        const targetModeId = targetCollection.modes[0].modeId;
-        const sourceModeId = sourceCollection.modes[0].modeId;
-        const valueToSet = valuesByMode[sourceModeId];
-        if (valueToSet !== undefined) {
-            newVariable.setValueForMode(targetModeId, valueToSet);
-        }
+        await safeMoveVariablesToCollection([variableId], targetCollectionId);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
     }
@@ -2170,43 +2294,7 @@ async function moveVariableToCollection(variableId, targetCollectionId) {
 // Move group of variables to different collection
 async function moveGroupToCollection(variableIds, targetCollectionId) {
     try {
-        const targetCollection = await figma.variables.getVariableCollectionByIdAsync(targetCollectionId);
-        if (!targetCollection) {
-            figma.ui.postMessage({ type: 'update-error', error: 'Target collection not found' });
-            return;
-        }
-        // Move each variable in the group
-        for (const variableId of variableIds) {
-            const variable = await figma.variables.getVariableByIdAsync(variableId);
-            if (!variable)
-                continue;
-            // Skip if already in target collection
-            if (variable.variableCollectionId === targetCollectionId)
-                continue;
-            // Get source collection
-            const sourceCollection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
-            if (!sourceCollection)
-                continue;
-            // Store variable data
-            const variableName = variable.name;
-            const variableType = variable.resolvedType;
-            const valuesByMode = {};
-            // Get all mode values
-            for (const modeId of Object.keys(variable.valuesByMode)) {
-                valuesByMode[modeId] = variable.valuesByMode[modeId];
-            }
-            // Delete from source
-            variable.remove();
-            // Create in target
-            const newVariable = figma.variables.createVariable(variableName, targetCollection, variableType);
-            // Transfer value from first mode
-            const targetModeId = targetCollection.modes[0].modeId;
-            const sourceModeId = sourceCollection.modes[0].modeId;
-            const valueToSet = valuesByMode[sourceModeId];
-            if (valueToSet !== undefined) {
-                newVariable.setValueForMode(targetModeId, valueToSet);
-            }
-        }
+        await safeMoveVariablesToCollection(variableIds, targetCollectionId);
         await fetchData();
         figma.ui.postMessage({ type: 'update-success' });
     }

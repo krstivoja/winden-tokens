@@ -137,6 +137,9 @@ export type CustomEdgeData = {
   // Path-highlight state.
   isHighlighted?: boolean;
   isDimmed?: boolean;
+  // Off-chain edge touching the highlighted row's own card — drawn in the
+  // highlight color but faded, to show group membership vs. selection.
+  isGroupSibling?: boolean;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
 };
 
