@@ -220,11 +220,15 @@ function arrangeGroupsByConnectedBlocks(
   groups: GroupData[],
   connections: ConnectionRecord[],
   gapX: number,
-  gapY: number
+  gapY: number,
+  heightOverrides?: Map<string, number>
 ): Map<string, { x: number; y: number }> {
   const columnStep = GROUP_WIDTH + gapX;
   const positions = new Map<string, { x: number; y: number }>();
   const groupMap = new Map(groups.map(group => [group.key, group]));
+  // Callers (e.g. Arrange treating a wrapper frame as one unit) can override
+  // a pseudo-group's vertical footprint instead of deriving it from row count.
+  const heightOf = (group: GroupData): number => heightOverrides?.get(group.key) ?? getGroupHeight(group);
 
   // Build directed graph: fromGroup → toGroup (connection flows left to right)
   const outgoing = new Map<string, Set<string>>();
@@ -382,7 +386,7 @@ function arrangeGroupsByConnectedBlocks(
       const lane = getManagedLane(group) ?? 0;
       positions.set(group.key, { x: lane * columnStep, y: nextBlockY });
       rowLanes.add(lane);
-      rowHeight = Math.max(rowHeight, getGroupHeight(group));
+      rowHeight = Math.max(rowHeight, heightOf(group));
     });
     nextBlockY += rowHeight + gapY;
     rowLanes.forEach(lane => {
@@ -458,7 +462,7 @@ function arrangeGroupsByConnectedBlocks(
         if (!group) return;
         const xLane = reserveGeneratorLane ? lane : compressedCol;
         positions.set(group.key, { x: xLane * columnStep, y: nextColumnY });
-        nextColumnY += getGroupHeight(group) + gapY;
+        nextColumnY += heightOf(group) + gapY;
       });
       laneBottoms.set(lane, nextColumnY);
     });

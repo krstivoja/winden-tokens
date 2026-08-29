@@ -58,6 +58,12 @@ const wrapperId = (path: string) => `wrapper:${path}`;
 /**
  * Build placements for standard cards, nesting them inside wrapper frames for
  * every expanded ancestor path. Managed groups are not handled here.
+ *
+ * `savedPositions` holds two namespaces in one record: a top-level unit's id
+ * (card key or `wrapper:<path>`) maps to its absolute position, while
+ * `rel:<id>` maps a *nested* unit to a manually-dragged position relative to
+ * its parent wrapper — used instead of the auto vertical stack for that one
+ * child, at whatever nesting depth it lives.
  */
 export function buildWrapperLayout(
   cards: GroupData[],
@@ -117,7 +123,10 @@ export function buildWrapperLayout(
   roots.forEach(sortChildren);
 
   // Size + relative layout: cards/sub-wrappers stacked vertically,
-  // left-aligned, inside the wrapper.
+  // left-aligned, inside the wrapper — unless the user dragged one to a
+  // manual spot (rel:<id> in savedPositions), in which case that position
+  // wins and the auto-stack skips over it for the *other* children.
+  const unitId = (unit: Unit) => unit.kind === 'card' && unit.group ? unit.group.key : wrapperId(unit.path);
   const sizeUnit = (unit: Unit) => {
     if (unit.kind === 'card') {
       unit.width = GROUP_WIDTH;
@@ -126,16 +135,29 @@ export function buildWrapperLayout(
     }
     let y = WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING;
     let maxW = 0;
+    let maxRight = 0;
+    let maxBottom = 0;
     unit.children.forEach(child => {
       sizeUnit(child);
-      child.rel = { x: WRAPPER_PADDING, y };
-      y += child.height + WRAPPER_GAP;
+      const manualRel = savedPositions[`rel:${unitId(child)}`];
+      if (manualRel) {
+        child.rel = manualRel;
+      } else {
+        child.rel = { x: WRAPPER_PADDING, y };
+        y += child.height + WRAPPER_GAP;
+      }
       maxW = Math.max(maxW, child.width);
+      maxRight = Math.max(maxRight, child.rel.x + child.width);
+      maxBottom = Math.max(maxBottom, child.rel.y + child.height);
     });
-    unit.width = Math.max(maxW + WRAPPER_PADDING * 2, GROUP_WIDTH);
-    unit.height = unit.children.length > 0
+    const minWidth = Math.max(maxW + WRAPPER_PADDING * 2, GROUP_WIDTH);
+    const minHeight = unit.children.length > 0
       ? y - WRAPPER_GAP + WRAPPER_PADDING
       : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2;
+    // Bounding box of all children (auto-stacked and manually placed) never
+    // shrinks the wrapper below what the auto-stack alone would need.
+    unit.width = Math.max(minWidth, maxRight + WRAPPER_PADDING);
+    unit.height = Math.max(minHeight, maxBottom + WRAPPER_PADDING);
   };
   roots.forEach(sizeUnit);
 
@@ -182,8 +204,7 @@ export function buildWrapperLayout(
   });
   const columnBottoms = new Map<number, number>();
   sortedRoots.forEach(unit => {
-    const id = unit.kind === 'card' && unit.group ? unit.group.key : wrapperId(unit.path);
-    const saved = savedPositions[id];
+    const saved = savedPositions[unitId(unit)];
     let pos: { x: number; y: number };
     if (saved) {
       pos = saved;
