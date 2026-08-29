@@ -460,7 +460,7 @@ export function SidebarFilter({
         {activePickerCollection && activePickerCollection.modes.length > 0 && (
           <div className="ml-2 mt-1 pt-2 border-t border-border">
             <label className="block text-[11px] font-semibold text-text-muted mb-1">
-              {activePickerCollection.name} mode
+              {activePickerCollection.name} {activePickerCollection.modes.length > 1 ? 'modes' : 'mode'}
             </label>
             <div className="flex flex-wrap gap-1">
               {activePickerCollection.modes.map(mode => {
