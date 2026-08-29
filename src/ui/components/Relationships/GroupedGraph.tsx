@@ -125,8 +125,11 @@ function GroupedGraphInner() {
     gapY: String(GROUP_GAP_Y),
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
-  // Group key whose connected chain is highlighted (null = nothing highlighted)
-  const [highlightedGroupKey, setHighlightedGroupKey] = useState<string | null>(null);
+  // Highlight target: a group card (varName null = whole card's chain) or a
+  // single variable row inside it (varName set = only that row's chain).
+  const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
+  const highlightedGroupKey = highlightTarget?.groupKey ?? null;
+  const highlightedVarName = highlightTarget?.varName ?? null;
   // Parent paths the user has wrapped into a group frame. Empty = flat leaf
   // cards. A path here draws a wrapper around all cards sharing that parent.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
@@ -433,21 +436,40 @@ function GroupedGraphInner() {
 
   // Highlight the full connected chain of a group (toggle off if re-selected)
   const handleHighlightPath = useCallback((group: GroupData) => {
-    setHighlightedGroupKey(prev => (prev === group.key ? null : group.key));
+    setHighlightTarget(prev => (
+      prev?.groupKey === group.key && prev.varName === null
+        ? null
+        : { groupKey: group.key, varName: null }
+    ));
+  }, []);
+
+  // Highlight only one variable row's chain (toggle off if re-selected).
+  const handleHighlightVariable = useCallback((group: GroupData, node: VariableNode) => {
+    setHighlightTarget(prev => (
+      prev?.groupKey === group.key && prev.varName === node.name
+        ? null
+        : { groupKey: group.key, varName: node.name }
+    ));
   }, []);
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
-    setHighlightedGroupKey(prev => (prev === node.id ? null : node.id));
+    setHighlightTarget(prev => (
+      prev?.groupKey === node.id && prev.varName === null
+        ? null
+        : { groupKey: node.id, varName: null }
+    ));
   }, []);
 
-  const clearHighlight = useCallback(() => setHighlightedGroupKey(null), []);
+  const clearHighlight = useCallback(() => setHighlightTarget(null), []);
 
   // Sidebar label click — same toggle behavior as clicking the card in the graph,
   // plus panning the canvas to it since (unlike a card click) it may be off-screen.
   const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
-    setHighlightedGroupKey(prev => {
-      const next = prev === graphGroupKey ? null : graphGroupKey;
+    setHighlightTarget(prev => {
+      const next = prev?.groupKey === graphGroupKey && prev.varName === null
+        ? null
+        : { groupKey: graphGroupKey, varName: null };
       if (next) {
         requestAnimationFrame(() => {
           try {
@@ -825,9 +847,11 @@ function GroupedGraphInner() {
         varIncoming.get(conn.toVar)!.push({ edgeId: conn.id, varName: conn.fromVar });
       });
 
-      // Seed with every variable in the selected card.
+      // Seed with the single selected row, or every variable in the card.
       const selectedGroup = groupsData.find(g => g.key === highlightedGroupKey);
-      const seedVars = (selectedGroup?.variables || []).map(v => v.name);
+      const seedVars = highlightedVarName
+        ? [highlightedVarName]
+        : (selectedGroup?.variables || []).map(v => v.name);
       seedVars.forEach(v => highlightedVars.add(v));
 
       const walk = (adjacency: Map<string, Array<{ edgeId: string; varName: string }>>) => {
@@ -958,7 +982,9 @@ function GroupedGraphInner() {
           isDimmed: hasHighlight && !highlightedGroups.has(group.key),
           highlightActive: hasHighlight,
           highlightedVars,
+          highlightedVarSeed: highlightedVarName,
           onHighlightPath: handleHighlightPath,
+          onHighlightVariable: handleHighlightVariable,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
           onAddVariable: handleAddVariableToGroup,
@@ -1049,7 +1075,9 @@ function GroupedGraphInner() {
             isDimmed: false,
             highlightActive: hasHighlight,
             highlightedVars,
+            highlightedVarSeed: highlightedVarName,
             onHighlightPath: handleHighlightPath,
+            onHighlightVariable: handleHighlightVariable,
             onGeneratorOpen: handleGeneratorOpen,
             onShowColorMenu: handleShowColorMenu,
             onAddVariable: handleAddVariableToGroup,
@@ -1162,7 +1190,7 @@ function GroupedGraphInner() {
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
-      highlightedGroupKey, setNodes, setEdges]);
+      handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
 
   // The selection card now carries a per-element id (see getSelectionNodeId),
   // so switching elements mounts a fresh node with correctly measured handles.

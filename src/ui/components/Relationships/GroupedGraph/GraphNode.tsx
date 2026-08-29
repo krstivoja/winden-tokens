@@ -32,7 +32,9 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
     isDimmed,
     highlightActive,
     highlightedVars,
+    highlightedVarSeed,
     onHighlightPath,
+    onHighlightVariable,
     onGeneratorOpen,
     onShowColorMenu,
     onAddVariable,
@@ -134,12 +136,17 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
           // Dim off-chain rows only within a card that's on the chain; fully
           // off-chain cards are already dimmed as a whole.
           const rowDimmed = highlightActive && isHighlighted && !highlightedVars?.has(node.name);
+          const isSeedRow = highlightActive && isHighlighted && highlightedVarSeed === node.name;
 
           return (
             <div
               key={node.id}
-              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background,opacity] duration-150 ${rowInteractive ? 'cursor-pointer bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${rowDimmed ? 'opacity-30' : ''}`}
-              onClick={rowInteractive ? () => onGeneratorOpen(group, node) : undefined}
+              className={`group relative flex items-center px-2 h-8 border-b border-border last:border-b-0 bg-base hover:bg-base-2 transition-[background,opacity] duration-150 cursor-pointer ${rowInteractive ? 'bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${rowDimmed ? 'opacity-30' : ''} ${isSeedRow ? 'bg-base-2 shadow-[inset_2px_0_0_#EC4899]' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (rowInteractive) onGeneratorOpen(group, node);
+                else onHighlightVariable(group, node);
+              }}
             >
               {/* Left handle (target) */}
               <GraphHandle
@@ -159,7 +166,7 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
                 <div className="absolute left-3.5">
                   <ColorSwatch
                     color={node.color}
-                    onClick={(e) => onShowColorMenu(e, node)}
+                    onClick={(e) => { e.stopPropagation(); onShowColorMenu(e, node); }}
                     className="w-4.5 h-4.5 transition-all duration-150 hover:scale-115 hover:shadow-[0_2px_6px_rgba(0,0,0,0.2)]"
                     title="Edit color"
                   />
