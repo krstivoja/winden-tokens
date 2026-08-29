@@ -26,10 +26,10 @@ export interface FlatJsonPayload {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export function buildNestedTokensJson(
+export function buildNestedTokensTree(
   collections: CollectionData[],
   variables: VariableData[]
-): string {
+): Record<string, Record<string, unknown>> {
   const root: Record<string, Record<string, unknown>> = {};
   const bucketByCollectionId = new Map<string, Record<string, unknown>>();
 
@@ -66,8 +66,21 @@ export function buildNestedTokensJson(
     };
   });
 
-  return JSON.stringify(root, null, 2);
+  return root;
 }
+
+export function buildNestedTokensJson(
+  collections: CollectionData[],
+  variables: VariableData[]
+): string {
+  return JSON.stringify(buildNestedTokensTree(collections, variables), null, 2);
+}
+
+export const isTokenLeaf = (value: unknown): value is Record<string, unknown> =>
+  isPlainObject(value) && value.$value !== undefined;
+
+export const isTokenGroup = (value: unknown): value is Record<string, unknown> =>
+  isPlainObject(value);
 
 // Convert edited JSON back to the flat payload 'update-from-json' expects.
 // Accepts both the nested shape and the legacy flat {collections, variables}

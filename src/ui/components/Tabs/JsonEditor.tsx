@@ -6,12 +6,15 @@ import { post } from '../../hooks/usePluginMessages';
 import { TextButton } from '../common/Button';
 import { highlightJsonToHtml } from '../../utils/jsonHighlight';
 import { buildNestedTokensJson, parseTokensJson } from '../../utils/tokensJson';
+import { SegmentedControl } from '../common/SegmentedControl/SegmentedControl';
+import { JsonTreeView } from './JsonTreeView';
 
 export function JsonEditor() {
   const { collections, variables } = useAppContext();
   const [jsonValue, setJsonValue] = useState('');
   const [hasError, setHasError] = useState(false);
   const [isEdited, setIsEdited] = useState(false);
+  const [viewMode, setViewMode] = useState<'tree' | 'raw'>('tree');
   const editorRef = useRef<HTMLDivElement>(null);
 
   // Update JSON when data changes from outside (plugin updates)
@@ -21,11 +24,11 @@ export function JsonEditor() {
     setHasError(false);
     setIsEdited(false);
 
-    // Update contenteditable
+    // Update contenteditable (only mounted in raw mode; re-runs on switch)
     if (editorRef.current) {
       editorRef.current.innerHTML = highlightJsonToHtml(json);
     }
-  }, [collections, variables]);
+  }, [collections, variables, viewMode]);
 
   // Handle input in contenteditable
   const handleInput = useCallback(() => {
@@ -122,24 +125,34 @@ export function JsonEditor() {
 
   return (
     <div className="relative w-full h-full">
-      {/* Floating Format button - top right */}
-      <div className="absolute top-3 right-3 z-10">
-        <TextButton variant={isEdited ? 'primary' : undefined} onClick={handleFormat}>
-          Format
-        </TextButton>
-      </div>
-
-      {/* Full width/height editor with syntax highlighting */}
-      <div className="w-full h-full">
-        <div
-          ref={editorRef}
-          contentEditable
-          spellCheck={false}
-          onInput={handleInput}
-          className={`json-editor json-highlight w-full h-full ${hasError ? 'error' : ''}`}
-          style={{ whiteSpace: 'pre', outline: 'none' }}
+      {/* Floating controls - top right */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        {viewMode === 'raw' && (
+          <TextButton variant={isEdited ? 'primary' : undefined} onClick={handleFormat}>
+            Format
+          </TextButton>
+        )}
+        <SegmentedControl
+          options={[{ value: 'tree', label: 'Tree' }, { value: 'raw', label: 'Raw' }]}
+          value={viewMode}
+          onChange={value => setViewMode(value as 'tree' | 'raw')}
         />
       </div>
+
+      {viewMode === 'tree' ? (
+        <JsonTreeView />
+      ) : (
+        <div className="w-full h-full">
+          <div
+            ref={editorRef}
+            contentEditable
+            spellCheck={false}
+            onInput={handleInput}
+            className={`json-editor json-highlight w-full h-full ${hasError ? 'error' : ''}`}
+            style={{ whiteSpace: 'pre', outline: 'none' }}
+          />
+        </div>
+      )}
     </div>
   );
 }
