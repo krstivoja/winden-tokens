@@ -1,158 +1,100 @@
-// JSON editor component
+// JSON editor component — CodeMirror with fold gutters, so collection and
+// group blocks collapse/expand like in a code editor.
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { json } from '@codemirror/lang-json';
+import { EditorView } from '@codemirror/view';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { TextButton } from '../common/Button';
-import { highlightJsonToHtml } from '../../utils/jsonHighlight';
 import { buildNestedTokensJson, parseTokensJson } from '../../utils/tokensJson';
-import { SegmentedControl } from '../common/SegmentedControl/SegmentedControl';
-import { JsonTreeView } from './JsonTreeView';
+
+// Transparent chrome so the editor sits on the plugin's own theme tokens.
+const editorTheme = EditorView.theme({
+  '&': { backgroundColor: 'transparent', height: '100%', fontSize: '12px' },
+  '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
+  '.cm-activeLine': { backgroundColor: 'transparent' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+});
 
 export function JsonEditor() {
   const { collections, variables } = useAppContext();
   const [jsonValue, setJsonValue] = useState('');
   const [hasError, setHasError] = useState(false);
   const [isEdited, setIsEdited] = useState(false);
-  const [viewMode, setViewMode] = useState<'tree' | 'raw'>('tree');
-  const editorRef = useRef<HTMLDivElement>(null);
+  const postTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Update JSON when data changes from outside (plugin updates)
   useEffect(() => {
-    const json = buildNestedTokensJson(collections, variables);
-    setJsonValue(json);
+    setJsonValue(buildNestedTokensJson(collections, variables));
     setHasError(false);
     setIsEdited(false);
+  }, [collections, variables]);
 
-    // Update contenteditable (only mounted in raw mode; re-runs on switch)
-    if (editorRef.current) {
-      editorRef.current.innerHTML = highlightJsonToHtml(json);
-    }
-  }, [collections, variables, viewMode]);
-
-  // Handle input in contenteditable
-  const handleInput = useCallback(() => {
-    if (!editorRef.current) return;
-
-    const newValue = editorRef.current.innerText;
-    setJsonValue(newValue);
+  // Parse edits and push them to the plugin, debounced so half-typed (but
+  // momentarily valid) JSON doesn't delete variables mid-edit.
+  const handleChange = useCallback((value: string) => {
+    setJsonValue(value);
     setIsEdited(true);
 
-    try {
-      const parsed = JSON.parse(newValue);
-      // Nested tree (or legacy flat shape) → the flat payload the plugin expects.
-      const data = parseTokensJson(parsed, collections);
-      if (!data) {
+    if (postTimeoutRef.current) clearTimeout(postTimeoutRef.current);
+    postTimeoutRef.current = setTimeout(() => {
+      try {
+        const parsed = JSON.parse(value);
+        const data = parseTokensJson(parsed, collections);
+        if (!data) {
+          setHasError(true);
+          return;
+        }
+        post({ type: 'update-from-json', data });
+        setHasError(false);
+      } catch {
         setHasError(true);
-        return;
       }
-      post({ type: 'update-from-json', data });
-      setHasError(false);
-
-      // Re-highlight after successful parse
-      const cursorPos = saveCursorPosition(editorRef.current);
-      editorRef.current.innerHTML = highlightJsonToHtml(newValue);
-      restoreCursorPosition(editorRef.current, cursorPos);
-    } catch {
-      setHasError(true);
-    }
+    }, 600);
   }, [collections]);
+
+  useEffect(() => () => {
+    if (postTimeoutRef.current) clearTimeout(postTimeoutRef.current);
+  }, []);
 
   const handleFormat = useCallback(() => {
     try {
-      const parsed = JSON.parse(jsonValue);
-      const formatted = JSON.stringify(parsed, null, 2);
-      setJsonValue(formatted);
+      setJsonValue(JSON.stringify(JSON.parse(jsonValue), null, 2));
       setHasError(false);
       setIsEdited(false);
-
-      if (editorRef.current) {
-        editorRef.current.innerHTML = highlightJsonToHtml(formatted);
-      }
     } catch {
       setHasError(true);
     }
   }, [jsonValue]);
 
-  // Save cursor position
-  const saveCursorPosition = (el: HTMLElement): number => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return 0;
-
-    const range = selection.getRangeAt(0);
-    const preCaretRange = range.cloneRange();
-    preCaretRange.selectNodeContents(el);
-    preCaretRange.setEnd(range.endContainer, range.endOffset);
-    return preCaretRange.toString().length;
-  };
-
-  // Restore cursor position
-  const restoreCursorPosition = (el: HTMLElement, offset: number) => {
-    const selection = window.getSelection();
-    if (!selection) return;
-
-    const range = document.createRange();
-    let currentOffset = 0;
-    let found = false;
-
-    const walk = (node: Node) => {
-      if (found) return;
-
-      if (node.nodeType === Node.TEXT_NODE) {
-        const textLength = node.textContent?.length || 0;
-        if (currentOffset + textLength >= offset) {
-          range.setStart(node, offset - currentOffset);
-          range.collapse(true);
-          found = true;
-          return;
-        }
-        currentOffset += textLength;
-      } else {
-        for (let i = 0; i < node.childNodes.length; i++) {
-          walk(node.childNodes[i]);
-          if (found) return;
-        }
-      }
-    };
-
-    walk(el);
-
-    if (found) {
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-  };
-
   return (
     <div className="relative w-full h-full">
-      {/* Floating controls - top right */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-        {viewMode === 'raw' && (
-          <TextButton variant={isEdited ? 'primary' : undefined} onClick={handleFormat}>
-            Format
-          </TextButton>
-        )}
-        <SegmentedControl
-          options={[{ value: 'tree', label: 'Tree' }, { value: 'raw', label: 'Raw' }]}
-          value={viewMode}
-          onChange={value => setViewMode(value as 'tree' | 'raw')}
-        />
+      {/* Floating Format button - top right */}
+      <div className="absolute top-3 right-3 z-10">
+        <TextButton variant={isEdited ? 'primary' : undefined} onClick={handleFormat}>
+          Format
+        </TextButton>
       </div>
 
-      {viewMode === 'tree' ? (
-        <JsonTreeView />
-      ) : (
-        <div className="w-full h-full">
-          <div
-            ref={editorRef}
-            contentEditable
-            spellCheck={false}
-            onInput={handleInput}
-            className={`json-editor json-highlight w-full h-full ${hasError ? 'error' : ''}`}
-            style={{ whiteSpace: 'pre', outline: 'none' }}
-          />
-        </div>
-      )}
+      <div className={`w-full h-full overflow-auto ${hasError ? 'ring-1 ring-danger ring-inset' : ''}`}>
+        <CodeMirror
+          value={jsonValue}
+          onChange={handleChange}
+          extensions={[json(), editorTheme]}
+          basicSetup={{
+            foldGutter: true,
+            lineNumbers: true,
+            highlightActiveLine: false,
+            highlightActiveLineGutter: false,
+            highlightSelectionMatches: false,
+            autocompletion: false,
+          }}
+          height="100%"
+          style={{ height: '100%' }}
+        />
+      </div>
     </div>
   );
 }
