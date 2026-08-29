@@ -7,6 +7,7 @@ import { TypeIcon, PlusIcon } from '../Icons';
 import { TextButton, IconTextButton } from '../common/Button';
 import { useModalContext } from '../Modals/ModalContext';
 import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
+import { resolveModeIdForCollection } from '../../utils/modes';
 import { VariableData } from '../../types';
 import { Search } from '../common/Search';
 
@@ -356,20 +357,21 @@ export function SidebarFilter({
     return map;
   }, [variables]);
 
-  // Get all modes from all collections
-  const allModes = React.useMemo(() => {
-    const modes: Array<{ modeId: string; name: string; collectionName: string }> = [];
-    collections.forEach(collection => {
-      collection.modes.forEach(mode => {
-        modes.push({
-          modeId: mode.modeId,
-          name: mode.name,
-          collectionName: collection.name,
-        });
-      });
-    });
-    return modes;
-  }, [collections]);
+  // Two-level mode picker: a collection tag opens that collection's mode
+  // tags. `null` falls back to the collection owning the current mode.
+  const [modePickerCollectionId, setModePickerCollectionId] = useState<string | null>(null);
+  const modeOwnerCollectionId = React.useMemo(
+    () => collections.find(c => c.modes.some(m => m.modeId === selectedModeId))?.id ?? null,
+    [collections, selectedModeId]
+  );
+  const activePickerCollectionId =
+    modePickerCollectionId ?? modeOwnerCollectionId ?? collections[0]?.id ?? null;
+  const activePickerCollection = collections.find(c => c.id === activePickerCollectionId) || null;
+  // Mode this collection would actually display: exact pick, or the
+  // same-named cascade from a pick made under another collection.
+  const activeResolvedModeId = activePickerCollection
+    ? resolveModeIdForCollection(collections, activePickerCollection.id, selectedModeId)
+    : null;
 
   // Select all / deselect all for types
   const allTypesSelected = selectedTypes ? availableTypes.every(type => selectedTypes.has(type)) : false;
@@ -420,21 +422,67 @@ export function SidebarFilter({
       className="relative flex flex-col h-full border-r border-border bg-base shrink-0"
       style={{ width: sidebarWidth }}
     >
-      {/* Mode Selector */}
+      {/* Mode Selector — collection tags on top, that collection's mode
+          tags below. Picking a mode cascades to same-named modes in other
+          collections (see resolveModeIdForCollection). */}
       <div className="p-3 border-b border-border">
-        <label className="block text-xs font-semibold mb-2">Mode</label>
-        <select
-          value={selectedModeId || ''}
-          onChange={e => onModeChange(e.target.value)}
-          className="w-full px-2 py-1.5 border border-border rounded bg-base text-text text-sm"
-        >
-          <option value="">All Modes</option>
-          {allModes.map(mode => (
-            <option key={mode.modeId} value={mode.modeId}>
-              {mode.name} ({mode.collectionName})
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-semibold">Mode</label>
+          {selectedModeId && (
+            <button
+              type="button"
+              className="text-[11px] text-text-muted hover:text-text cursor-pointer bg-transparent border-none p-0"
+              onClick={() => onModeChange('')}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1 mb-2">
+          {collections.map(collection => {
+            const isActive = collection.id === activePickerCollectionId;
+            return (
+              <button
+                key={collection.id}
+                type="button"
+                className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-all ${
+                  isActive
+                    ? 'bg-primary text-base border-primary'
+                    : 'bg-base-2 text-text border-border hover:bg-base-3'
+                }`}
+                onClick={() => setModePickerCollectionId(collection.id)}
+              >
+                {collection.name}
+              </button>
+            );
+          })}
+        </div>
+        {activePickerCollection && activePickerCollection.modes.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {activePickerCollection.modes.map(mode => {
+              const isExactPick = mode.modeId === selectedModeId;
+              // Shown via same-name cascade or default fallback, not picked.
+              const isResolved = !isExactPick && mode.modeId === activeResolvedModeId;
+              return (
+                <button
+                  key={mode.modeId}
+                  type="button"
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-medium border cursor-pointer transition-all ${
+                    isExactPick
+                      ? 'bg-primary text-base border-primary'
+                      : isResolved
+                        ? 'bg-primary/15 text-primary border-primary/40'
+                        : 'bg-transparent text-text-secondary border-border hover:bg-base-2'
+                  }`}
+                  title={isResolved ? 'Currently shown (following the selected mode by name)' : undefined}
+                  onClick={() => onModeChange(mode.modeId)}
+                >
+                  {mode.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Type Filters */}
