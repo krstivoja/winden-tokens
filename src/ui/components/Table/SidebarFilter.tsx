@@ -457,28 +457,26 @@ export function SidebarFilter({
             );
           })}
         </div>
-        {activePickerCollection && activePickerCollection.modes.length > 0 && (
+        {activePickerCollection && activePickerCollection.modes.length > 1 && (
           <div className="ml-2 mt-2 pt-3 border-t border-border">
             <label className="block text-[11px] font-semibold text-text-muted mb-1.5">
-              {activePickerCollection.name} {activePickerCollection.modes.length > 1 ? 'modes' : 'mode'}
+              {activePickerCollection.name} modes
             </label>
             <div className="flex flex-wrap gap-1.5">
               {activePickerCollection.modes.map(mode => {
-                const isExactPick = mode.modeId === selectedModeId;
-                // Shown via same-name cascade or default fallback, not picked.
-                const isResolved = !isExactPick && mode.modeId === activeResolvedModeId;
+                // Binary state: solid = the mode this collection displays
+                // right now (explicit pick, cascade, or default — same thing
+                // from the user's point of view).
+                const isActive = mode.modeId === activeResolvedModeId;
                 return (
                   <button
                     key={mode.modeId}
                     type="button"
                     className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-all ${
-                      isExactPick
+                      isActive
                         ? 'bg-primary text-base border-primary'
-                        : isResolved
-                          ? 'bg-primary/15 text-primary border-primary/40'
-                          : 'bg-base-2 text-text border-border hover:bg-base-3'
+                        : 'bg-base-2 text-text border-border hover:bg-base-3'
                     }`}
-                    title={isResolved ? 'Currently shown (following the selected mode by name)' : undefined}
                     onClick={() => onModeChange(mode.modeId)}
                   >
                     {mode.name}
