@@ -458,29 +458,34 @@ export function SidebarFilter({
           })}
         </div>
         {activePickerCollection && activePickerCollection.modes.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {activePickerCollection.modes.map(mode => {
-              const isExactPick = mode.modeId === selectedModeId;
-              // Shown via same-name cascade or default fallback, not picked.
-              const isResolved = !isExactPick && mode.modeId === activeResolvedModeId;
-              return (
-                <button
-                  key={mode.modeId}
-                  type="button"
-                  className={`px-2 py-0.5 rounded-full text-[11px] font-medium border cursor-pointer transition-all ${
-                    isExactPick
-                      ? 'bg-primary text-base border-primary'
-                      : isResolved
-                        ? 'bg-primary/15 text-primary border-primary/40'
-                        : 'bg-transparent text-text-secondary border-border hover:bg-base-2'
-                  }`}
-                  title={isResolved ? 'Currently shown (following the selected mode by name)' : undefined}
-                  onClick={() => onModeChange(mode.modeId)}
-                >
-                  {mode.name}
-                </button>
-              );
-            })}
+          <div className="ml-1.5 pl-2 border-l-2 border-primary/40">
+            <label className="block text-[11px] font-semibold text-text-muted mb-1">
+              {activePickerCollection.name} mode
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {activePickerCollection.modes.map(mode => {
+                const isExactPick = mode.modeId === selectedModeId;
+                // Shown via same-name cascade or default fallback, not picked.
+                const isResolved = !isExactPick && mode.modeId === activeResolvedModeId;
+                return (
+                  <button
+                    key={mode.modeId}
+                    type="button"
+                    className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-all ${
+                      isExactPick
+                        ? 'bg-primary text-base border-primary'
+                        : isResolved
+                          ? 'bg-primary/15 text-primary border-primary/40'
+                          : 'bg-base-2 text-text border-border hover:bg-base-3'
+                    }`}
+                    title={isResolved ? 'Currently shown (following the selected mode by name)' : undefined}
+                    onClick={() => onModeChange(mode.modeId)}
+                  >
+                    {mode.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
