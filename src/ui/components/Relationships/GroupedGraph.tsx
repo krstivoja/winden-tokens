@@ -8,6 +8,11 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
   ReactFlowProvider,
+  MiniMap,
+  Controls,
+  Background,
+  BackgroundVariant,
+  SelectionMode,
 } from '@xyflow/react';
 import type {
   Node,
@@ -55,6 +60,9 @@ import {
   IDLE_HANDLE_FILL_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   SHADER_GROUP_HEADER_FILL,
+  WRAPPER_HEADER_HEIGHT,
+  WRAPPER_PADDING,
+  WRAPPER_GAP,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
@@ -95,6 +103,20 @@ const PROPERTY_COLUMN_GAP = 220;
 // (the row's handle still shows, but no connecting line is drawn).
 const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
 
+// Shallowest (outermost) grouped ancestor of `path` — the top-level wrapper
+// that ultimately contains it, even when wrappers are nested inside one
+// another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
+// FIRST match (ascending depth) instead of the deepest one, since Arrange
+// treats a whole nested wrapper frame as a single movable unit.
+const outermostGroupedAncestor = (path: string, grouped: Set<string>): string | null => {
+  const parts = path.split('/');
+  for (let depth = 1; depth < parts.length; depth++) {
+    const prefix = parts.slice(0, depth).join('/');
+    if (grouped.has(prefix)) return prefix;
+  }
+  return null;
+};
+
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
 };
@@ -125,12 +147,20 @@ function GroupedGraphInner() {
     gapY: String(GROUP_GAP_Y),
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
-  // Group key whose connected chain is highlighted (null = nothing highlighted)
-  const [highlightedGroupKey, setHighlightedGroupKey] = useState<string | null>(null);
+  // Highlight target: a group card (varName null = whole card's chain) or a
+  // single variable row inside it (varName set = only that row's chain).
+  const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
+  const highlightedGroupKey = highlightTarget?.groupKey ?? null;
+  const highlightedVarName = highlightTarget?.varName ?? null;
   // Parent paths the user has wrapped into a group frame. Empty = flat leaf
   // cards. A path here draws a wrapper around all cards sharing that parent.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
   const reactFlowInstance = useReactFlow();
+  // One-step undo for the last "Arrange Grid" run: the top-level positions it
+  // overwrote, so a single click can put everything back. Cleared after use
+  // or once superseded by a fresh arrange.
+  const lastArrangeUndoRef = useRef<Record<string, { x: number; y: number }> | null>(null);
+  const [hasArrangeUndo, setHasArrangeUndo] = useState(false);
 
   // Get filter state from context
   const {
@@ -433,21 +463,40 @@ function GroupedGraphInner() {
 
   // Highlight the full connected chain of a group (toggle off if re-selected)
   const handleHighlightPath = useCallback((group: GroupData) => {
-    setHighlightedGroupKey(prev => (prev === group.key ? null : group.key));
+    setHighlightTarget(prev => (
+      prev?.groupKey === group.key && prev.varName === null
+        ? null
+        : { groupKey: group.key, varName: null }
+    ));
+  }, []);
+
+  // Highlight only one variable row's chain (toggle off if re-selected).
+  const handleHighlightVariable = useCallback((group: GroupData, node: VariableNode) => {
+    setHighlightTarget(prev => (
+      prev?.groupKey === group.key && prev.varName === node.name
+        ? null
+        : { groupKey: group.key, varName: node.name }
+    ));
   }, []);
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
-    setHighlightedGroupKey(prev => (prev === node.id ? null : node.id));
+    setHighlightTarget(prev => (
+      prev?.groupKey === node.id && prev.varName === null
+        ? null
+        : { groupKey: node.id, varName: null }
+    ));
   }, []);
 
-  const clearHighlight = useCallback(() => setHighlightedGroupKey(null), []);
+  const clearHighlight = useCallback(() => setHighlightTarget(null), []);
 
   // Sidebar label click — same toggle behavior as clicking the card in the graph,
   // plus panning the canvas to it since (unlike a card click) it may be off-screen.
   const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
-    setHighlightedGroupKey(prev => {
-      const next = prev === graphGroupKey ? null : graphGroupKey;
+    setHighlightTarget(prev => {
+      const next = prev?.groupKey === graphGroupKey && prev.varName === null
+        ? null
+        : { groupKey: graphGroupKey, varName: null };
       if (next) {
         requestAnimationFrame(() => {
           try {
@@ -825,9 +874,11 @@ function GroupedGraphInner() {
         varIncoming.get(conn.toVar)!.push({ edgeId: conn.id, varName: conn.fromVar });
       });
 
-      // Seed with every variable in the selected card.
+      // Seed with the single selected row, or every variable in the card.
       const selectedGroup = groupsData.find(g => g.key === highlightedGroupKey);
-      const seedVars = (selectedGroup?.variables || []).map(v => v.name);
+      const seedVars = highlightedVarName
+        ? [highlightedVarName]
+        : (selectedGroup?.variables || []).map(v => v.name);
       seedVars.forEach(v => highlightedVars.add(v));
 
       const walk = (adjacency: Map<string, Array<{ edgeId: string; varName: string }>>) => {
@@ -958,7 +1009,9 @@ function GroupedGraphInner() {
           isDimmed: hasHighlight && !highlightedGroups.has(group.key),
           highlightActive: hasHighlight,
           highlightedVars,
+          highlightedVarSeed: highlightedVarName,
           onHighlightPath: handleHighlightPath,
+          onHighlightVariable: handleHighlightVariable,
           onGeneratorOpen: handleGeneratorOpen,
           onShowColorMenu: handleShowColorMenu,
           onAddVariable: handleAddVariableToGroup,
@@ -1049,7 +1102,9 @@ function GroupedGraphInner() {
             isDimmed: false,
             highlightActive: hasHighlight,
             highlightedVars,
+            highlightedVarSeed: highlightedVarName,
             onHighlightPath: handleHighlightPath,
+            onHighlightVariable: handleHighlightVariable,
             onGeneratorOpen: handleGeneratorOpen,
             onShowColorMenu: handleShowColorMenu,
             onAddVariable: handleAddVariableToGroup,
@@ -1162,7 +1217,7 @@ function GroupedGraphInner() {
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
-      highlightedGroupKey, setNodes, setEdges]);
+      handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
 
   // The selection card now carries a per-element id (see getSelectionNodeId),
   // so switching elements mounts a fresh node with correctly measured handles.
@@ -1189,10 +1244,16 @@ function GroupedGraphInner() {
         const currentNodes = reactFlowInstance.getNodes();
         const positionsObj: Record<string, { x: number; y: number }> = {};
         currentNodes.forEach(n => {
-          // Only persist top-level nodes; nested cards/wrappers are auto-laid
-          // out relative to their parent each render.
-          if (n.parentId) return;
-          positionsObj[n.id] = { x: n.position.x, y: n.position.y };
+          // Top-level nodes save their absolute position as-is. Nested
+          // cards/wrappers are normally auto-stacked inside their parent each
+          // render, but a manual drag is remembered under a `rel:` key (same
+          // record, namespaced) so buildWrapperLayout can honor it instead —
+          // applies uniformly at every nesting depth.
+          if (n.parentId) {
+            positionsObj[`rel:${n.id}`] = { x: n.position.x, y: n.position.y };
+          } else {
+            positionsObj[n.id] = { x: n.position.x, y: n.position.y };
+          }
         });
         const storageKey = `graph-positions`;
         setSavedPositions(positionsObj);
@@ -1258,12 +1319,95 @@ function GroupedGraphInner() {
       };
     });
 
+    // A wrapped card can't be arranged on its own — its coordinates are
+    // parent-relative, and the wrapper frame itself never moves otherwise.
+    // Fold each card into its outermost wrapper's unit key so the whole
+    // frame is arranged as one block; standalone cards are their own unit.
+    // Only 'standard' cards can ever be wrapped (buildWrapperLayout never
+    // nests managed source/shader/shades groups), so leave those alone even
+    // if their sourceGroupName happens to share a prefix with a grouped path.
+    const unitKeyForGroup = (group: GroupData): string => {
+      if (group.kind !== 'standard') return group.key;
+      const outermost = outermostGroupedAncestor(group.sourceGroupName || '', groupedPaths);
+      return outermost ? `wrapper:${outermost}` : group.key;
+    };
+
+    // One pseudo GroupData per top-level unit. For a wrapper unit, reuse its
+    // first member card and override key/title/position — only those plus
+    // the height override matter to the arrange algorithm.
+    const unitGroups = new Map<string, GroupData>();
+    const wrapperMemberHeightSum = new Map<string, number>();
+    currentGroups.forEach(group => {
+      const unitKey = unitKeyForGroup(group);
+      if (unitKey === group.key) {
+        unitGroups.set(unitKey, group);
+        return;
+      }
+      if (!unitGroups.has(unitKey)) {
+        const wrapperNode = currentNodes.find(n => n.id === unitKey);
+        unitGroups.set(unitKey, {
+          ...group,
+          key: unitKey,
+          title: unitKey.slice('wrapper:'.length),
+          x: wrapperNode?.position.x ?? group.x,
+          y: wrapperNode?.position.y ?? group.y,
+        });
+      }
+      wrapperMemberHeightSum.set(unitKey, (wrapperMemberHeightSum.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP);
+    });
+
+    // Wrapper units use the measured frame height when xyflow has it;
+    // otherwise fall back to summing member card heights + gaps, wrapped in
+    // the same chrome buildWrapperLayout adds (header + top/bottom padding).
+    const heightOverrides = new Map<string, number>();
+    unitGroups.forEach((group, unitKey) => {
+      if (!unitKey.startsWith('wrapper:')) return;
+      const wrapperNode = currentNodes.find(n => n.id === unitKey);
+      const measured = wrapperNode?.measured?.height;
+      if (typeof measured === 'number' && measured > 0) {
+        heightOverrides.set(unitKey, measured);
+      } else {
+        const memberSum = wrapperMemberHeightSum.get(unitKey) || 0;
+        heightOverrides.set(
+          unitKey,
+          memberSum > 0
+            ? memberSum - WRAPPER_GAP + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+            : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+        );
+      }
+    });
+
+    const arrangeUnits = Array.from(unitGroups.values());
+
+    // Remap connections onto their unit keys; a connection that becomes a
+    // self-loop within one unit (both ends now the same wrapper) is dropped.
+    const remappedConnections = connectionData.reduce<ConnectionRecord[]>((acc, conn) => {
+      const fromGroup = currentGroups.find(g => g.key === conn.fromGroup);
+      const toGroup = currentGroups.find(g => g.key === conn.toGroup);
+      if (!fromGroup || !toGroup) return acc;
+      const fromUnit = unitKeyForGroup(fromGroup);
+      const toUnit = unitKeyForGroup(toGroup);
+      if (fromUnit === toUnit) return acc;
+      acc.push({ ...conn, fromGroup: fromUnit, toGroup: toUnit });
+      return acc;
+    }, []);
+
     const newPositions = arrangeGroupsByConnectedBlocks(
-      currentGroups, connectionData, settings.gapX, settings.gapY
+      arrangeUnits, remappedConnections, settings.gapX, settings.gapY, heightOverrides
     );
+
+    // Snapshot current top-level positions for one-step undo before applying.
+    const previousPositions: Record<string, { x: number; y: number }> = {};
+    currentNodes.forEach(n => {
+      if (n.parentId) return;
+      previousPositions[n.id] = { x: n.position.x, y: n.position.y };
+    });
+    lastArrangeUndoRef.current = previousPositions;
+    setHasArrangeUndo(true);
 
     setNodes(prevNodes =>
       prevNodes.map(rfNode => {
+        if (rfNode.parentId) return rfNode; // wrapped cards stay parent-relative
         const pos = newPositions.get(rfNode.id);
         return pos ? { ...rfNode, position: { x: pos.x, y: pos.y } } : rfNode;
       })
@@ -1273,7 +1417,30 @@ function GroupedGraphInner() {
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
     setSavedPositions(positionsObj);
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, setNodes, variableType]);
+
+    // Deferred so the new positions are committed before we measure for fit.
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+    }, 50);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, setNodes, variableType]);
+
+  const handleUndoArrange = useCallback(() => {
+    const previousPositions = lastArrangeUndoRef.current;
+    if (!previousPositions) return;
+
+    setNodes(prevNodes =>
+      prevNodes.map(rfNode => {
+        if (rfNode.parentId) return rfNode;
+        const pos = previousPositions[rfNode.id];
+        return pos ? { ...rfNode, position: { x: pos.x, y: pos.y } } : rfNode;
+      })
+    );
+    setSavedPositions(previousPositions);
+    post({ type: 'set-client-storage', key: `graph-positions`, value: previousPositions });
+
+    lastArrangeUndoRef.current = null;
+    setHasArrangeUndo(false);
+  }, [setNodes]);
 
   const handleFocusSelection = useCallback(() => {
     if (!selectedNode) return;
@@ -1355,6 +1522,11 @@ function GroupedGraphInner() {
           <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
           </TextButton>
+          {hasArrangeUndo && (
+            <TextButton variant="secondary" onClick={handleUndoArrange}>
+              Undo Arrange
+            </TextButton>
+          )}
           {selectedNode && !hasMultipleSelection && (
             <TextButton variant="secondary" onClick={handleFocusSelection}>
               Focus Selection
@@ -1465,7 +1637,17 @@ function GroupedGraphInner() {
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
         className="w-full h-full bg-base-2!"
-      />
+        snapToGrid
+        snapGrid={[8, 8]}
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
+        panOnDrag={[1, 2]}
+        panOnScroll
+      >
+            <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+            <MiniMap pannable zoomable />
+            <Controls showInteractive={false} />
+          </ReactFlow>
         </div>
       </div>
 

@@ -101,7 +101,10 @@ export type GroupNodeData = {
   // names on the chain so individual rows can be dimmed.
   highlightActive?: boolean;
   highlightedVars?: Set<string>;
+  // Variable name whose row is the highlight seed (row-level selection).
+  highlightedVarSeed?: string | null;
   onHighlightPath: (group: GroupData) => void;
+  onHighlightVariable: (group: GroupData, node: VariableNode) => void;
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
   onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;
   onAddVariable: (group: GroupData) => void;
