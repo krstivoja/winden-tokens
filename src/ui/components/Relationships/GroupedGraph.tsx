@@ -6,6 +6,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useUpdateNodeInternals,
   ReactFlowProvider,
 } from '@xyflow/react';
 import type {
@@ -57,6 +58,7 @@ import {
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
+import { PropertyNodeComponent, PropertyNodeData, getPropertyCardHeight } from './GroupedGraph/PropertyNode';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
 import {
@@ -81,7 +83,17 @@ import {
 const nodeTypes: NodeTypes = {
   groupNode: GroupNodeComponent,
   groupWrapper: GroupWrapperComponent,
+  propertyNode: PropertyNodeComponent,
 };
+
+const PROPERTY_COLUMN_GAP = 220;
+
+// The selection card's xyflow id is derived from the selected Figma node id so
+// that switching elements mounts a *fresh* node. xyflow caches handle geometry
+// per node id; reusing one static id across selections leaves stale handle
+// bounds, and edges whose target handle can't be located are silently dropped
+// (the row's handle still shows, but no connecting line is drawn).
+const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
 
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
@@ -90,9 +102,10 @@ const edgeTypes: EdgeTypes = {
 // ── Inner component (needs ReactFlowProvider context) ──────────────
 
 function GroupedGraphInner() {
-  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId } = useAppContext();
+  const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId, selectedNode, hasMultipleSelection } = useAppContext();
   const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
+  const updateNodeInternals = useUpdateNodeInternals();
 
   // Support both COLOR and FLOAT variables - groups are typed individually based on their variables
   // Storage keys are now type-independent since we show all types together
@@ -845,6 +858,50 @@ function GroupedGraphInner() {
     }
     const hasHighlight = highlightedGroupKey !== null;
 
+    // Resolve the selected node's bound tokens against the local token cards.
+    // A token that maps to a real card marks that card as a "provider" (kept
+    // visible even if filters would hide it, so the selection's link is never
+    // dropped). A token with NO local card (e.g. a published library variable)
+    // gets a synthetic "external" card so its connection is still drawn.
+    const hexColorRe = /^#[0-9A-Fa-f]{6,8}$/;
+    const selectionProviderGroupKeys = new Set<string>();
+    const externalTokenCardKey = new Map<string, string>();
+    const externalTokensByCard = new Map<string, { title: string; collectionId: string; nodes: VariableNode[] }>();
+    if (selectedNode) {
+      selectedNode.entries.forEach(entry => {
+        if (entry.kind !== 'variable' || !entry.token) return;
+        const info = variableMap.get(entry.token.name);
+        if (info) {
+          selectionProviderGroupKeys.add(info.group);
+          return;
+        }
+        // No local match — bucket into a synthetic card by path prefix.
+        const parts = entry.token.name.split('/');
+        const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
+        const cardKey = `ext-group:${groupName}`;
+        externalTokenCardKey.set(entry.token.name, cardKey);
+        const bucket = externalTokensByCard.get(cardKey)
+          || { title: groupName, collectionId: entry.token.collectionId || 'external', nodes: [] };
+        if (!bucket.nodes.some(n => n.name === entry.token!.name)) {
+          const isColor = hexColorRe.test(entry.rawValue);
+          bucket.nodes.push({
+            id: `ext:${entry.token.name}`,
+            name: entry.token.name,
+            shortName: parts[parts.length - 1],
+            displayName: entry.token.collectionName || 'library',
+            color: isColor ? entry.rawValue : '#888888',
+            value: entry.rawValue,
+            resolvedValue: entry.rawValue,
+            resolvedType: isColor ? 'COLOR' : 'STRING',
+            isReference: false,
+            referenceName: null,
+            connectionsDisabled: false,
+          });
+        }
+        externalTokensByCard.set(cardKey, bucket);
+      });
+    }
+
     // Determine whether a card is hidden by the active filters.
     const isCardHidden = (group: GroupData): boolean => {
       if (!localSelectedCollections.has(group.collectionId)) return true;
@@ -888,7 +945,9 @@ function GroupedGraphInner() {
         id: group.key,
         type: 'groupNode',
         position,
-        hidden: isCardHidden(group),
+        // Force-show cards that provide a value to the current selection,
+        // even when the active filters would otherwise hide them.
+        hidden: isCardHidden(group) && !selectionProviderGroupKeys.has(group.key),
         ...(parentId ? { parentId, extent: 'parent' as const } : {}),
         data: {
           group,
@@ -930,7 +989,7 @@ function GroupedGraphInner() {
     // Standard cards, nested inside wrapper frames for expanded groups.
     const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
     const cardHiddenByKey = new Map<string, boolean>();
-    standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g)));
+    standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g) && !selectionProviderGroupKeys.has(g.key)));
 
     placements.forEach(p => {
       if (p.kind === 'card') {
@@ -955,6 +1014,76 @@ function GroupedGraphInner() {
         });
       }
     });
+
+    // Selected Figma node's own card, plus synthetic cards for any bound
+    // tokens that have no local card. Laid out in reserved columns to the
+    // right of every real token card: external tokens first, then the
+    // selection card so its property rows sit beside their providers.
+    if (selectedNode) {
+      const maxRight = groupsData.reduce((max, g) => Math.max(max, g.initialX + GROUP_WIDTH), 0);
+      const externalX = maxRight + PROPERTY_COLUMN_GAP;
+      const externalCards = Array.from(externalTokensByCard.entries());
+
+      let externalY = 0;
+      externalCards.forEach(([cardKey, bucket]) => {
+        const group: GroupData = {
+          key: cardKey, title: bucket.title, variables: bucket.nodes,
+          x: 0, y: 0, initialX: externalX, initialY: externalY,
+          // 'shader' kind suppresses the group management UI (add/rename/etc.)
+          // that doesn't apply to a read-only external/library token card.
+          kind: 'shader', sourceGroupName: bucket.title,
+          headerFill: SHADER_GROUP_HEADER_FILL, collectionId: bucket.collectionId,
+        };
+        const position = savedPositions[cardKey] || { x: externalX, y: externalY };
+        newNodes.push({
+          id: cardKey,
+          type: 'groupNode',
+          position,
+          hidden: false,
+          data: {
+            group,
+            isColorType: bucket.nodes.every(n => n.resolvedType === 'COLOR'),
+            variableType: 'FLOAT',
+            connectedVars,
+            isHighlighted: false,
+            isDimmed: false,
+            highlightActive: hasHighlight,
+            highlightedVars,
+            onHighlightPath: handleHighlightPath,
+            onGeneratorOpen: handleGeneratorOpen,
+            onShowColorMenu: handleShowColorMenu,
+            onAddVariable: handleAddVariableToGroup,
+            onRenameGroup: handleRenameGroup,
+            onDuplicateGroup: handleDuplicateGroup,
+            onEditAsText: handleEditGroupAsText,
+            onLevelUp: handleLevelUp,
+            onDeleteGroup: handleDeleteGraphGroup,
+            onRenameVariable: handleRenameGraphVariable,
+            onDeleteVariable: handleDeleteGraphVariable,
+            onDisconnect: handleDisconnect,
+          },
+          dragHandle: '.group-header',
+        });
+        externalY += getGroupHeight(group) + GROUP_GAP_Y;
+      });
+
+      const selectionX = externalCards.length > 0
+        ? externalX + GROUP_WIDTH + PROPERTY_COLUMN_GAP
+        : externalX;
+      const selectionNodeId = getSelectionNodeId(selectedNode.id);
+      const position = savedPositions[selectionNodeId] || { x: selectionX, y: 0 };
+      newNodes.push({
+        id: selectionNodeId,
+        type: 'propertyNode',
+        position,
+        data: {
+          nodeName: selectedNode.name,
+          nodeType: selectedNode.type,
+          entries: selectedNode.entries,
+        } as PropertyNodeData,
+        dragHandle: '.group-header',
+      });
+    }
 
     // Create visibility map for groups (cards only; edges connect cards).
     const groupVisibility = new Map<string, boolean>();
@@ -990,14 +1119,62 @@ function GroupedGraphInner() {
         };
       });
 
+    // Edges from a bound token straight to the selected node's own property
+    // row — same visual language as reference connections, but the receiver
+    // is a live Figma property instead of another variable.
+    if (selectedNode) {
+      selectedNode.entries.forEach((entry, index) => {
+        if (entry.kind !== 'variable' || !entry.token || !entry.bindingTarget) return;
+        // Prefer the real token card; fall back to the synthetic external card
+        // when the token has no local match (library variable, etc.).
+        const tokenInfo = variableMap.get(entry.token.name);
+        const sourceGroupKey = tokenInfo ? tokenInfo.group : externalTokenCardKey.get(entry.token.name);
+        if (!sourceGroupKey) return;
+        const sourceVisible = groupVisibility.get(sourceGroupKey) ?? false;
+        const bindingTarget = entry.bindingTarget;
+        const nodeId = selectedNode.id;
+
+        newEdges.push({
+          id: `prop-edge:${index}`,
+          source: sourceGroupKey,
+          target: getSelectionNodeId(nodeId),
+          sourceHandle: `${entry.token.name}::out`,
+          targetHandle: `prop:${index}::in`,
+          type: 'customEdge',
+          hidden: !sourceVisible,
+          data: {
+            kind: 'reference',
+            receiverName: entry.property,
+            receiverShortName: entry.property,
+            resolvedValue: '',
+            onDisconnect: () => {
+              post({ type: 'unbind-node-property', nodeId, target: bindingTarget });
+            },
+          },
+        });
+      });
+    }
+
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
-      localSelectedCollections, selectedTypes, selectedGroups, variablesById,
+      localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
       highlightedGroupKey, setNodes, setEdges]);
+
+  // The selection card now carries a per-element id (see getSelectionNodeId),
+  // so switching elements mounts a fresh node with correctly measured handles.
+  // We still refresh internals here to cover in-place changes — e.g. rebinding a
+  // property on the *same* selected element adds/removes handles under one id.
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    const raf = requestAnimationFrame(() => {
+      updateNodeInternals(nodes.map(n => n.id));
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [nodes, updateNodeInternals]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1028,6 +1205,31 @@ function GroupedGraphInner() {
   const handleConnect: OnConnect = useCallback((connection) => {
     if (!connection.sourceHandle || !connection.targetHandle) return;
 
+    const sourceIsProp = connection.sourceHandle.startsWith('prop:');
+    const targetIsProp = connection.targetHandle.startsWith('prop:');
+
+    // One side is the selected node's own property row — bind it to whichever
+    // token variable is on the other end (regardless of which side was
+    // dragged from first; xyflow doesn't guarantee drag direction here).
+    if (sourceIsProp || targetIsProp) {
+      if (sourceIsProp === targetIsProp || !selectedNode) return;
+
+      const propHandle = sourceIsProp ? connection.sourceHandle : connection.targetHandle;
+      const tokenHandle = sourceIsProp ? connection.targetHandle : connection.sourceHandle;
+
+      const entryIndexMatch = propHandle.match(/^prop:(\d+)::/);
+      if (!entryIndexMatch) return;
+      const entry = selectedNode.entries[parseInt(entryIndexMatch[1], 10)];
+      if (!entry || !entry.bindingTarget) return;
+
+      const tokenVarName = tokenHandle.replace('::out', '').replace('::in', '');
+      const tokenVarInfo = variableMap.get(tokenVarName);
+      if (!tokenVarInfo || tokenVarInfo.node.connectionsDisabled) return;
+
+      post({ type: 'bind-node-property', nodeId: selectedNode.id, target: entry.bindingTarget, variableId: tokenVarInfo.node.id });
+      return;
+    }
+
     const sourceVarName = connection.sourceHandle.replace('::out', '');
     const targetVarName = connection.targetHandle.replace('::in', '');
 
@@ -1042,7 +1244,7 @@ function GroupedGraphInner() {
       ? resolveModeIdForCollection(collections, targetVariable.collectionId, selectedModeId)
       : selectedModeId;
     post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId });
-  }, [collections, selectedModeId, variableMap, variablesById]);
+  }, [collections, selectedModeId, variableMap, variablesById, selectedNode]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;
@@ -1073,6 +1275,57 @@ function GroupedGraphInner() {
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
   }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, setNodes, variableType]);
 
+  const handleFocusSelection = useCallback(() => {
+    if (!selectedNode) return;
+    const wanted = new Set<string>([getSelectionNodeId(selectedNode.id)]);
+    selectedNode.entries.forEach(entry => {
+      if (entry.kind !== 'variable' || !entry.token) return;
+      const info = variableMap.get(entry.token.name);
+      if (info) {
+        wanted.add(info.group);
+      } else {
+        // Mirror the synthetic external-card key built during node layout.
+        const parts = entry.token.name.split('/');
+        const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
+        wanted.add(`ext-group:${groupName}`);
+      }
+    });
+
+    // fitView({nodes}) relies on xyflow's internal measured dimensions, which
+    // aren't populated for these nodes — so compute the bounding box from the
+    // store positions (flow coords) plus live DOM sizes and fitBounds instead.
+    const zoom = reactFlowInstance.getViewport().zoom || 1;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let found = false;
+    wanted.forEach(id => {
+      const node = reactFlowInstance.getNode(id);
+      const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`) as HTMLElement | null;
+      if (!node || !el) return;
+      const rect = el.getBoundingClientRect();
+      minX = Math.min(minX, node.position.x);
+      minY = Math.min(minY, node.position.y);
+      maxX = Math.max(maxX, node.position.x + rect.width / zoom);
+      maxY = Math.max(maxY, node.position.y + rect.height / zoom);
+      found = true;
+    });
+    if (!found) return;
+    reactFlowInstance.fitBounds(
+      { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      { padding: 0.2, duration: 400 }
+    );
+  }, [selectedNode, variableMap, reactFlowInstance]);
+
+  // Auto-frame the selection (and its providers) whenever a NEW node is
+  // selected in Figma — the selection card is laid out past every token card,
+  // so without this it can land far outside the current viewport. Deferred so
+  // the freshly-built nodes have painted before we measure them.
+  const selectionId = selectedNode?.id;
+  useEffect(() => {
+    if (!selectionId) return;
+    const timer = setTimeout(() => handleFocusSelection(), 150);
+    return () => clearTimeout(timer);
+  }, [selectionId, handleFocusSelection]);
+
   const handleApplyGridSettings = useCallback(() => {
     const settings = normalizeGridLayoutSettings({
       gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
@@ -1102,6 +1355,11 @@ function GroupedGraphInner() {
           <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
           </TextButton>
+          {selectedNode && !hasMultipleSelection && (
+            <TextButton variant="secondary" onClick={handleFocusSelection}>
+              Focus Selection
+            </TextButton>
+          )}
           <Dropdown
             position="bottom-right"
             onOpenChange={(open) => {

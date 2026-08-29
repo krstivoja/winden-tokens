@@ -18,6 +18,36 @@ export interface VariableData {
 
 export type VariableType = 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
 
+export type InspectorValueKind = 'hardcoded' | 'variable' | 'style';
+
+export interface InspectorTokenRef {
+  id: string;
+  name: string;
+  collectionId?: string;
+  collectionName?: string;
+}
+
+export type InspectorBindingTarget =
+  | { kind: 'node-field'; field: string }
+  | { kind: 'paint'; prop: 'fills' | 'strokes'; index: number }
+  | { kind: 'effect'; index: number };
+
+export interface InspectorEntry {
+  category: string;
+  property: string;
+  kind: InspectorValueKind;
+  rawValue: string;
+  token?: InspectorTokenRef;
+  bindingTarget?: InspectorBindingTarget;
+}
+
+export interface InspectorNodeData {
+  id: string;
+  name: string;
+  type: string;
+  entries: InspectorEntry[];
+}
+
 export interface PluginMessage {
   type: string;
   [key: string]: any;

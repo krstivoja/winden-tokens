@@ -5,6 +5,7 @@ import React, { ReactNode } from 'react';
 import { DataProvider, useDataContext } from './DataContext';
 import { FilterProvider, useFilterContext } from './FilterContext';
 import { UIStateProvider, useUIStateContext } from './UIStateContext';
+import { SelectionProvider, useSelectionContext } from './SelectionContext';
 
 // Composite AppProvider that composes all contexts
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -12,7 +13,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <DataProvider>
       <FilterProvider>
         <UIStateProvider>
-          {children}
+          <SelectionProvider>
+            {children}
+          </SelectionProvider>
         </UIStateProvider>
       </FilterProvider>
     </DataProvider>
@@ -25,11 +28,13 @@ export function useAppContext() {
   const dataContext = useDataContext();
   const filterContext = useFilterContext();
   const uiStateContext = useUIStateContext();
+  const selectionContext = useSelectionContext();
 
   return {
     ...dataContext,
     ...filterContext,
     ...uiStateContext,
+    ...selectionContext,
   };
 }
 
@@ -37,3 +42,4 @@ export function useAppContext() {
 export { useDataContext } from './DataContext';
 export { useFilterContext } from './FilterContext';
 export { useUIStateContext } from './UIStateContext';
+export { useSelectionContext } from './SelectionContext';

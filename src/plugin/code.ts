@@ -2198,6 +2198,337 @@ async function parseValue(value: string, type: string): Promise<any> {
   }
 }
 
+// ---- Selection Inspector ----
+
+type InspectorValueKind = 'hardcoded' | 'variable' | 'style';
+
+interface InspectorTokenRef {
+  id: string;
+  name: string;
+  collectionId?: string;
+  collectionName?: string;
+}
+
+type InspectorBindingTarget =
+  | { kind: 'node-field'; field: string }
+  | { kind: 'paint'; prop: 'fills' | 'strokes'; index: number }
+  | { kind: 'effect'; index: number };
+
+interface InspectorEntry {
+  category: string;
+  property: string;
+  kind: InspectorValueKind;
+  rawValue: string;
+  token?: InspectorTokenRef;
+  bindingTarget?: InspectorBindingTarget;
+}
+
+interface InspectorNodeData {
+  id: string;
+  name: string;
+  type: string;
+  entries: InspectorEntry[];
+}
+
+function formatInspectorNumber(n: number): string {
+  const rounded = Math.round(n * 100) / 100;
+  return String(rounded);
+}
+
+function formatInspectorColor(c: { r: number; g: number; b: number; a?: number }, opacity?: number): string {
+  const toHex = (n: number) => ('0' + Math.round(Math.max(0, Math.min(1, n)) * 255).toString(16).toUpperCase()).slice(-2);
+  const hex = '#' + toHex(c.r) + toHex(c.g) + toHex(c.b);
+  const a = opacity !== undefined ? opacity : (c.a !== undefined ? c.a : 1);
+  return a < 1 ? hex + toHex(a) : hex;
+}
+
+async function resolveVariableAlias(alias: any): Promise<InspectorTokenRef | null> {
+  if (!alias || alias.type !== 'VARIABLE_ALIAS') {
+    return null;
+  }
+  try {
+    const variable = await figma.variables.getVariableByIdAsync(alias.id);
+    if (!variable) {
+      return null;
+    }
+    let collectionName: string | undefined;
+    try {
+      const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+      collectionName = collection ? collection.name : undefined;
+    } catch (e) {
+      // ignore
+    }
+    return {
+      id: variable.id,
+      name: variable.name,
+      collectionId: variable.variableCollectionId,
+      collectionName,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function resolveStyleName(styleId: any): Promise<string | null> {
+  if (!styleId || typeof styleId !== 'string') {
+    return null;
+  }
+  try {
+    const style = await figma.getStyleByIdAsync(styleId);
+    return style ? style.name : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function buildPaintEntries(node: any, propName: 'fills' | 'strokes', category: string): Promise<InspectorEntry[]> {
+  const entries: InspectorEntry[] = [];
+  const paints = node[propName];
+  if (!Array.isArray(paints)) {
+    return entries;
+  }
+
+  for (let i = 0; i < paints.length; i++) {
+    const paint = paints[i];
+    if (paint.visible === false) {
+      continue;
+    }
+    const label = paints.length > 1 ? `${category} ${i + 1}` : category;
+
+    if (paint.type === 'SOLID') {
+      const token = await resolveVariableAlias(paint.boundVariables && paint.boundVariables.color);
+      entries.push({
+        category,
+        property: label,
+        kind: token ? 'variable' : 'hardcoded',
+        rawValue: formatInspectorColor(paint.color, paint.opacity),
+        token: token || undefined,
+        bindingTarget: { kind: 'paint', prop: propName, index: i },
+      });
+    } else {
+      entries.push({
+        category,
+        property: label,
+        kind: 'hardcoded',
+        rawValue: paint.type,
+      });
+    }
+  }
+
+  return entries;
+}
+
+const INSPECTOR_SCALAR_PROPS: Array<{ key: string; category: string; label: string }> = [
+  { key: 'opacity', category: 'Appearance', label: 'Opacity' },
+  { key: 'cornerRadius', category: 'Corner Radius', label: 'Corner Radius' },
+  { key: 'topLeftRadius', category: 'Corner Radius', label: 'Top Left Radius' },
+  { key: 'topRightRadius', category: 'Corner Radius', label: 'Top Right Radius' },
+  { key: 'bottomLeftRadius', category: 'Corner Radius', label: 'Bottom Left Radius' },
+  { key: 'bottomRightRadius', category: 'Corner Radius', label: 'Bottom Right Radius' },
+  { key: 'strokeWeight', category: 'Stroke', label: 'Stroke Weight' },
+  { key: 'itemSpacing', category: 'Spacing', label: 'Item Spacing' },
+  { key: 'counterAxisSpacing', category: 'Spacing', label: 'Counter Axis Spacing' },
+  { key: 'paddingLeft', category: 'Spacing', label: 'Padding Left' },
+  { key: 'paddingRight', category: 'Spacing', label: 'Padding Right' },
+  { key: 'paddingTop', category: 'Spacing', label: 'Padding Top' },
+  { key: 'paddingBottom', category: 'Spacing', label: 'Padding Bottom' },
+];
+
+const INSPECTOR_TEXT_SCALAR_PROPS: Array<{ key: string; category: string; label: string }> = [
+  { key: 'fontSize', category: 'Typography', label: 'Font Size' },
+  { key: 'letterSpacing', category: 'Typography', label: 'Letter Spacing' },
+  { key: 'lineHeight', category: 'Typography', label: 'Line Height' },
+  { key: 'paragraphSpacing', category: 'Typography', label: 'Paragraph Spacing' },
+  { key: 'paragraphIndent', category: 'Typography', label: 'Paragraph Indent' },
+];
+
+function formatInspectorScalarValue(value: any): string {
+  if (typeof value === 'number') {
+    return formatInspectorNumber(value);
+  }
+  if (value && typeof value === 'object' && 'unit' in value) {
+    if (value.unit === 'AUTO') {
+      return 'AUTO';
+    }
+    return `${formatInspectorNumber(value.value)}${value.unit === 'PERCENT' ? '%' : ''}`;
+  }
+  return String(value);
+}
+
+async function buildScalarEntries(node: any, props: Array<{ key: string; category: string; label: string }>): Promise<InspectorEntry[]> {
+  const entries: InspectorEntry[] = [];
+  for (const { key, category, label } of props) {
+    if (!(key in node)) {
+      continue;
+    }
+    const value = node[key];
+    if (value === undefined || value === figma.mixed) {
+      continue;
+    }
+    const token = await resolveVariableAlias(node.boundVariables && node.boundVariables[key]);
+    entries.push({
+      category,
+      property: label,
+      kind: token ? 'variable' : 'hardcoded',
+      rawValue: formatInspectorScalarValue(value),
+      token: token || undefined,
+      bindingTarget: { kind: 'node-field', field: key },
+    });
+  }
+  return entries;
+}
+
+async function buildEffectEntries(node: any): Promise<InspectorEntry[]> {
+  const entries: InspectorEntry[] = [];
+  const effects = node.effects;
+  if (!Array.isArray(effects)) {
+    return entries;
+  }
+
+  for (let i = 0; i < effects.length; i++) {
+    const effect: any = effects[i];
+    if (effect.visible === false) {
+      continue;
+    }
+    const label = effects.length > 1 ? `Effect ${i + 1}` : 'Effect';
+    const token = await resolveVariableAlias(effect.boundVariables && effect.boundVariables.color);
+    const parts: string[] = [effect.type];
+    if (effect.color) {
+      parts.push(formatInspectorColor(effect.color));
+    }
+    if (typeof effect.radius === 'number') {
+      parts.push(`radius ${formatInspectorNumber(effect.radius)}`);
+    }
+    if (effect.offset) {
+      parts.push(`offset ${formatInspectorNumber(effect.offset.x)}, ${formatInspectorNumber(effect.offset.y)}`);
+    }
+    entries.push({
+      category: 'Effects',
+      property: label,
+      kind: token ? 'variable' : 'hardcoded',
+      rawValue: parts.join(' · '),
+      token: token || undefined,
+      bindingTarget: { kind: 'effect', index: i },
+    });
+  }
+
+  return entries;
+}
+
+async function addStyleEntry(node: any, key: string, category: string, label: string, entries: InspectorEntry[]) {
+  const styleId = node[key];
+  const name = await resolveStyleName(styleId);
+  if (name) {
+    entries.push({ category, property: label, kind: 'style', rawValue: name });
+  }
+}
+
+async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData> {
+  const anyNode = node as any;
+  const entries: InspectorEntry[] = [];
+
+  if ('fills' in anyNode) {
+    entries.push(...await buildPaintEntries(anyNode, 'fills', 'Fill'));
+  }
+  if ('strokes' in anyNode) {
+    entries.push(...await buildPaintEntries(anyNode, 'strokes', 'Stroke'));
+  }
+
+  entries.push(...await buildScalarEntries(anyNode, INSPECTOR_SCALAR_PROPS));
+
+  if (node.type === 'TEXT') {
+    entries.push(...await buildScalarEntries(anyNode, INSPECTOR_TEXT_SCALAR_PROPS));
+
+    if (anyNode.fontName !== figma.mixed) {
+      const fontName = anyNode.fontName as FontName;
+      const familyToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontFamily);
+      const styleToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontStyle);
+      entries.push({
+        category: 'Typography',
+        property: 'Font Family',
+        kind: familyToken ? 'variable' : 'hardcoded',
+        rawValue: fontName.family,
+        token: familyToken || undefined,
+        bindingTarget: { kind: 'node-field', field: 'fontFamily' },
+      });
+      entries.push({
+        category: 'Typography',
+        property: 'Font Style',
+        kind: styleToken ? 'variable' : 'hardcoded',
+        rawValue: fontName.style,
+        token: styleToken || undefined,
+        bindingTarget: { kind: 'node-field', field: 'fontStyle' },
+      });
+    }
+  }
+
+  if ('effects' in anyNode) {
+    entries.push(...await buildEffectEntries(anyNode));
+  }
+
+  if ('fillStyleId' in anyNode) await addStyleEntry(anyNode, 'fillStyleId', 'Fill', 'Fill Style', entries);
+  if ('strokeStyleId' in anyNode) await addStyleEntry(anyNode, 'strokeStyleId', 'Stroke', 'Stroke Style', entries);
+  if ('effectStyleId' in anyNode) await addStyleEntry(anyNode, 'effectStyleId', 'Effects', 'Effect Style', entries);
+  if (node.type === 'TEXT' && 'textStyleId' in anyNode) await addStyleEntry(anyNode, 'textStyleId', 'Typography', 'Text Style', entries);
+  if ('gridStyleId' in anyNode) await addStyleEntry(anyNode, 'gridStyleId', 'Layout', 'Grid Style', entries);
+
+  return {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    entries,
+  };
+}
+
+async function bindNodeProperty(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    throw new Error('Node not found');
+  }
+  const variable = variableId ? await figma.variables.getVariableByIdAsync(variableId) : null;
+  if (variableId && !variable) {
+    throw new Error('Variable not found');
+  }
+
+  const anyNode = node as any;
+
+  if (target.kind === 'node-field') {
+    anyNode.setBoundVariable(target.field, variable);
+  } else if (target.kind === 'paint') {
+    const paints = anyNode[target.prop];
+    if (!Array.isArray(paints) || !paints[target.index]) {
+      throw new Error('Paint not found');
+    }
+    const newPaints = paints.slice();
+    newPaints[target.index] = figma.variables.setBoundVariableForPaint(newPaints[target.index], 'color', variable);
+    anyNode[target.prop] = newPaints;
+  } else if (target.kind === 'effect') {
+    const effects = anyNode.effects;
+    if (!Array.isArray(effects) || !effects[target.index]) {
+      throw new Error('Effect not found');
+    }
+    const newEffects = effects.slice();
+    newEffects[target.index] = figma.variables.setBoundVariableForEffect(newEffects[target.index], 'color', variable);
+    anyNode.effects = newEffects;
+  }
+
+  await sendSelection();
+}
+
+async function sendSelection() {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 1) {
+    try {
+      const data = await getNodeInspectorData(selection[0]);
+      figma.ui.postMessage({ type: 'selection-changed', node: data, multiple: false });
+    } catch (error: any) {
+      figma.ui.postMessage({ type: 'selection-changed', node: null, multiple: false, error: error.message });
+    }
+  } else {
+    figma.ui.postMessage({ type: 'selection-changed', node: null, multiple: selection.length > 1 });
+  }
+}
+
 function getDefaultValue(type: string): any {
   switch (type) {
     case 'COLOR':
@@ -3831,6 +4162,10 @@ figma.on('currentpagechange', () => {
   setSidebarRelaunchData();
 });
 
+figma.on('selectionchange', () => {
+  void sendSelection();
+});
+
 // Start polling - check every 5 seconds to reduce overhead
 setInterval(checkForChanges, 5000);
 
@@ -3838,6 +4173,7 @@ setInterval(checkForChanges, 5000);
 void (async () => {
   await fetchData();
   await resetHistory();
+  await sendSelection();
 })();
 
 // Message handler
@@ -3970,6 +4306,7 @@ figma.ui.onmessage = async (msg: any) => {
       // message, in which case that postMessage is dropped silently. Resend
       // current data once the UI confirms its listener is attached.
       await fetchData();
+      await sendSelection();
       break;
 
     case 'get-client-storage':
@@ -3991,6 +4328,24 @@ figma.ui.onmessage = async (msg: any) => {
 
     case 'resize':
       figma.ui.resize(msg.width, msg.height);
+      break;
+
+    case 'bind-node-property':
+      try {
+        await bindNodeProperty(msg.nodeId, msg.target, msg.variableId);
+        figma.ui.postMessage({ type: 'update-success' });
+      } catch (error: any) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+      }
+      break;
+
+    case 'unbind-node-property':
+      try {
+        await bindNodeProperty(msg.nodeId, msg.target, null);
+        figma.ui.postMessage({ type: 'update-success' });
+      } catch (error: any) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+      }
       break;
 
     case 'cancel':

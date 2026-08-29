@@ -17,7 +17,7 @@ import { ResizeHandles } from './components/ResizeHandles';
 export type ActiveTab = TabId;
 
 export function App() {
-  const { setData } = useAppContext();
+  const { setData, setSelection } = useAppContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('table');
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: '', type: '' });
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
@@ -53,7 +53,10 @@ export function App() {
     'history-error': (msg: any) => {
       showStatus(msg.error, 'warning');
     },
-  }), [setData, showStatus]);
+    'selection-changed': (msg: any) => {
+      setSelection(msg.node || null, !!msg.multiple);
+    },
+  }), [setData, setSelection, showStatus]);
 
   usePluginMessages(messageHandlers());
 
