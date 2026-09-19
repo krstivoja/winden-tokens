@@ -819,6 +819,10 @@ Colors, primary, COLOR, #FF0000
 - Node grouping
 - Edge visualization
 - Pan/zoom
+- Selection card (`GroupedGraph/PropertyNode.tsx`) for the selected Figma node, one row per inspected property; drag a token onto a row to bind it
+- Component selections (component, component set, instance) show one collapsible section per visible layer (root + descendants, indented by depth)
+- Component sections list only bound/styled rows and rows with a real value; "Add property" (per section) reveals a hidden bindable row for the session
+- Rows are pure-helper driven: `GroupedGraph/propertyLayers.ts` (flatten, visibility, card height); handle ids `prop:<layerIndex>:<entryIndex>::in|out`
 
 ---
 

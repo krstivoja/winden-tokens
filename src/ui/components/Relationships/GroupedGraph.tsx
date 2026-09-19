@@ -66,7 +66,8 @@ import {
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
-import { PropertyNodeComponent, PropertyNodeData, getPropertyCardHeight } from './GroupedGraph/PropertyNode';
+import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
+import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
 import {
@@ -128,6 +129,14 @@ function GroupedGraphInner() {
   const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
+
+  // The selection as a flat layer list (root + component descendants). Every
+  // selection-row lookup goes through this so child-layer rows bind/unbind on
+  // their own layer id; `layerIndex` is what handle and edge ids carry.
+  const selectedLayers = useMemo(
+    () => (selectedNode ? flattenLayers(selectedNode) : []),
+    [selectedNode]
+  );
 
   // Support both COLOR and FLOAT variables - groups are typed individually based on their variables
   // Storage keys are now type-independent since we show all types together
@@ -922,8 +931,8 @@ function GroupedGraphInner() {
     const selectionProviderGroupKeys = new Set<string>();
     const externalTokenCardKey = new Map<string, string>();
     const externalTokensByCard = new Map<string, { title: string; collectionId: string; nodes: VariableNode[] }>();
-    if (selectedNode) {
-      selectedNode.entries.forEach(entry => {
+    selectedLayers.forEach(layer => {
+      layer.entries.forEach(entry => {
         if (entry.kind !== 'variable' || !entry.token) return;
         const info = variableMap.get(entry.token.name);
         if (info) {
@@ -955,7 +964,7 @@ function GroupedGraphInner() {
         }
         externalTokensByCard.set(cardKey, bucket);
       });
-    }
+    });
 
     // Determine whether a card is hidden by the active filters.
     const isCardHidden = (group: GroupData): boolean => {
@@ -1138,7 +1147,8 @@ function GroupedGraphInner() {
         data: {
           nodeName: selectedNode.name,
           nodeType: selectedNode.type,
-          entries: selectedNode.entries,
+          layers: selectedLayers,
+          truncated: selectedNode.truncated,
         } as PropertyNodeData,
         dragHandle: '.group-header',
       });
@@ -1183,8 +1193,12 @@ function GroupedGraphInner() {
     // Edges from a bound token straight to the selected node's own property
     // row — same visual language as reference connections, but the receiver
     // is a live Figma property instead of another variable.
+    // Bound rows are always visible on the card (rows inside a collapsed
+    // section anchor their handle on that section's header), so every binding
+    // gets an edge regardless of the card's session UI state.
     if (selectedNode) {
-      selectedNode.entries.forEach((entry, index) => {
+      const selectionNodeId = getSelectionNodeId(selectedNode.id);
+      selectedLayers.forEach(layer => layer.entries.forEach((entry, index) => {
         if (entry.kind !== 'variable' || !entry.token || !entry.bindingTarget) return;
         // Prefer the real token card; fall back to the synthetic external card
         // when the token has no local match (library variable, etc.).
@@ -1193,14 +1207,14 @@ function GroupedGraphInner() {
         if (!sourceGroupKey) return;
         const sourceVisible = groupVisibility.get(sourceGroupKey) ?? false;
         const bindingTarget = entry.bindingTarget;
-        const nodeId = selectedNode.id;
+        const layerNodeId = layer.id;
 
         newEdges.push({
-          id: `prop-edge:${index}`,
+          id: `prop-edge:${layer.layerIndex}:${index}`,
           source: sourceGroupKey,
-          target: getSelectionNodeId(nodeId),
+          target: selectionNodeId,
           sourceHandle: `${entry.token.name}::out`,
-          targetHandle: `prop:${index}::in`,
+          targetHandle: getPropertyHandleId(layer.layerIndex, index, 'in'),
           type: 'customEdge',
           hidden: !sourceVisible,
           data: {
@@ -1209,17 +1223,17 @@ function GroupedGraphInner() {
             receiverShortName: entry.property,
             resolvedValue: '',
             onDisconnect: () => {
-              post({ type: 'unbind-node-property', nodeId, target: bindingTarget });
+              post({ type: 'unbind-node-property', nodeId: layerNodeId, target: bindingTarget });
             },
           },
         });
-      });
+      }));
     }
 
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
-      localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode,
+      localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
@@ -1279,21 +1293,22 @@ function GroupedGraphInner() {
     // token variable is on the other end (regardless of which side was
     // dragged from first; xyflow doesn't guarantee drag direction here).
     if (sourceIsProp || targetIsProp) {
-      if (sourceIsProp === targetIsProp || !selectedNode) return;
+      if (sourceIsProp === targetIsProp) return;
 
       const propHandle = sourceIsProp ? connection.sourceHandle : connection.targetHandle;
       const tokenHandle = sourceIsProp ? connection.targetHandle : connection.sourceHandle;
 
-      const entryIndexMatch = propHandle.match(/^prop:(\d+)::/);
-      if (!entryIndexMatch) return;
-      const entry = selectedNode.entries[parseInt(entryIndexMatch[1], 10)];
-      if (!entry || !entry.bindingTarget) return;
+      const indexMatch = propHandle.match(/^prop:(\d+):(\d+)::/);
+      if (!indexMatch) return;
+      const layer = selectedLayers[parseInt(indexMatch[1], 10)];
+      const entry = layer?.entries[parseInt(indexMatch[2], 10)];
+      if (!layer || !entry || !entry.bindingTarget) return;
 
       const tokenVarName = tokenHandle.replace('::out', '').replace('::in', '');
       const tokenVarInfo = variableMap.get(tokenVarName);
       if (!tokenVarInfo || tokenVarInfo.node.connectionsDisabled) return;
 
-      post({ type: 'bind-node-property', nodeId: selectedNode.id, target: entry.bindingTarget, variableId: tokenVarInfo.node.id });
+      post({ type: 'bind-node-property', nodeId: layer.id, target: entry.bindingTarget, variableId: tokenVarInfo.node.id });
       return;
     }
 
@@ -1311,7 +1326,7 @@ function GroupedGraphInner() {
       ? resolveModeIdForCollection(collections, targetVariable.collectionId, selectedModeId)
       : selectedModeId;
     post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId });
-  }, [collections, selectedModeId, variableMap, variablesById, selectedNode]);
+  }, [collections, selectedModeId, variableMap, variablesById, selectedLayers]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;
@@ -1451,7 +1466,7 @@ function GroupedGraphInner() {
   const handleFocusSelection = useCallback(() => {
     if (!selectedNode) return;
     const wanted = new Set<string>([getSelectionNodeId(selectedNode.id)]);
-    selectedNode.entries.forEach(entry => {
+    selectedLayers.forEach(layer => layer.entries.forEach(entry => {
       if (entry.kind !== 'variable' || !entry.token) return;
       const info = variableMap.get(entry.token.name);
       if (info) {
@@ -1462,7 +1477,7 @@ function GroupedGraphInner() {
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         wanted.add(`ext-group:${groupName}`);
       }
-    });
+    }));
 
     // fitView({nodes}) relies on xyflow's internal measured dimensions, which
     // aren't populated for these nodes — so compute the bounding box from the
@@ -1486,7 +1501,7 @@ function GroupedGraphInner() {
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
       { padding: 0.2, duration: 400 }
     );
-  }, [selectedNode, variableMap, reactFlowInstance]);
+  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance]);
 
   // Auto-frame the selection (and its providers) whenever a NEW node is
   // selected in Figma — the selection card is laid out past every token card,

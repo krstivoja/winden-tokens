@@ -2221,6 +2221,8 @@ interface InspectorEntry {
   rawValue: string;
   token?: InspectorTokenRef;
   bindingTarget?: InspectorBindingTarget;
+  // True when the value is the property's default/empty state (unbound only). Omitted otherwise to keep payload lean.
+  isDefault?: boolean;
 }
 
 interface InspectorNodeData {
@@ -2228,7 +2230,16 @@ interface InspectorNodeData {
   name: string;
   type: string;
   entries: InspectorEntry[];
+  // Present only for component-type selections (COMPONENT/COMPONENT_SET/INSTANCE): descendants in tree order.
+  children?: InspectorNodeData[];
+  // Set on the root node's data when the layer cap (INSPECTOR_MAX_LAYERS) was hit while collecting children.
+  truncated?: boolean;
 }
+
+// Node types for which the Selection Inspector also collects descendant layers.
+const INSPECTOR_COMPONENT_TYPES = new Set(['COMPONENT', 'COMPONENT_SET', 'INSTANCE']);
+// Safety cap on total layers (root + descendants) collected per selection, so huge components stay fast.
+const INSPECTOR_MAX_LAYERS = 300;
 
 function formatInspectorNumber(n: number): string {
   const rounded = Math.round(n * 100) / 100;
@@ -2355,6 +2366,28 @@ function formatInspectorScalarValue(value: any): string {
   return String(value);
 }
 
+// Whether an unbound scalar property is sitting at its default/empty value (hidden by default on component cards).
+function isInspectorScalarDefault(node: any, key: string, value: any): boolean {
+  if (key === 'fontSize') {
+    return false;
+  }
+  if (key === 'opacity') {
+    return value === 1;
+  }
+  if (key === 'lineHeight') {
+    return !!(value && typeof value === 'object' && value.unit === 'AUTO');
+  }
+  if (key === 'strokeWeight') {
+    const strokes = node.strokes;
+    if (!Array.isArray(strokes)) {
+      return true;
+    }
+    return !strokes.some((paint: any) => paint && paint.visible !== false);
+  }
+  const numeric = typeof value === 'number' ? value : (value && typeof value === 'object' && 'value' in value ? value.value : undefined);
+  return numeric === 0;
+}
+
 async function buildScalarEntries(node: any, props: Array<{ key: string; category: string; label: string }>): Promise<InspectorEntry[]> {
   const entries: InspectorEntry[] = [];
   for (const { key, category, label } of props) {
@@ -2366,14 +2399,18 @@ async function buildScalarEntries(node: any, props: Array<{ key: string; categor
       continue;
     }
     const token = await resolveVariableAlias(node.boundVariables && node.boundVariables[key]);
-    entries.push({
+    const entry: InspectorEntry = {
       category,
       property: label,
       kind: token ? 'variable' : 'hardcoded',
       rawValue: formatInspectorScalarValue(value),
       token: token || undefined,
       bindingTarget: { kind: 'node-field', field: key },
-    });
+    };
+    if (!token && isInspectorScalarDefault(node, key, value)) {
+      entry.isDefault = true;
+    }
+    entries.push(entry);
   }
   return entries;
 }
@@ -2423,7 +2460,7 @@ async function addStyleEntry(node: any, key: string, category: string, label: st
   }
 }
 
-async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData> {
+async function buildInspectorEntries(node: SceneNode): Promise<InspectorEntry[]> {
   const anyNode = node as any;
   const entries: InspectorEntry[] = [];
 
@@ -2472,12 +2509,73 @@ async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData>
   if (node.type === 'TEXT' && 'textStyleId' in anyNode) await addStyleEntry(anyNode, 'textStyleId', 'Typography', 'Text Style', entries);
   if ('gridStyleId' in anyNode) await addStyleEntry(anyNode, 'gridStyleId', 'Layout', 'Grid Style', entries);
 
-  return {
+  return entries;
+}
+
+// Depth-first collection of a component's descendant layers (tree order), skipping hidden nodes.
+// Shared `state` tracks the running layer count across the whole recursion so the cap applies to the
+// selection as a whole, not per-branch.
+async function collectInspectorChildren(
+  nodes: readonly SceneNode[] | undefined,
+  state: { count: number; truncated: boolean }
+): Promise<InspectorNodeData[]> {
+  const result: InspectorNodeData[] = [];
+  if (!nodes) {
+    return result;
+  }
+
+  for (const child of nodes) {
+    if ((child as any).visible === false) {
+      continue;
+    }
+    if (state.count >= INSPECTOR_MAX_LAYERS) {
+      state.truncated = true;
+      break;
+    }
+    state.count++;
+
+    const entries = await buildInspectorEntries(child);
+    const childData: InspectorNodeData = {
+      id: child.id,
+      name: child.name,
+      type: child.type,
+      entries,
+    };
+    const grandchildren = await collectInspectorChildren((child as any).children, state);
+    if (grandchildren.length > 0) {
+      childData.children = grandchildren;
+    }
+    result.push(childData);
+
+    if (state.truncated) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData> {
+  const entries = await buildInspectorEntries(node);
+  const data: InspectorNodeData = {
     id: node.id,
     name: node.name,
     type: node.type,
     entries,
   };
+
+  if (INSPECTOR_COMPONENT_TYPES.has(node.type)) {
+    const state = { count: 1, truncated: false }; // root counts toward the cap too
+    const children = await collectInspectorChildren((node as any).children, state);
+    if (children.length > 0) {
+      data.children = children;
+    }
+    if (state.truncated) {
+      data.truncated = true;
+    }
+  }
+
+  return data;
 }
 
 async function bindNodeProperty(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {

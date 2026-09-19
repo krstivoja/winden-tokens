@@ -39,6 +39,9 @@ export interface InspectorEntry {
   rawValue: string;
   token?: InspectorTokenRef;
   bindingTarget?: InspectorBindingTarget;
+  // True when the value is the property's default/empty state (0, opacity 1,
+  // AUTO line height, stroke weight without strokes). Only set on unbound rows.
+  isDefault?: boolean;
 }
 
 export interface InspectorNodeData {
@@ -46,6 +49,11 @@ export interface InspectorNodeData {
   name: string;
   type: string;
   entries: InspectorEntry[];
+  // Only present for COMPONENT / COMPONENT_SET / INSTANCE selections: visible
+  // descendant layers in tree order (each may nest its own children).
+  children?: InspectorNodeData[];
+  // Set on the root when the plugin's layer cap was hit while collecting children.
+  truncated?: boolean;
 }
 
 export interface PluginMessage {

@@ -1651,6 +1651,10 @@ async function parseValue(value, type) {
             return value;
     }
 }
+// Node types for which the Selection Inspector also collects descendant layers.
+const INSPECTOR_COMPONENT_TYPES = new Set(['COMPONENT', 'COMPONENT_SET', 'INSTANCE']);
+// Safety cap on total layers (root + descendants) collected per selection, so huge components stay fast.
+const INSPECTOR_MAX_LAYERS = 300;
 function formatInspectorNumber(n) {
     const rounded = Math.round(n * 100) / 100;
     return String(rounded);
@@ -1769,6 +1773,27 @@ function formatInspectorScalarValue(value) {
     }
     return String(value);
 }
+// Whether an unbound scalar property is sitting at its default/empty value (hidden by default on component cards).
+function isInspectorScalarDefault(node, key, value) {
+    if (key === 'fontSize') {
+        return false;
+    }
+    if (key === 'opacity') {
+        return value === 1;
+    }
+    if (key === 'lineHeight') {
+        return !!(value && typeof value === 'object' && value.unit === 'AUTO');
+    }
+    if (key === 'strokeWeight') {
+        const strokes = node.strokes;
+        if (!Array.isArray(strokes)) {
+            return true;
+        }
+        return !strokes.some((paint) => paint && paint.visible !== false);
+    }
+    const numeric = typeof value === 'number' ? value : (value && typeof value === 'object' && 'value' in value ? value.value : undefined);
+    return numeric === 0;
+}
 async function buildScalarEntries(node, props) {
     const entries = [];
     for (const { key, category, label } of props) {
@@ -1780,14 +1805,18 @@ async function buildScalarEntries(node, props) {
             continue;
         }
         const token = await resolveVariableAlias(node.boundVariables && node.boundVariables[key]);
-        entries.push({
+        const entry = {
             category,
             property: label,
             kind: token ? 'variable' : 'hardcoded',
             rawValue: formatInspectorScalarValue(value),
             token: token || undefined,
             bindingTarget: { kind: 'node-field', field: key },
-        });
+        };
+        if (!token && isInspectorScalarDefault(node, key, value)) {
+            entry.isDefault = true;
+        }
+        entries.push(entry);
     }
     return entries;
 }
@@ -1832,7 +1861,7 @@ async function addStyleEntry(node, key, category, label, entries) {
         entries.push({ category, property: label, kind: 'style', rawValue: name });
     }
 }
-async function getNodeInspectorData(node) {
+async function buildInspectorEntries(node) {
     const anyNode = node;
     const entries = [];
     if ('fills' in anyNode) {
@@ -1879,12 +1908,62 @@ async function getNodeInspectorData(node) {
         await addStyleEntry(anyNode, 'textStyleId', 'Typography', 'Text Style', entries);
     if ('gridStyleId' in anyNode)
         await addStyleEntry(anyNode, 'gridStyleId', 'Layout', 'Grid Style', entries);
-    return {
+    return entries;
+}
+// Depth-first collection of a component's descendant layers (tree order), skipping hidden nodes.
+// Shared `state` tracks the running layer count across the whole recursion so the cap applies to the
+// selection as a whole, not per-branch.
+async function collectInspectorChildren(nodes, state) {
+    const result = [];
+    if (!nodes) {
+        return result;
+    }
+    for (const child of nodes) {
+        if (child.visible === false) {
+            continue;
+        }
+        if (state.count >= INSPECTOR_MAX_LAYERS) {
+            state.truncated = true;
+            break;
+        }
+        state.count++;
+        const entries = await buildInspectorEntries(child);
+        const childData = {
+            id: child.id,
+            name: child.name,
+            type: child.type,
+            entries,
+        };
+        const grandchildren = await collectInspectorChildren(child.children, state);
+        if (grandchildren.length > 0) {
+            childData.children = grandchildren;
+        }
+        result.push(childData);
+        if (state.truncated) {
+            break;
+        }
+    }
+    return result;
+}
+async function getNodeInspectorData(node) {
+    const entries = await buildInspectorEntries(node);
+    const data = {
         id: node.id,
         name: node.name,
         type: node.type,
         entries,
     };
+    if (INSPECTOR_COMPONENT_TYPES.has(node.type)) {
+        const state = { count: 1, truncated: false }; // root counts toward the cap too
+        const children = await collectInspectorChildren(node.children, state);
+        if (children.length > 0) {
+            data.children = children;
+        }
+        if (state.truncated) {
+            data.truncated = true;
+        }
+    }
+    return data;
 }
 async function bindNodeProperty(nodeId, target, variableId) {
     const node = await figma.getNodeByIdAsync(nodeId);

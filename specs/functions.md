@@ -106,6 +106,12 @@
 - Show reference chains
 - Detect circular dependencies
 
+**Selection card:**
+- The selected Figma node appears as a card; bound tokens are connected to its property rows
+- Dragging a token onto a row binds it (`bind-node-property`); disconnecting an edge unbinds it (`unbind-node-property`), always on that row's own layer id
+- Components/instances: child layers are listed as collapsible sections, default/empty values are hidden, "Add property" reveals one for binding
+- Revealed rows and collapsed sections reset when the selection changes; an unbound row stays visible until then
+
 **Library:** @xyflow/react for graph visualization
 
 ---
