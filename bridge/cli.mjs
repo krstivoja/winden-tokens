@@ -59,6 +59,12 @@ const HELP = `
     manifest.json to list the new port, or the plugin will never connect.
     Use it to dodge a port conflict only if you can rebuild the plugin too.
 
+  Also in this package
+    winden-tokens-mcp   an MCP server that reads and edits the same file's
+                        tokens from an MCP client. It needs THIS relay and the
+                        Figma plugin window to be running, and refuses to start
+                        if either is missing. See specs/devnotes.md.
+
   Security
     The relay binds 127.0.0.1 only, and refuses any WebSocket whose Origin is
     not the page it served itself. A WebSocket handshake is not subject to

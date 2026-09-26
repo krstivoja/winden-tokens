@@ -246,4 +246,132 @@ describe('bridge relay', () => {
       client.close();
     });
   });
+  // -------------------------------------------------------------------------
+  // The third role. See PROTOCOL (2b) and the THREAT MODEL block in
+  // bridge/server.mjs — the point of every test here is that an `mcp` socket
+  // has a strict SUBSET of a browser tab's powers and is invisible to the
+  // Figma plugin window.
+  // -------------------------------------------------------------------------
+
+  describe('the mcp role', () => {
+    let relay;
+    let port;
+
+    beforeAll(async () => {
+      port = await freePort();
+      relay = await startRelay({ port, uiFile });
+    });
+    afterAll(() => relay.close());
+
+    /** An identified socket that stays open, with everything it received. */
+    async function attach(role, { origin } = {}) {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+      const frames = [];
+      ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+      await new Promise((resolve) => ws.on('open', resolve));
+      ws.send(JSON.stringify({ v: PROTOCOL_VERSION, role, kind: 'hello' }));
+      await new Promise((r) => setTimeout(r, 120));
+      return { ws, frames };
+    }
+
+    const settle = () => new Promise((r) => setTimeout(r, 120));
+
+    it("accepts 'mcp' from a null Origin, and tells it whether the plugin is there", async () => {
+      const mcp = await attach('mcp');
+      expect(mcp.ws.readyState).toBe(WebSocket.OPEN);
+      expect(mcp.frames.at(-1)).toMatchObject({
+        role: 'relay',
+        kind: 'status',
+        payload: { type: 'bridge/plugin-disconnected' },
+      });
+      mcp.ws.close();
+    });
+
+    it("refuses 'mcp' from a browser Origin — only a non-browser peer may claim it", async () => {
+      const result = await handshake(port, {
+        origin: `http://127.0.0.1:${port}`,
+        hello: { v: PROTOCOL_VERSION, role: 'mcp', kind: 'hello' },
+      });
+      expect(result.closeCode).toBe(4001);
+      expect(result.closeReason).toContain("may only claim role 'client'");
+    });
+
+    it('is invisible to the plugin: no forwarded hello, no client-attached', async () => {
+      const plugin = await attach('plugin');
+      const before = plugin.frames.length;
+
+      const mcp = await attach('mcp');
+      await settle();
+
+      // A browser tab attaching sends the plugin TWO frames (the forwarded
+      // hello and `client-attached`), and both put the plugin UI into headless
+      // mode. An mcp socket must send it nothing at all.
+      expect(plugin.frames.slice(before)).toEqual([]);
+
+      mcp.ws.close();
+      await settle();
+      expect(plugin.frames.slice(before)).toEqual([]); // nor on the way out
+
+      plugin.ws.close();
+    });
+
+    it('sends commands to the plugin and receives what the plugin broadcasts', async () => {
+      const plugin = await attach('plugin');
+      const mcp = await attach('mcp');
+      const seen = plugin.frames.length;
+
+      mcp.ws.send(
+        JSON.stringify({ v: PROTOCOL_VERSION, role: 'client', kind: 'message', payload: { type: 'ui-ready' } })
+      );
+      await settle();
+      expect(plugin.frames.slice(seen)).toEqual([
+        { v: PROTOCOL_VERSION, role: 'client', kind: 'message', payload: { type: 'ui-ready' } },
+      ]);
+
+      const got = mcp.frames.length;
+      plugin.ws.send(
+        JSON.stringify({ v: PROTOCOL_VERSION, role: 'plugin', kind: 'message', payload: { type: 'data-loaded', variables: [] } })
+      );
+      await settle();
+      expect(mcp.frames.slice(got)).toEqual([
+        { v: PROTOCOL_VERSION, role: 'plugin', kind: 'message', payload: { type: 'data-loaded', variables: [] } },
+      ]);
+
+      mcp.ws.close();
+      plugin.ws.close();
+    });
+
+    it('cannot reach a browser tab, and does not count as one', async () => {
+      const client = await attach('client', { origin: `http://127.0.0.1:${port}` });
+      const mcp = await attach('mcp');
+      const seen = client.frames.length;
+
+      mcp.ws.send(
+        JSON.stringify({ v: PROTOCOL_VERSION, role: 'client', kind: 'message', payload: { type: 'delete-all-variables' } })
+      );
+      await settle();
+      expect(client.frames.slice(seen)).toEqual([]);
+
+      const health = await get(port, '/healthz');
+      expect(JSON.parse(health.body)).toMatchObject({ clients: 1, mcp: 1, plugin: false });
+
+      mcp.ws.close();
+      client.ws.close();
+    });
+
+    it('never becomes the plugin socket', async () => {
+      const plugin = await attach('plugin');
+      const mcp = await attach('mcp');
+      await settle();
+
+      // A second PLUGIN hello replaces the first (close code 4000). An mcp
+      // hello must not, or a background process could take the Figma window's
+      // place and feed browser tabs whatever it liked.
+      expect(plugin.ws.readyState).toBe(WebSocket.OPEN);
+      expect(JSON.parse((await get(port, '/healthz')).body)).toMatchObject({ plugin: true, mcp: 1 });
+
+      mcp.ws.close();
+      plugin.ws.close();
+    });
+  });
 });

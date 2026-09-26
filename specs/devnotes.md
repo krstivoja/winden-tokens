@@ -196,10 +196,77 @@ Read the THREAT MODEL block at the top of `bridge/server.mjs` before changing an
 
 ---
 
+---
+
+### 5. MCP Server (manage tokens from Claude)
+
+**Best for:** reading and editing the token structure from a chat, without a browser tab.
+
+`winden-tokens-mcp` is a second bin in the same `winden-tokens` package.
+It is a third peer on the same relay: it may send plugin commands and receives everything the plugin broadcasts, and it can never impersonate the plugin.
+See [../plans/mcp-server.md](../plans/mcp-server.md) for the design, and the PROTOCOL (2b) block in `bridge/server.mjs` for the role.
+
+#### The one-line client config
+
+```bash
+claude mcp add winden-tokens -- winden-tokens-mcp
+```
+
+Claude Desktop wants the same thing as JSON, in `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "winden-tokens": { "command": "winden-tokens-mcp" } } }
+```
+
+Add `"args": ["--port", "9338"]` only if the relay is on another port.
+
+#### Both halves must already be running
+
+```bash
+npm install -g winden-tokens
+winden-tokens --no-open        # 1. the relay
+                               # 2. open the Winden Tokens plugin in Figma, leave the window open
+```
+
+The MCP server starts nothing.
+If the relay is not listening, or no Figma plugin is attached to it, it **refuses to start** and says which of the two is missing rather than hanging on the first tool call.
+Start them, then reconnect the MCP server in your client.
+
+#### Tools
+
+| | |
+|---|---|
+| `list_collections` | collections, their modes, variable counts, the groups inside them |
+| `list_variables` | filter by collection, group prefix, type or name substring |
+| `get_variable` | value per mode, what it references per mode, what references it |
+| `create_collection`, `create_variable`, `create_group` | additive |
+| `set_variable_value` | per mode; a raw value or `{another/variable}` |
+| `rename_variable`, `delete_variable` | **destructive, no undo from the model's side** |
+
+`rename_variable` and `delete_variable` say so at the top of their own descriptions, so a client that can gate tools has something to gate on.
+Figma's own undo, in the Figma window, is the only way back from either.
+
+Deliberately not in v1: binding a variable to a node property (it depends on the live Figma selection, which the model cannot see) and `rename-group` (it silently rewires every consumer).
+
+#### How request/response works over a broadcast protocol
+
+The plugin protocol is fire-and-forget: commands carry no id, replies carry no id, and every reply goes to everything attached.
+So the MCP server correlates by outcome — reads await the next `data-loaded`, writes await the next `update-success` / `update-error` — and every wait is bounded by a timeout that says what it was waiting for.
+Nothing in `src/plugin/code.ts` changed, which is what lets this work against a plugin bundle that is already loaded in Figma.
+
+The cost is stated in every write tool's own description: a second writer (a browser tab on the same relay, or the user clicking in the plugin window) produces outcomes that are indistinguishable from ours, so an `update-success` is not proof that THAT write is the one that succeeded.
+Every write therefore reports state re-read from the file rather than what it hoped it did.
+A correlation id in the envelope, echoed by the sandbox, is the v2 — and it costs every user a plugin rebuild.
+
+**Reads send `ui-ready`, not `refresh`.**
+`refresh` also runs `setVariableOrder([])` and `resetHistory()`, so it throws away the user's custom variable ordering and the plugin's whole undo/redo stack.
+A read tool that a model may call several times per answer must not do that.
+`ui-ready` produces the same `data-loaded` with neither side effect, and it is the cue the bridge already uses for a newly attached tab (`requestFullRefresh` in `src/ui/hooks/useBridge.ts`).
+
 ### Publishing `winden-tokens` to npm
 
-The package lives in `bridge/`, with its own `package.json`.
-Its only runtime dependency is `ws`.
+The package lives in `bridge/`, with its own `package.json`, and provides two bins: `winden-tokens` (relay + browser UI) and `winden-tokens-mcp` (MCP server).
+Its runtime dependencies are `ws` and `@modelcontextprotocol/sdk`, and nothing else.
 
 ```bash
 cd bridge
@@ -211,7 +278,7 @@ npm publish              # prepack builds and embeds the UI first
 So a published relay can never serve a UI that predates its own protocol, and the repo's tracked `dist/` is never touched by a publish.
 
 `bridge/ui/` and `bridge/LICENSE` are generated at pack time and are gitignored.
-Check what would ship with `npm pack --dry-run` from `bridge/`: it should be exactly `package.json`, `cli.mjs`, `server.mjs`, `ui/index.html` and `LICENSE`.
+Check what would ship with `npm pack --dry-run` from `bridge/`: it should be exactly `package.json`, `cli.mjs`, `mcp.mjs`, `mcp-tokens.mjs`, `server.mjs`, `ui/index.html` and `LICENSE`.
 
 **The protocol version is a shipping concern now.**
 The envelope carries `v: 1`.

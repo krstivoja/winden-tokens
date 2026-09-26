@@ -23,7 +23,7 @@
  *
  * Every frame is JSON:
  *
- *     { v: 1, role: 'plugin' | 'client', kind: 'hello' | 'message', payload }
+ *     { v: 1, role: 'plugin' | 'client' | 'mcp', kind: 'hello' | 'message', payload }
  *
  * `payload` is opaque to the relay. It carries the existing plugin message
  * types verbatim (`refresh`, `create-variable`, `bind-node-property`, …).
@@ -34,6 +34,7 @@
  *
  *        { v: 1, role: 'plugin', kind: 'hello', payload: {...} }
  *        { v: 1, role: 'client', kind: 'hello', payload: {...} }
+ *        { v: 1, role: 'mcp',    kind: 'hello', payload: {...} }
  *
  *    Before its hello a socket is unidentified: the relay sends it nothing and
  *    forwards nothing from it. A socket that has not said hello within
@@ -44,8 +45,51 @@
  *    so an old global install WILL eventually meet a newer plugin. A mismatch
  *    must be legible, not a blank tab — see the version-mismatch block below.
  *
- * 2. Routing — plugin ──▶ every client, any client ──▶ the plugin.
- *    Clients never reach each other.
+ * 2. Routing — plugin ──▶ every client AND every mcp, any client ──▶ the
+ *    plugin, any mcp ──▶ the plugin. Clients never reach each other, and an
+ *    mcp socket is never reachable from a client.
+ *
+ * 2b. THE `mcp` ROLE (the `winden-tokens-mcp` bin, see ./mcp.mjs)
+ *
+ *    A third peer: a local stdio MCP server that lets a model read and edit the
+ *    tokens in the open file. Its capabilities are deliberately a SUBSET of the
+ *    browser client's:
+ *
+ *      may     send plugin commands (routed exactly like a client's)
+ *      may     receive everything the plugin broadcasts
+ *      may NOT ever become `pluginSocket` — it can never impersonate the
+ *              Figma plugin, and therefore can never feed a browser tab a
+ *              forged `data-loaded`
+ *      may NOT be reached by a client, and cannot reach one
+ *
+ *    Two things the relay does for a client and deliberately does NOT do for an
+ *    mcp socket, both for the same reason — an MCP server attaching must be
+ *    INVISIBLE to the user's Figma plugin window:
+ *
+ *      - its hello is not forwarded to the plugin. A forwarded hello is the
+ *        plugin UI's cue to enter headless mode ("the browser has the wheel")
+ *        as well as to refresh, and a background process must not collapse the
+ *        window the user is working in.
+ *      - no `bridge/client-attached` / `client-detached` status frame is sent,
+ *        for the same reason: that frame also drives headless mode.
+ *
+ *    Consequently an mcp socket gets no automatic first snapshot. It asks for
+ *    one itself by sending `ui-ready`, which is precisely the cue the bridge
+ *    already uses for a freshly attached tab (`requestFullRefresh` in
+ *    src/ui/hooks/useBridge.ts). See ./mcp.mjs for why `ui-ready` and not
+ *    `refresh`.
+ *
+ *    WIRE LABEL OF AN MCP COMMAND, AND WHY IT SAYS `client`. The plugin half of
+ *    the bridge speaks protocol v1 and knows exactly two peer roles; its
+ *    `decodeEnvelope` DROPS a frame whose role it does not recognise. So an
+ *    `mcp`-labelled command frame would be silently discarded by every plugin
+ *    build that exists. The MCP server therefore names itself `mcp` in its
+ *    hello — which is what the relay makes its policy decisions on — and labels
+ *    its command frames `client`, the role the plugin already accepts commands
+ *    from. The relay routes on the socket's hello role and never on a frame's
+ *    label, so this changes nothing here; it is stated because it looks like an
+ *    inconsistency and is not one. The v2 cleanup is to teach `decodeEnvelope`
+ *    the `mcp` role and drop the relabel, which costs a plugin rebuild.
  *
  * 3. CLIENT HELLO IS FORWARDED TO THE PLUGIN VERBATIM.
  *    When a browser tab says hello, the plugin socket receives that exact
@@ -132,9 +176,40 @@
  *     which is why null must be allowed through at all.
  *
  *   Stage 2 (hello): bind the claim to the origin.
- *       null/absent origin  → may claim ONLY 'plugin'
+ *       null/absent origin  → may claim 'plugin' or 'mcp'
  *       an allowed origin   → may claim ONLY 'client'
  *     A violation closes the socket with a reason.
+ *
+ * WHY `mcp` SHARES THE NULL-ORIGIN BUCKET WITH `plugin` — a deliberate choice,
+ * not an oversight.
+ *
+ *   A Node process sends no Origin header, so `winden-tokens-mcp` arrives in
+ *   exactly the condition this relay has always read as "the Figma plugin
+ *   iframe". Three ways to tell the two apart were considered:
+ *
+ *     (a) a shared secret the CLI prints and the MCP server passes. It would
+ *         stop nothing: whoever can run a process on this machine can read the
+ *         same file or the same terminal. Real auth here is a different design
+ *         (see "No tokens" below), not a token bolted onto one role.
+ *     (b) a separate loopback port for the mcp role. The port is not a
+ *         capability — anything that can reach 9337 can reach 9338.
+ *     (c) nothing beyond the role claim itself. Chosen.
+ *
+ *   The reasoning for (c): the null-Origin bucket ALREADY lets any local
+ *   process claim `plugin`, which is strictly MORE power than `mcp` — a plugin
+ *   socket replaces the real one (close code 4000) and can feed every attached
+ *   browser tab a forged `data-loaded`. An `mcp` socket can do neither. So
+ *   admitting `mcp` from a null Origin adds no capability that was not already
+ *   reachable from the same position, and the threat model is unchanged: a
+ *   hostile WEB PAGE still cannot claim `mcp`, because a browser sets Origin
+ *   itself and cannot make it null for a WebSocket.
+ *
+ *   What DOES have to hold, and is enforced below rather than assumed: a socket
+ *   that claimed `mcp` can never become the plugin socket, and never reaches a
+ *   client. The distinction between the two null-Origin roles is therefore not
+ *   a security boundary — it is a capability floor. If a real boundary is ever
+ *   wanted here, it needs authentication for ALL roles, and the place to start
+ *   is that the Figma iframe cannot hold a secret either.
  *
  *   The consequence worth stating plainly: stage 1 lets any NON-BROWSER client
  *   (curl, a script) reach stage 2 and claim `plugin`, because a non-browser
@@ -225,9 +300,22 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
   let pluginSocket = null;
   /** @type {Set<import('ws').WebSocket>} */
   const clientSockets = new Set();
+  /**
+   * Sockets that claimed the `mcp` role. Kept apart from `clientSockets` on
+   * purpose: they receive the same plugin broadcasts, but they must NOT be
+   * counted in the `clients:N` the plugin uses to decide headless mode, and
+   * they must not be forwarded a hello. See PROTOCOL (2b).
+   * @type {Set<import('ws').WebSocket>}
+   */
+  const mcpSockets = new Set();
 
   let seq = 0; // monotonic socket id, for readable logs
   const counts = { toClients: 0, toPlugin: 0, dropped: 0 };
+
+  /** Every socket the relay currently holds, in one place. */
+  function allSockets() {
+    return [pluginSocket, ...clientSockets, ...mcpSockets].filter(Boolean);
+  }
 
   // -------------------------------------------------------------------------
   // HTTP server — serves the browser UI, and `noServer` so we own the upgrade
@@ -258,6 +346,10 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
           protocol: PROTOCOL_VERSION,
           plugin: Boolean(pluginSocket),
           clients: clientSockets.size,
+          // `winden-tokens-mcp` preflights this endpoint before it opens a
+          // socket, so that it can refuse to start with a sentence instead of
+          // hanging. `plugin` is the field it cares about most.
+          mcp: mcpSockets.size,
         }) + '\n'
       );
       return;
@@ -408,6 +500,8 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       }
 
       // Forward the ORIGINAL bytes. The relay does not re-serialise payload.
+      // Both non-plugin roles route the same way: towards the plugin, and
+      // nowhere else. That is the whole of "an mcp socket cannot reach a tab".
       if (meta.role === 'plugin') {
         forwardToClients(raw, frame);
       } else {
@@ -421,12 +515,17 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       if (meta.role === 'plugin' && pluginSocket === ws) {
         pluginSocket = null;
         log('CLOSE', `plugin  socket #${meta.id} disconnected (code ${code}, reason: ${reason})`);
-        log('NOTIFY', `telling ${clientSockets.size} client(s): plugin is gone`);
-        broadcastToClients(status('bridge/plugin-disconnected'));
+        log('NOTIFY', `telling ${clientSockets.size} client(s) and ${mcpSockets.size} mcp socket(s): plugin is gone`);
+        broadcastToPeers(status('bridge/plugin-disconnected'));
       } else if (meta.role === 'client') {
         clientSockets.delete(ws);
         log('CLOSE', `client  socket #${meta.id} disconnected (code ${code}, reason: ${reason}) — ${clientSockets.size} client(s) left`);
         sendToPlugin(status('bridge/client-detached', { clients: clientSockets.size }));
+      } else if (meta.role === 'mcp') {
+        mcpSockets.delete(ws);
+        // No `client-detached`: the plugin was never told this peer arrived,
+        // and must not be told it left. See PROTOCOL (2b).
+        log('CLOSE', `mcp     socket #${meta.id} disconnected (code ${code}, reason: ${reason}) — ${mcpSockets.size} mcp socket(s) left`);
       } else {
         log('CLOSE', `socket #${meta.id} (${meta.role ?? 'unidentified'}) disconnected (code ${code}, reason: ${reason})`);
       }
@@ -458,7 +557,7 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       return;
     }
 
-    if (claimed !== 'plugin' && claimed !== 'client') {
+    if (claimed !== 'plugin' && claimed !== 'client' && claimed !== 'mcp') {
       warn('REJECT', `socket #${meta.id} claimed unknown role ${JSON.stringify(claimed)} — closing`);
       closeWith(ws, CLOSE_POLICY, 'unknown role');
       return;
@@ -466,9 +565,9 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
 
     // Bind the role claim to the handshake Origin. See threat model, stage 2.
     const isNullOrigin = meta.origin === undefined || meta.origin === 'null';
-    if (isNullOrigin && claimed !== 'plugin') {
-      warn('REJECT', `socket #${meta.id} with null Origin claimed '${claimed}' — only 'plugin' is allowed from a null Origin. Closing.`);
-      closeWith(ws, CLOSE_POLICY, "null Origin may only claim role 'plugin'");
+    if (isNullOrigin && claimed !== 'plugin' && claimed !== 'mcp') {
+      warn('REJECT', `socket #${meta.id} with null Origin claimed '${claimed}' — only 'plugin' and 'mcp' are allowed from a null Origin. Closing.`);
+      closeWith(ws, CLOSE_POLICY, "null Origin may only claim role 'plugin' or 'mcp'");
       return;
     }
     if (!isNullOrigin && claimed !== 'client') {
@@ -491,11 +590,31 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       }
       pluginSocket = ws;
       log('HELLO', `plugin  socket #${meta.id} identified (Origin: ${meta.originLabel}) — ${clientSockets.size} client(s) attached`);
-      log('NOTIFY', `telling ${clientSockets.size} client(s): plugin is here`);
-      broadcastToClients(status('bridge/plugin-connected'));
+      log('NOTIFY', `telling ${clientSockets.size} client(s) and ${mcpSockets.size} mcp socket(s): plugin is here`);
+      broadcastToPeers(status('bridge/plugin-connected'));
       if (clientSockets.size > 0) {
         sendToPlugin(status('bridge/client-attached', { clients: clientSockets.size }));
       }
+      return;
+    }
+
+    if (claimed === 'mcp') {
+      mcpSockets.add(ws);
+      log('HELLO', `mcp     socket #${meta.id} identified (Origin: ${meta.originLabel}) — ${mcpSockets.size} mcp socket(s) attached`);
+
+      // Deliberately NOT done here, and both omissions are load-bearing:
+      //   - the hello is not forwarded to the plugin,
+      //   - no `bridge/client-attached` is sent.
+      // Either one would put the user's plugin window into headless mode
+      // because a background process attached. See PROTOCOL (2b).
+      if (!pluginSocket) {
+        warn('MCP', `mcp #${meta.id} attached but NO PLUGIN is connected — it will report that and refuse tool calls until the Figma plugin window is open`);
+      }
+
+      // The one thing it does get: the relay's view of the plugin, now and on
+      // every later change, which is what lets it say "the plugin window
+      // detached" instead of waiting out a timeout.
+      send(ws, status(pluginSocket ? 'bridge/plugin-connected' : 'bridge/plugin-disconnected'));
       return;
     }
 
@@ -542,7 +661,7 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
 
     const message = `Bridge protocol mismatch: the relay speaks v${PROTOCOL_VERSION}, the other side speaks ${shown}. ${advice}`;
 
-    broadcastToClients(
+    broadcastToPeers(
       status('bridge/version-mismatch', {
         relay: PROTOCOL_VERSION,
         peer: Number.isInteger(peerVersion) ? peerVersion : null,
@@ -559,10 +678,17 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
   // Forwarding
   // -------------------------------------------------------------------------
 
+  /**
+   * Plugin ──▶ every listening peer: browser tabs AND mcp sockets.
+   *
+   * The two are listed separately in the log because "0 clients, 1 mcp" is a
+   * perfectly normal state (a model driving the file with no tab open) and
+   * reading it as "dropped" would send you hunting a bug that is not there.
+   */
   function forwardToClients(raw, frame) {
-    if (clientSockets.size === 0) {
+    if (clientSockets.size === 0 && mcpSockets.size === 0) {
       counts.dropped++;
-      log('FWD', `plugin → (no clients)  type=${payloadType(frame)}  dropped (#${counts.dropped} dropped)`);
+      log('FWD', `plugin → (nobody listening)  type=${payloadType(frame)}  dropped (#${counts.dropped} dropped)`);
       return;
     }
     let sent = 0;
@@ -572,19 +698,26 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
         sent++;
       }
     }
+    let sentMcp = 0;
+    for (const mcp of mcpSockets) {
+      if (mcp.readyState === mcp.OPEN) {
+        mcp.send(raw);
+        sentMcp++;
+      }
+    }
     counts.toClients++;
-    log('FWD', `plugin → ${sent} client(s)   kind=${frame.kind}  type=${payloadType(frame)}  #${counts.toClients}`);
+    log('FWD', `plugin → ${sent} client(s) + ${sentMcp} mcp   kind=${frame.kind}  type=${payloadType(frame)}  #${counts.toClients}`);
   }
 
   function forwardToPlugin(raw, frame, meta) {
     if (!pluginSocket || pluginSocket.readyState !== pluginSocket.OPEN) {
       counts.dropped++;
-      warn('FWD', `client #${meta.id} → plugin  type=${payloadType(frame)}  DROPPED — no plugin connected (#${counts.dropped} dropped)`);
+      warn('FWD', `${meta.role.padEnd(6)} #${meta.id} → plugin  type=${payloadType(frame)}  DROPPED — no plugin connected (#${counts.dropped} dropped)`);
       return;
     }
     pluginSocket.send(raw);
     counts.toPlugin++;
-    log('FWD', `client #${meta.id} → plugin   kind=${frame.kind}  type=${payloadType(frame)}  #${counts.toPlugin}`);
+    log('FWD', `${meta.role.padEnd(6)} #${meta.id} → plugin   kind=${frame.kind}  type=${payloadType(frame)}  #${counts.toPlugin}`);
   }
 
   // -------------------------------------------------------------------------
@@ -615,10 +748,19 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
     send(pluginSocket, frame);
   }
 
-  function broadcastToClients(frame) {
+  /**
+   * A relay-authored status frame to everyone on the far side of the plugin:
+   * browser tabs and mcp sockets alike.
+   *
+   * Both need the same two facts for the same reason — whether the Figma plugin
+   * window is there. A tab that does not know says "lost the document" instead
+   * of hanging; an MCP server that does not know would answer a tool call by
+   * waiting out a timeout instead of saying the window is closed.
+   */
+  function broadcastToPeers(frame) {
     const raw = JSON.stringify(frame);
-    for (const client of clientSockets) {
-      if (client.readyState === client.OPEN) client.send(raw);
+    for (const peer of [...clientSockets, ...mcpSockets]) {
+      if (peer.readyState === peer.OPEN) peer.send(raw);
     }
   }
 
@@ -636,7 +778,7 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
   // -------------------------------------------------------------------------
 
   const heartbeat = setInterval(() => {
-    const sockets = [pluginSocket, ...clientSockets].filter(Boolean);
+    const sockets = allSockets();
     for (const ws of sockets) {
       const meta = ws._bridge;
       if (!meta.alive) {
@@ -670,6 +812,7 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       log('READY', `client Origins allowed: ${[...clientOrigins].join(', ')}`);
       if (dev) log('READY', 'DEV MODE — the vite dev origin is on the allowlist');
       log('READY', `plugin role allowed only from a null/absent Origin (the Figma iframe)`);
+      log('READY', `mcp    role allowed only from a null/absent Origin (winden-tokens-mcp) — never becomes the plugin`);
       log('READY', `bridge protocol v${PROTOCOL_VERSION}`);
 
       resolve({
@@ -678,7 +821,7 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
         close() {
           log('BYE', `shutting down (${counts.toClients} frames to clients, ${counts.toPlugin} to plugin, ${counts.dropped} dropped)`);
           clearInterval(heartbeat);
-          for (const ws of [pluginSocket, ...clientSockets].filter(Boolean)) {
+          for (const ws of allSockets()) {
             closeWith(ws, 1001, 'relay shutting down');
           }
           return new Promise((done) => {

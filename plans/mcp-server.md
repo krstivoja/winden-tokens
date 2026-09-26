@@ -56,19 +56,47 @@ Deliberately NOT in v1:
 
 ## Steps
 
-- [ ] `mcp` role in the relay: may send commands, receives plugin broadcasts, never impersonates the plugin.
-- [ ] `winden-tokens-mcp` bin: stdio MCP server, `@modelcontextprotocol/sdk`.
-- [ ] Read tools over the `refresh` → `data-loaded` snapshot.
-- [ ] Write tools over the existing plugin commands, each awaiting its outcome.
-- [ ] Bounded waits with legible timeout errors.
-- [ ] `specs/devnotes.md`: the one-line client config.
+- [x] `mcp` role in the relay: may send commands, receives plugin broadcasts, never impersonates the plugin.
+- [x] `winden-tokens-mcp` bin: stdio MCP server, `@modelcontextprotocol/sdk`. Package bumped to 0.2.0.
+- [x] Read tools over the `ui-ready` → `data-loaded` snapshot. **Not `refresh` — see the decision below.**
+- [x] Write tools over the existing plugin commands, each awaiting its outcome.
+- [x] Bounded waits with legible timeout errors.
+- [x] `specs/devnotes.md`: the one-line client config.
+
+## Decisions taken while building it
+
+**Reads send `ui-ready`, not `refresh`.** The plan said `refresh`; reading the handler shows it does more than re-read:
+
+```ts
+case 'refresh':
+  setVariableOrder([]);   // discards the user's custom ordering
+  await fetchData();
+  await resetHistory();   // discards the plugin's undo/redo stack
+```
+
+A read tool a model may call several times per answer must not quietly destroy either.
+`ui-ready` broadcasts the same `data-loaded` with neither side effect, and it is not an improvisation: it is already the bridge's own refresh cue for a newly attached tab (`requestFullRefresh` in `src/ui/hooks/useBridge.ts` posts `ui-ready` + `get-history-state`).
+
+**Writes reuse the snapshot the write itself produced.** Every write handler in the sandbox calls `fetchData()` *before* it posts `update-success`, so the post-write `data-loaded` has already arrived when the outcome does. No second refresh per write.
+
+**An `mcp` socket is invisible to the plugin window.** The relay forwards a *client* hello to the plugin and sends it `client-attached`; both put the plugin UI into headless mode. Neither happens for `mcp` — a background process must not collapse the window the user is working in. Cost: no automatic first snapshot, which is why reads trigger their own.
+
+**Command frames from the MCP are labelled `role: 'client'` on the wire.** The plugin half speaks v1 and its `decodeEnvelope` drops envelopes whose role it does not know, so an `mcp`-labelled command would be silently discarded by every plugin build in existence. The relay decides policy on the hello role, never on a frame label, so nothing in the routing depends on this. Teaching `decodeEnvelope` the role and dropping the relabel is a v2 item; it costs a plugin rebuild.
+
+**`create_group` takes the variables to put in it, and requires at least one.** A Figma group is not an object — it exists only as the shared `/` prefix of the variables in it, so an empty group cannot be represented at all.
+
+**`mcp` shares the null-Origin bucket with `plugin`, deliberately.** A shared secret and a separate port were both considered and rejected as theatre; the full reasoning, including why this adds no capability that was not already reachable, is in the THREAT MODEL block of `bridge/server.mjs`.
 
 ## Verify
 
-- [ ] Against the real open file: list collections, read a variable's references, create a variable and see it appear in Figma.
-- [ ] Relay not running → a clear refusal, not a hang.
-- [ ] Plugin window closed → same.
-- [ ] The production plugin build still contains no bridge code.
+- [x] Relay not running → a clear refusal naming the command that starts it, not a hang.
+- [x] Relay running, no plugin attached → a clear refusal naming the plugin window, not a hang.
+- [x] Plugin detaching mid-session → tool calls fail in ~1ms with a sentence, not at the 20s timeout.
+- [x] Full round trip against a real relay and a fake plugin socket, on a scratch port: all 9 tools, plus the duplicate-name, unknown-id, unnamed-mode and `update-error` paths.
+- [x] The production plugin build still contains no bridge code (`grep -c WebSocket dist/index.html` → 0).
+- [ ] **Against the real open Figma file** — the one thing a fake plugin socket cannot prove: list collections, read a variable's references, create a variable and watch it appear in Figma, and confirm the plugin window does NOT collapse to the headless strip when the MCP server attaches.
+
+Keep this plan until that last box is ticked.
 
 ## After this
 

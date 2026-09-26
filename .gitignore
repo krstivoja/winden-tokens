@@ -13,3 +13,4 @@ specs/.conversations/
 bridge/ui/
 bridge/LICENSE
 bridge/*.tgz
+bridge/package-lock.json
