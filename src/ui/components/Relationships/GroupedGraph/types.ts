@@ -83,11 +83,14 @@ export interface ConnectionFlags {
 export interface GridLayoutSettings {
   gapX: number;
   gapY: number;
+  /** Max stacked height of one Arrange column before the tier wraps. */
+  maxColumnHeight: number;
 }
 
 export interface GridLayoutDraft {
   gapX: string;
   gapY: string;
+  maxColumnHeight: string;
 }
 
 // ── Node Data Type ─────────────────────────────────────────────────

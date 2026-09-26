@@ -9,6 +9,7 @@ import {
   VariableNode,
   ManagedNumberStepGroup,
   GridLayoutSettings,
+  GridLayoutDraft,
   ConnectionRecord,
 } from './types';
 import {
@@ -17,6 +18,7 @@ import {
   GROUP_PADDING,
   GROUP_GAP_X,
   GROUP_GAP_Y,
+  GRID_MAX_COLUMN_HEIGHT,
   GROUP_WIDTH,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
@@ -55,7 +57,22 @@ function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
   const candidate = (value && typeof value === 'object') ? value as Partial<GridLayoutSettings> : {};
   const gapX = typeof candidate.gapX === 'number' && candidate.gapX >= 0 ? candidate.gapX : GROUP_GAP_X;
   const gapY = typeof candidate.gapY === 'number' && candidate.gapY >= 0 ? candidate.gapY : GROUP_GAP_Y;
-  return { gapX, gapY };
+  // A zero or negative cap would put every card in its own column, so it falls
+  // back to the default rather than being taken literally. Settings persisted
+  // before this option existed simply have no value here.
+  const maxColumnHeight = typeof candidate.maxColumnHeight === 'number' && candidate.maxColumnHeight > 0
+    ? candidate.maxColumnHeight
+    : GRID_MAX_COLUMN_HEIGHT;
+  return { gapX, gapY, maxColumnHeight };
+}
+
+/** Settings → the string-backed draft the Grid Settings inputs edit. */
+function toGridLayoutDraft(settings: GridLayoutSettings): GridLayoutDraft {
+  return {
+    gapX: String(settings.gapX),
+    gapY: String(settings.gapY),
+    maxColumnHeight: String(settings.maxColumnHeight),
+  };
 }
 
 function sortGroupsByPosition(a: GroupData, b: GroupData): number {
@@ -224,21 +241,62 @@ function detectManagedNumberStepGroups(variables: VariableData[]): ManagedNumber
   return groups.filter(group => group.stepVariables.length > 0);
 }
 
+/**
+ * Extra inputs to Arrange Grid, named rather than positional: the tail of this
+ * function's arguments is three optional knobs of three different kinds, and
+ * two of them (the two connection lists) would otherwise sit next to each
+ * other with nothing but their position to tell them apart.
+ */
+interface ArrangeGridOptions {
+  /** Vertical footprint override per unit, for wrapper frames. */
+  heightOverrides?: Map<string, number>;
+  /**
+   * The FULL connection set — hidden endpoints included — used only to compute
+   * each group's topological depth, i.e. which tier it belongs to.
+   *
+   * `connections` carries just the edges the user can actually see, because
+   * packing must follow what is on screen. Depth must not: hiding the `_global`
+   * collection would strip every incoming edge from `color/surface/*`, turn it
+   * into a root, and collapse the whole graph into the first two columns.
+   * A group keeps the tier it occupies in the real graph; only its PLACEMENT is
+   * restricted to visible cards. Endpoints that are not in `groups` (hidden
+   * units) take part in the depth walk and are never placed.
+   *
+   * Defaults to `connections`, so a caller that has only one list behaves as
+   * it always did.
+   */
+  depthConnections?: ConnectionRecord[];
+  /**
+   * Max stacked height of the cards in one column. A tier whose cards exceed it
+   * wraps into side-by-side sub-columns within the same tier; tiers to its
+   * right shift over by the extra columns it consumes. Measures the stacked
+   * cards only, not any managed-chain rows sitting above them. Defaults to
+   * unlimited.
+   */
+  maxColumnHeight?: number;
+}
+
 function arrangeGroupsByConnectedBlocks(
   groups: GroupData[],
   connections: ConnectionRecord[],
   gapX: number,
   gapY: number,
-  heightOverrides?: Map<string, number>
+  options: ArrangeGridOptions = {}
 ): Map<string, { x: number; y: number }> {
+  const { heightOverrides, depthConnections, maxColumnHeight } = options;
   const columnStep = GROUP_WIDTH + gapX;
+  const columnHeightLimit = typeof maxColumnHeight === 'number' && maxColumnHeight > 0
+    ? maxColumnHeight
+    : Number.POSITIVE_INFINITY;
   const positions = new Map<string, { x: number; y: number }>();
   const groupMap = new Map(groups.map(group => [group.key, group]));
   // Callers (e.g. Arrange treating a wrapper frame as one unit) can override
   // a pseudo-group's vertical footprint instead of deriving it from row count.
   const heightOf = (group: GroupData): number => heightOverrides?.get(group.key) ?? getGroupHeight(group);
 
-  // Build directed graph: fromGroup → toGroup (connection flows left to right)
+  // Directed graph over the VISIBLE groups only: fromGroup → toGroup
+  // (a connection flows left to right). Drives the barycenter sweeps, which
+  // order cards against the neighbours actually drawn beside them.
   const outgoing = new Map<string, Set<string>>();
   const incoming = new Map<string, Set<string>>();
   groups.forEach(group => {
@@ -253,67 +311,43 @@ function arrangeGroupsByConnectedBlocks(
     incoming.get(conn.toGroup)?.add(conn.fromGroup);
   });
 
-  // Also build undirected adjacency for finding connected components
-  const adjacency = new Map<string, Set<string>>();
-  groups.forEach(group => adjacency.set(group.key, new Set()));
-  connections.forEach(conn => {
-    if (!groupMap.has(conn.fromGroup) || !groupMap.has(conn.toGroup)) return;
-    adjacency.get(conn.fromGroup)?.add(conn.toGroup);
-    adjacency.get(conn.toGroup)?.add(conn.fromGroup);
+  // ── Topological depth over the FULL graph ────────────────────────
+  // Node set = every visible group PLUS every endpoint of a connection that
+  // has an end off screen, so a hidden provider still pushes its consumers
+  // into the tier they belong to.
+  const depthEdges = depthConnections ?? connections;
+  const depthOutgoing = new Map<string, Set<string>>();
+  const depthIncoming = new Map<string, Set<string>>();
+  const ensureDepthNode = (key: string) => {
+    if (!depthOutgoing.has(key)) depthOutgoing.set(key, new Set());
+    if (!depthIncoming.has(key)) depthIncoming.set(key, new Set());
+  };
+  groups.forEach(group => ensureDepthNode(group.key));
+  depthEdges.forEach(conn => {
+    if (conn.fromGroup === conn.toGroup) return;
+    ensureDepthNode(conn.fromGroup);
+    ensureDepthNode(conn.toGroup);
+    depthOutgoing.get(conn.fromGroup)?.add(conn.toGroup);
+    depthIncoming.get(conn.toGroup)?.add(conn.fromGroup);
   });
 
-  // Find connected components (blocks)
-  const visited = new Set<string>();
-  const blocks: GroupData[][] = [];
-
-  groups.slice().sort((a, b) => a.title.localeCompare(b.title)).forEach(group => {
-    if (visited.has(group.key)) return;
-    const stack = [group.key];
-    const block: GroupData[] = [];
-    visited.add(group.key);
-
-    while (stack.length > 0) {
-      const currentKey = stack.pop();
-      if (!currentKey) continue;
-      const currentGroup = groupMap.get(currentKey);
-      if (currentGroup) block.push(currentGroup);
-      adjacency.get(currentKey)?.forEach(nextKey => {
-        if (visited.has(nextKey)) return;
-        visited.add(nextKey);
-        stack.push(nextKey);
-      });
-    }
-    blocks.push(block);
-  });
-
-  // Deterministic block order: by minimum group title, larger blocks first as tiebreak
-  blocks.sort((a, b) => {
-    const minTitleA = a.reduce((min, g) => (g.title < min ? g.title : min), a[0]?.title || '');
-    const minTitleB = b.reduce((min, g) => (g.title < min ? g.title : min), b[0]?.title || '');
-    if (minTitleA !== minTitleB) return minTitleA.localeCompare(minTitleB);
-    return b.length - a.length;
-  });
-
-  // Per-group topological depth (each group is its own unit)
+  const depthNodes = Array.from(depthOutgoing.keys());
   const groupDepth = new Map<string, number>();
   const indegreeCount = new Map<string, number>();
-
-  groups.forEach(group => {
-    groupDepth.set(group.key, 0);
-    indegreeCount.set(group.key, incoming.get(group.key)?.size || 0);
+  depthNodes.forEach(key => {
+    groupDepth.set(key, 0);
+    indegreeCount.set(key, depthIncoming.get(key)?.size || 0);
   });
 
-  // Kahn's algorithm for topological depth
-  const queue = groups
-    .filter(g => (indegreeCount.get(g.key) || 0) === 0)
-    .map(g => g.key);
+  // Kahn's algorithm, taking the longest path to each node.
+  const queue = depthNodes.filter(key => (indegreeCount.get(key) || 0) === 0);
   const processed = new Set<string>();
 
   while (queue.length > 0) {
     queue.sort((a, b) => {
       const gA = groupMap.get(a);
       const gB = groupMap.get(b);
-      if (!gA || !gB) return 0;
+      if (!gA || !gB) return a.localeCompare(b);
       return sortGroupsByPosition(gA, gB);
     });
     const currentKey = queue.shift();
@@ -321,32 +355,28 @@ function arrangeGroupsByConnectedBlocks(
     processed.add(currentKey);
     const currentDepth = groupDepth.get(currentKey) || 0;
 
-    outgoing.get(currentKey)?.forEach(nextKey => {
+    depthOutgoing.get(currentKey)?.forEach(nextKey => {
       groupDepth.set(nextKey, Math.max(groupDepth.get(nextKey) || 0, currentDepth + 1));
       indegreeCount.set(nextKey, (indegreeCount.get(nextKey) || 0) - 1);
       if ((indegreeCount.get(nextKey) || 0) === 0) queue.push(nextKey);
     });
   }
 
-  // Handle cycles: assign remaining groups a fallback depth
-  if (processed.size !== groups.length) {
+  // Handle cycles: assign remaining nodes a fallback depth
+  if (processed.size !== depthNodes.length) {
     const maxProcessedDepth = processed.size > 0
       ? Math.max(...Array.from(processed).map(key => groupDepth.get(key) || 0))
       : -1;
-    groups.forEach(group => {
-      if (!processed.has(group.key)) {
-        groupDepth.set(group.key, maxProcessedDepth + 1);
-      }
+    depthNodes.forEach(key => {
+      if (!processed.has(key)) groupDepth.set(key, maxProcessedDepth + 1);
     });
   }
 
   // Identify managed chains: groups linked by sourceGroupName (source → shader → shades)
   // Each chain is laid out as a horizontal row with aligned Y positions
-  const chainSourceNames = new Set<string>();
   const groupToChain = new Map<string, string>(); // group.key → sourceGroupName
   groups.forEach(group => {
     if (getManagedLane(group) !== null && group.sourceGroupName) {
-      chainSourceNames.add(group.sourceGroupName);
       groupToChain.set(group.key, group.sourceGroupName);
     }
   });
@@ -374,12 +404,20 @@ function arrangeGroupsByConnectedBlocks(
     return sortGroupsByPosition(aSource, bSource);
   });
 
-  // Layout: managed chains first as horizontal rows, then standalone groups by depth
+  // ── Pass 1: vertical placement ───────────────────────────────────
+  // X is deferred to pass 3, because a tier's column index depends on how many
+  // sub-columns every tier to its left ends up consuming.
+
+  // Managed chains first — each chain is one horizontal row across its fixed
+  // lanes, so its cards share a Y. A chain is never broken up: it is placed
+  // whole, in the first sub-column of each lane it touches, and takes no part
+  // in the column-height wrapping below.
+  const chainPlacements: { key: string; lane: number; y: number }[] = [];
   let nextBlockY = 0;
   const reserveGeneratorLane = sortedChains.length > 0;
   const laneBottoms = new Map<number, number>();
+  const chainLanes = new Set<number>();
 
-  // Layout managed chains - each chain on its own row
   sortedChains.forEach(([, chainGroups]) => {
     // Managed chains always occupy fixed lanes regardless of extra references.
     chainGroups.sort((a, b) => {
@@ -392,8 +430,9 @@ function arrangeGroupsByConnectedBlocks(
     const rowLanes = new Set<number>();
     chainGroups.forEach(group => {
       const lane = getManagedLane(group) ?? 0;
-      positions.set(group.key, { x: lane * columnStep, y: nextBlockY });
+      chainPlacements.push({ key: group.key, lane, y: nextBlockY });
       rowLanes.add(lane);
+      chainLanes.add(lane);
       rowHeight = Math.max(rowHeight, heightOf(group));
     });
     nextBlockY += rowHeight + gapY;
@@ -402,79 +441,140 @@ function arrangeGroupsByConnectedBlocks(
     });
   });
 
-  // Layout standalone groups by depth columns.
-  // When shaders/steps are present, reserve column 1 for them and place
-  // other dependent groups starting at column 2. Each column stacks
-  // beneath items already occupying that same lane, not beneath the full graph.
-  if (standaloneGroups.length > 0) {
-    const standaloneColumns = new Map<number, GroupData[]>();
-    standaloneGroups.forEach(group => {
-      const depth = groupDepth.get(group.key) || 0;
-      const lane = getStandaloneLane(depth, reserveGeneratorLane);
-      const col = standaloneColumns.get(lane) || [];
-      col.push(group);
-      standaloneColumns.set(lane, col);
-    });
+  // Standalone groups by depth lane. When shaders/steps are present, lane 1 is
+  // reserved for them and other dependent groups start at lane 2. Each lane
+  // stacks beneath whatever already occupies that same lane, not beneath the
+  // full graph.
+  const standaloneColumns = new Map<number, GroupData[]>();
+  standaloneGroups.forEach(group => {
+    const depth = groupDepth.get(group.key) || 0;
+    const lane = getStandaloneLane(depth, reserveGeneratorLane);
+    const col = standaloneColumns.get(lane) || [];
+    col.push(group);
+    standaloneColumns.set(lane, col);
+  });
 
-    const sortedLanes = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
+  const sortedLanes = Array.from(standaloneColumns.keys()).sort((a, b) => a - b);
 
-    // Initial within-column order: by title (position-independent, deterministic)
-    const laneOrder = new Map<number, string[]>();
-    sortedLanes.forEach(lane => {
-      const columnGroups = (standaloneColumns.get(lane) || [])
-        .slice()
-        .sort((a, b) => a.title.localeCompare(b.title));
-      laneOrder.set(lane, columnGroups.map(group => group.key));
-    });
+  // Initial within-column order: by title (position-independent, deterministic)
+  const laneOrder = new Map<number, string[]>();
+  sortedLanes.forEach(lane => {
+    const columnGroups = (standaloneColumns.get(lane) || [])
+      .slice()
+      .sort((a, b) => a.title.localeCompare(b.title));
+    laneOrder.set(lane, columnGroups.map(group => group.key));
+  });
 
-    // Barycenter sweeps: reduce edge crossings by reordering each column
-    // according to the average index of its connected neighbors in the
-    // adjacent (already-visited) column, sweeping left-to-right then
-    // right-to-left. Groups without neighbors in that column keep their
-    // relative order (stable sort on original index).
-    const barycenterSweepCount = 4;
-    for (let sweep = 0; sweep < barycenterSweepCount; sweep++) {
-      const leftToRight = sweep % 2 === 0;
-      const laneSequence = leftToRight ? sortedLanes : sortedLanes.slice().reverse();
-      const neighborSets = leftToRight ? incoming : outgoing;
+  // Barycenter sweeps: reduce edge crossings by reordering each column
+  // according to the average index of its connected neighbors in the
+  // adjacent (already-visited) column, sweeping left-to-right then
+  // right-to-left. Groups without neighbors in that column keep their
+  // relative order (stable sort on original index).
+  const barycenterSweepCount = 4;
+  for (let sweep = 0; sweep < barycenterSweepCount; sweep++) {
+    const leftToRight = sweep % 2 === 0;
+    const laneSequence = leftToRight ? sortedLanes : sortedLanes.slice().reverse();
+    const neighborSets = leftToRight ? incoming : outgoing;
 
-      laneSequence.forEach((lane, seqIndex) => {
-        if (seqIndex === 0) return; // first column in this sweep direction stays fixed
-        const adjacentLane = laneSequence[seqIndex - 1];
-        const adjacentOrder = laneOrder.get(adjacentLane) || [];
-        const adjacentIndex = new Map(adjacentOrder.map((key, index) => [key, index]));
-        const currentOrder = laneOrder.get(lane) || [];
+    laneSequence.forEach((lane, seqIndex) => {
+      if (seqIndex === 0) return; // first column in this sweep direction stays fixed
+      const adjacentLane = laneSequence[seqIndex - 1];
+      const adjacentOrder = laneOrder.get(adjacentLane) || [];
+      const adjacentIndex = new Map(adjacentOrder.map((key, index) => [key, index]));
+      const currentOrder = laneOrder.get(lane) || [];
 
-        const withBarycenter = currentOrder.map((key, originalIndex) => {
-          const neighborKeys = Array.from(neighborSets.get(key) || []).filter(n => adjacentIndex.has(n));
-          const barycenter = neighborKeys.length > 0
-            ? neighborKeys.reduce((sum, n) => sum + (adjacentIndex.get(n) || 0), 0) / neighborKeys.length
-            : originalIndex;
-          return { key, barycenter, originalIndex };
-        });
-
-        withBarycenter.sort((a, b) => {
-          if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
-          return a.originalIndex - b.originalIndex;
-        });
-
-        laneOrder.set(lane, withBarycenter.map(item => item.key));
+      const withBarycenter = currentOrder.map((key, originalIndex) => {
+        const neighborKeys = Array.from(neighborSets.get(key) || []).filter(n => adjacentIndex.has(n));
+        const barycenter = neighborKeys.length > 0
+          ? neighborKeys.reduce((sum, n) => sum + (adjacentIndex.get(n) || 0), 0) / neighborKeys.length
+          : originalIndex;
+        return { key, barycenter, originalIndex };
       });
-    }
 
-    sortedLanes.forEach((lane, compressedCol) => {
-      const orderedKeys = laneOrder.get(lane) || [];
-      let nextColumnY = laneBottoms.get(lane) ?? 0;
-      orderedKeys.forEach(key => {
-        const group = groupMap.get(key);
-        if (!group) return;
-        const xLane = reserveGeneratorLane ? lane : compressedCol;
-        positions.set(group.key, { x: xLane * columnStep, y: nextColumnY });
-        nextColumnY += heightOf(group) + gapY;
+      withBarycenter.sort((a, b) => {
+        if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
+        return a.originalIndex - b.originalIndex;
       });
-      laneBottoms.set(lane, nextColumnY);
+
+      laneOrder.set(lane, withBarycenter.map(item => item.key));
     });
   }
+
+  // ── Pass 2: wrap over-tall lanes into sub-columns ────────────────
+  // Deliberately AFTER the sweeps: the sweeps are what reduce edge crossings,
+  // and chunking the order they produced keeps that work. Splitting first and
+  // sweeping per sub-column would throw it away. A single card taller than the
+  // limit still gets a sub-column of its own rather than none.
+  const laneChunks = new Map<number, string[][]>();
+  sortedLanes.forEach(lane => {
+    const chunks: string[][] = [];
+    let current: string[] = [];
+    let currentHeight = 0;
+
+    (laneOrder.get(lane) || []).forEach(key => {
+      const group = groupMap.get(key);
+      if (!group) return;
+      const height = heightOf(group);
+      if (current.length === 0) {
+        current = [key];
+        currentHeight = height;
+        return;
+      }
+      const grown = currentHeight + gapY + height;
+      if (grown > columnHeightLimit) {
+        chunks.push(current);
+        current = [key];
+        currentHeight = height;
+        return;
+      }
+      current.push(key);
+      currentHeight = grown;
+    });
+
+    if (current.length > 0) chunks.push(current);
+    laneChunks.set(lane, chunks);
+  });
+
+  // ── Pass 3: lane → column index ──────────────────────────────────
+  // Lanes with nothing visible in them collapse: the remaining lanes renumber
+  // contiguously in their original order, so hiding a whole tier leaves no
+  // horizontal void. A lane that wrapped consumes as many columns as it has
+  // sub-columns, pushing every later tier right by that much.
+  const usedLanes = Array.from(new Set([...chainLanes, ...sortedLanes])).sort((a, b) => a - b);
+  const laneStartColumn = new Map<number, number>();
+  let nextColumn = 0;
+  usedLanes.forEach(lane => {
+    laneStartColumn.set(lane, nextColumn);
+    nextColumn += Math.max(laneChunks.get(lane)?.length ?? 0, 1);
+  });
+
+  // ── Pass 4: emit positions ───────────────────────────────────────
+  chainPlacements.forEach(placement => {
+    positions.set(placement.key, {
+      x: (laneStartColumn.get(placement.lane) ?? 0) * columnStep,
+      y: placement.y,
+    });
+  });
+
+  sortedLanes.forEach(lane => {
+    const startColumn = laneStartColumn.get(lane) ?? 0;
+    const startY = laneBottoms.get(lane) ?? 0;
+    let laneBottom = startY;
+
+    (laneChunks.get(lane) || []).forEach((chunk, subColumn) => {
+      const x = (startColumn + subColumn) * columnStep;
+      let nextColumnY = startY;
+      chunk.forEach(key => {
+        const group = groupMap.get(key);
+        if (!group) return;
+        positions.set(group.key, { x, y: nextColumnY });
+        nextColumnY += heightOf(group) + gapY;
+      });
+      laneBottom = Math.max(laneBottom, nextColumnY);
+    });
+
+    laneBottoms.set(lane, laneBottom);
+  });
 
   return positions;
 }
@@ -724,7 +824,7 @@ function getCollectionCardKey(collectionId: string): string {
   return `collection:${collectionId}`;
 }
 
-export type { CardVisibilityFilters };
+export type { CardVisibilityFilters, ArrangeGridOptions };
 
 export {
   buildEmptyCollectionCards,
@@ -736,6 +836,7 @@ export {
   normalizePathSegment,
   getGroupHeight,
   normalizeGridLayoutSettings,
+  toGridLayoutDraft,
   sortGroupsByPosition,
   getManagedLane,
   getStandaloneLane,

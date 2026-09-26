@@ -72,6 +72,7 @@ import {
   normalizePathSegment,
   getGroupHeight,
   normalizeGridLayoutSettings,
+  toGridLayoutDraft,
   sortGroupsByPosition,
   getManagedLane,
   getStandaloneLane,
@@ -134,14 +135,12 @@ function GroupedGraphInner() {
   const variableType: 'COLOR' | 'FLOAT' = hasColorVars ? 'COLOR' : 'FLOAT';
   const isColorType = variableType === 'COLOR';
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
-    gapX: GROUP_GAP_X,
-    gapY: GROUP_GAP_Y,
-  });
-  const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>({
-    gapX: String(GROUP_GAP_X),
-    gapY: String(GROUP_GAP_Y),
-  });
+  const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>(
+    () => normalizeGridLayoutSettings({})
+  );
+  const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>(
+    () => toGridLayoutDraft(normalizeGridLayoutSettings({}))
+  );
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   // The layout effect seeds node positions from `savedPositions`, but that
   // state is rewritten by the 300ms debounce after every drag — keeping it in
@@ -279,7 +278,7 @@ function GroupedGraphInner() {
 
   useEffect(() => {
     const storageKey = `graph-layout-settings`;
-    setGridLayoutSettings({ gapX: GROUP_GAP_X, gapY: GROUP_GAP_Y });
+    setGridLayoutSettings(normalizeGridLayoutSettings({}));
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
@@ -1432,20 +1431,33 @@ function GroupedGraphInner() {
 
     // Remap connections onto their unit keys; a connection that becomes a
     // self-loop within one unit (both ends now the same wrapper) is dropped.
-    const remappedConnections = connectionData.reduce<ConnectionRecord[]>((acc, conn) => {
+    // Two lists come out of this, and the difference matters:
+    //  - `visibleConnections` drives the packing. An edge that isn't drawn
+    //    must not shape where the cards land.
+    //  - `allConnections` drives the tier (topological depth) each card sits
+    //    in, hidden endpoints included. Dropping those edges here is what made
+    //    deselecting `_global` turn every token that references it into a root
+    //    and flatten the graph into two very long columns.
+    const allConnections: ConnectionRecord[] = [];
+    const visibleConnections: ConnectionRecord[] = [];
+    connectionData.forEach(conn => {
       const fromUnit = unitKeyByGroupKey.get(conn.fromGroup);
       const toUnit = unitKeyByGroupKey.get(conn.toGroup);
-      if (!fromUnit || !toUnit) return acc;
-      // An edge that isn't drawn must not shape the layout: the packing
-      // follows what the user can actually see.
-      if (hiddenByKey.get(conn.fromGroup) || hiddenByKey.get(conn.toGroup)) return acc;
-      if (fromUnit === toUnit) return acc;
-      acc.push({ ...conn, fromGroup: fromUnit, toGroup: toUnit });
-      return acc;
-    }, []);
+      if (!fromUnit || !toUnit) return;
+      if (fromUnit === toUnit) return;
+      const remapped: ConnectionRecord = { ...conn, fromGroup: fromUnit, toGroup: toUnit };
+      allConnections.push(remapped);
+      if (hiddenByKey.get(conn.fromGroup) || hiddenByKey.get(conn.toGroup)) return;
+      visibleConnections.push(remapped);
+    });
 
     const newPositions = arrangeGroupsByConnectedBlocks(
-      arrangeUnits, remappedConnections, settings.gapX, settings.gapY, heightOverrides
+      arrangeUnits, visibleConnections, settings.gapX, settings.gapY,
+      {
+        heightOverrides,
+        depthConnections: allConnections,
+        maxColumnHeight: settings.maxColumnHeight,
+      }
     );
 
     // Hidden units get no slot, but they must keep an entry in the saved
@@ -1572,9 +1584,10 @@ function GroupedGraphInner() {
     const settings = normalizeGridLayoutSettings({
       gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
       gapY: Number.parseInt(gridLayoutDraft.gapY, 10),
+      maxColumnHeight: Number.parseInt(gridLayoutDraft.maxColumnHeight, 10),
     });
     setGridLayoutSettings(settings);
-    setGridLayoutDraft({ gapX: String(settings.gapX), gapY: String(settings.gapY) });
+    setGridLayoutDraft(toGridLayoutDraft(settings));
     post({
       type: 'set-client-storage',
       key: `graph-layout-settings`,
@@ -1611,10 +1624,7 @@ function GroupedGraphInner() {
             position="bottom-right"
             onOpenChange={(open) => {
               if (open) {
-                setGridLayoutDraft({
-                  gapX: String(gridLayoutSettings.gapX),
-                  gapY: String(gridLayoutSettings.gapY),
-                });
+                setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings));
               }
             }}
           >
@@ -1637,7 +1647,7 @@ function GroupedGraphInner() {
                   onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
                 />
               </div>
-              <div className="mb-4">
+              <div className="mb-3">
                 <label htmlFor="grid-gap-y" className="block text-[11px] mb-1 opacity-70">
                   Vertical gap
                 </label>
@@ -1649,15 +1659,22 @@ function GroupedGraphInner() {
                   onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
                 />
               </div>
+              <div className="mb-4">
+                <label htmlFor="grid-max-column-height" className="block text-[11px] mb-1 opacity-70">
+                  Max column height
+                </label>
+                <Input
+                  id="grid-max-column-height"
+                  type="number"
+                  min="1"
+                  value={gridLayoutDraft.maxColumnHeight}
+                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, maxColumnHeight: e.target.value }))}
+                />
+              </div>
               <div className="flex gap-2 justify-end">
                 <TextButton
                   variant="ghost"
-                  onClick={() => {
-                    setGridLayoutDraft({
-                      gapX: String(gridLayoutSettings.gapX),
-                      gapY: String(gridLayoutSettings.gapY),
-                    });
-                  }}
+                  onClick={() => setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings))}
                 >
                   Cancel
                 </TextButton>

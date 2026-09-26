@@ -8,6 +8,10 @@ export const HEADER_HEIGHT = 36;
 export const GROUP_PADDING = 8;
 export const GROUP_GAP_X = 180;
 export const GROUP_GAP_Y = 40;
+// Arrange Grid: how tall one stacked column of cards may grow before the tier
+// wraps into a second sub-column beside it. A tier holding ~60 cards is a
+// 20,000px ribbon otherwise. Overridable per user in Grid Settings.
+export const GRID_MAX_COLUMN_HEIGHT = 2400;
 export const DEFAULT_GROUP_CHILD_NAME = 'base';
 
 // ── Wrapper (expanded group frame) constants ───────────────────────
