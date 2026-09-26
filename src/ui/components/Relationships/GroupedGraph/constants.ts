@@ -30,6 +30,12 @@ export const GROUP_NODE_PREFIX = 'group:';
 export const WRAPPER_NODE_PREFIX = 'wrapper:';
 export const WRAPPER_HEADER_HEIGHT = 36;
 export const WRAPPER_PADDING = 16;
+// The card box's own inner gutter (`p-0.5` on .rf-group-box), the sliver of
+// background between the border and the header fill. A leaf card is `h-fit`
+// so its DOM absorbs this; a container's height is computed exactly and its
+// children are separately-positioned nodes, so the same gutter has to be
+// added to the geometry or the two drift apart by 2px.
+export const CARD_BOX_PADDING = 2;
 export const WRAPPER_GAP = 28;
 
 // ── Color Constants ────────────────────────────────────────────────

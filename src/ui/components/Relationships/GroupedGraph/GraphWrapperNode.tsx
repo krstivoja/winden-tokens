@@ -24,7 +24,7 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
 
   return (
     <div
-      className={`rf-group-wrapper w-full h-full rounded-sm border border-dashed ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} bg-base transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
+      className={`rf-group-wrapper w-full h-full rounded-sm border border-dashed ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} bg-base shadow-xs p-0.5 transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
     >
       <CardHeaderRow
         title={data.title}

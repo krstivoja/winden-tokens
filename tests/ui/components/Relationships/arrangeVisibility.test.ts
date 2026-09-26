@@ -14,6 +14,7 @@ import {
   WRAPPER_GAP,
   WRAPPER_HEADER_HEIGHT,
   WRAPPER_PADDING,
+  CARD_BOX_PADDING,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
 import type {
   GroupData,
@@ -226,7 +227,7 @@ describe('buildArrangeUnits', () => {
     // as tall as ALL of its members — the override must say so.
     expect(heightOverrides.get('wrapper:color::color')).toBe(
       getGroupHeight(visible) + WRAPPER_GAP + getGroupHeight(hidden)
-      + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+      + CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
   });
 
@@ -341,7 +342,7 @@ describe('Arrange Grid over filtered cards', () => {
     });
     expect(wrapperHeight).toBe(
       getGroupHeight(visible) + WRAPPER_GAP + getGroupHeight(hidden)
-      + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+      + CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
   });
 

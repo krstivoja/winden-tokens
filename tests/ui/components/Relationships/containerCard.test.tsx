@@ -31,6 +31,7 @@ import {
   WRAPPER_GAP,
   WRAPPER_HEADER_HEIGHT,
   WRAPPER_PADDING,
+  CARD_BOX_PADDING,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
 import type {
   GroupData,
@@ -159,7 +160,7 @@ describe('container sizing', () => {
     const placements = buildWrapperLayout([only], new Set(['c1::test']), {});
 
     expect(wrapperAt(placements, 'wrapper:c1::test').height)
-      .toBe(WRAPPER_HEADER_HEIGHT + 2 * ROW_HEIGHT + GROUP_PADDING * 2);
+      .toBe(CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + 2 * ROW_HEIGHT + GROUP_PADDING * 2);
   });
 
   it('stacks its children BELOW its own rows', () => {
@@ -170,17 +171,18 @@ describe('container sizing', () => {
     const childPlacement = placements.find(p => p.id === 'group:c1::test/test')!;
     // The rows push the first child down by exactly their height.
     expect(childPlacement.position.y)
-      .toBe(WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own) + WRAPPER_PADDING);
+      .toBe(CARD_BOX_PADDING + WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own) + WRAPPER_PADDING);
     expect(wrapperAt(placements, 'wrapper:c1::test').height)
-      .toBe(WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own) + WRAPPER_PADDING
-        + getGroupHeight(child) + WRAPPER_PADDING);
+      .toBe(CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own)
+        + WRAPPER_PADDING + getGroupHeight(child) + WRAPPER_PADDING);
   });
 
   it('keeps the empty-frame minimum when it absorbed nothing', () => {
     const placements = buildWrapperLayout([card('color/brand')], new Set(['c1::color']), {});
     const container = wrapperAt(placements, 'wrapper:c1::color');
     expect(container.height).toBe(
-      WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING + getGroupHeight(card('color/brand')) + WRAPPER_PADDING
+      CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING
+        + getGroupHeight(card('color/brand')) + WRAPPER_PADDING
     );
   });
 
@@ -242,7 +244,8 @@ describe('Arrange sizes a unit whose card was absorbed', () => {
     // The same number buildWrapperLayout computes, so the frame Arrange
     // reserves room for is the frame that is drawn.
     expect(heightOverrides.get('wrapper:c1::test')).toBe(
-      WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own) + getGroupHeight(child) + WRAPPER_PADDING * 2
+      CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + getCardRowsHeight(own)
+        + getGroupHeight(child) + WRAPPER_PADDING * 2
     );
     const placements = buildWrapperLayout([own, child], new Set(['c1::test']), {});
     expect(heightOverrides.get('wrapper:c1::test'))
@@ -257,7 +260,7 @@ describe('Arrange sizes a unit whose card was absorbed', () => {
     const { heightOverrides } = buildArrangeUnits([a, b], new Set(['c1::test']), filters, new Map());
     expect(heightOverrides.get('wrapper:c1::test')).toBe(
       getGroupHeight(a) + WRAPPER_GAP + getGroupHeight(b)
-      + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+      + CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
   });
 });

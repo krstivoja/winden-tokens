@@ -14,6 +14,7 @@ import {
   GROUP_WIDTH,
   WRAPPER_HEADER_HEIGHT,
   WRAPPER_PADDING,
+  CARD_BOX_PADDING,
   WRAPPER_GAP,
   WRAPPER_NODE_PREFIX,
 } from './constants';
@@ -210,7 +211,7 @@ export function buildWrapperLayout(
     // header, exactly where a leaf card draws them. Zero when nothing was
     // absorbed.
     const ownRows = getCardRowsHeight(unit.group);
-    let y = WRAPPER_HEADER_HEIGHT + ownRows + WRAPPER_PADDING;
+    let y = CARD_BOX_PADDING + WRAPPER_HEADER_HEIGHT + ownRows + WRAPPER_PADDING;
     let maxW = 0;
     let maxRight = 0;
     let maxBottom = 0;
@@ -220,24 +221,24 @@ export function buildWrapperLayout(
       if (manualRel) {
         child.rel = manualRel;
       } else {
-        child.rel = { x: WRAPPER_PADDING, y };
+        child.rel = { x: CARD_BOX_PADDING + WRAPPER_PADDING, y };
         y += child.height + WRAPPER_GAP;
       }
       maxW = Math.max(maxW, child.width);
       maxRight = Math.max(maxRight, child.rel.x + child.width);
       maxBottom = Math.max(maxBottom, child.rel.y + child.height);
     });
-    const minWidth = Math.max(maxW + WRAPPER_PADDING * 2, GROUP_WIDTH);
+    const minWidth = Math.max(maxW + (CARD_BOX_PADDING + WRAPPER_PADDING) * 2, GROUP_WIDTH);
     // A container with rows and no children is exactly a card's box — header
     // plus rows, no trailing dead space; only the dashed outline tells the
     // two apart. With nothing at all it keeps the empty frame's minimum.
     const minHeight = unit.children.length > 0
-      ? y - WRAPPER_GAP + WRAPPER_PADDING
-      : WRAPPER_HEADER_HEIGHT + (ownRows > 0 ? ownRows : WRAPPER_PADDING * 2);
+      ? y - WRAPPER_GAP + WRAPPER_PADDING + CARD_BOX_PADDING
+      : CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + (ownRows > 0 ? ownRows : WRAPPER_PADDING * 2);
     // Bounding box of all children (auto-stacked and manually placed) never
     // shrinks the wrapper below what the auto-stack alone would need.
-    unit.width = Math.max(minWidth, maxRight + WRAPPER_PADDING);
-    unit.height = Math.max(minHeight, maxBottom + WRAPPER_PADDING);
+    unit.width = Math.max(minWidth, maxRight + WRAPPER_PADDING + CARD_BOX_PADDING);
+    unit.height = Math.max(minHeight, maxBottom + WRAPPER_PADDING + CARD_BOX_PADDING);
   };
   roots.forEach(sizeUnit);
 
