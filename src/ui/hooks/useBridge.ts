@@ -25,8 +25,62 @@ declare global {
   }
 }
 
-export const BRIDGE_URL = 'ws://localhost:9337';
+export type BridgeRole = 'plugin' | 'client';
+/** The relay speaks too, under a third role it alone may claim. */
+export type BridgeSender = BridgeRole | 'relay';
+export type BridgeKind = 'hello' | 'message' | 'status';
+
+/**
+ * The relay's default port. The Figma manifest lists `ws://localhost:9337`, and
+ * a plugin may only open a socket to a host its manifest lists, so for the
+ * PLUGIN role this is not a default but a hard constraint.
+ */
+export const BRIDGE_PORT = 9337;
+export const BRIDGE_URL = `ws://localhost:${BRIDGE_PORT}`;
 export const BRIDGE_PROTOCOL_VERSION = 1;
+
+/**
+ * Close code the relay uses for a protocol-version mismatch (`CLOSE_VERSION` in
+ * bridge/server.mjs). Distinct from its generic policy close because retrying
+ * can never fix it: the two halves are different ages and one must be updated.
+ */
+export const BRIDGE_CLOSE_VERSION = 4002;
+
+/**
+ * A browser tab is SERVED BY the relay (`winden-tokens` serves the built UI
+ * from the same HTTP server the WebSocket upgrades from), so the relay is
+ * wherever this page came from. Deriving the socket URL from `window.location`
+ * is what makes `winden-tokens --port N` work at all, and it is what makes the
+ * page and the socket literally same-origin — the assumption the relay's Origin
+ * allowlist is built on.
+ *
+ * Returns null for anything that is not a plausible relay origin (a file://
+ * page, a default-port URL), leaving the caller on the fixed default.
+ */
+export function relayUrlFromLocation(loc: {
+  protocol: string;
+  hostname: string;
+  port: string;
+}): string | null {
+  if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return null;
+  if (!loc.hostname || !loc.port) return null;
+  return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.hostname}:${loc.port}`;
+}
+
+/**
+ * Where this window should look for the relay.
+ *
+ * The plugin iframe always uses the fixed default — see BRIDGE_PORT. So does a
+ * tab on the vite dev server, which serves the UI but is not the relay;
+ * `import.meta.env.DEV` is precisely "this bundle is being served by vite dev",
+ * and it folds to `false` in the built bundle the relay ships.
+ */
+export function bridgeUrl(role: BridgeRole): string {
+  if (role !== 'client') return BRIDGE_URL;
+  if (import.meta.env.DEV === true) return BRIDGE_URL;
+  if (typeof window === 'undefined') return BRIDGE_URL;
+  return relayUrlFromLocation(window.location) ?? BRIDGE_URL;
+}
 
 /**
  * Marks a `window.postMessage` frame that this module re-emitted from a relay
@@ -79,11 +133,6 @@ export const BRIDGE_ENABLED =
     import.meta.env.VITE_BRIDGE === '1' ||
     import.meta.env.VITE_BRIDGE === 'true');
 
-export type BridgeRole = 'plugin' | 'client';
-/** The relay speaks too, under a third role it alone may claim. */
-export type BridgeSender = BridgeRole | 'relay';
-export type BridgeKind = 'hello' | 'message' | 'status';
-
 export interface BridgeEnvelope {
   v: number;
   role: BridgeSender;
@@ -100,6 +149,12 @@ export const RELAY_PLUGIN_CONNECTED = 'bridge/plugin-connected';
 export const RELAY_PLUGIN_DISCONNECTED = 'bridge/plugin-disconnected';
 export const RELAY_CLIENT_ATTACHED = 'bridge/client-attached';
 export const RELAY_CLIENT_DETACHED = 'bridge/client-detached';
+/**
+ * The relay turned a socket away for speaking another protocol version. Sent to
+ * every client still attached, because the side that was NOT rejected is the
+ * one staring at an empty screen with no idea why.
+ */
+export const RELAY_VERSION_MISMATCH = 'bridge/version-mismatch';
 
 export interface BridgeStatus {
   /** The bridge was compiled in and is allowed to open a socket. */
@@ -120,6 +175,14 @@ export interface BridgeStatus {
    * page load flashes a "not connected" banner for the duration of a handshake.
    */
   probed: boolean;
+  /**
+   * A failure the user has to act on, in plain words, or null. Today this is
+   * only ever a bridge protocol-version mismatch: the relay ships separately
+   * from the plugin (`npm i -g winden-tokens`), so an old install WILL meet a
+   * newer plugin, and that must read as a sentence rather than as a tab that
+   * never fills in. Everything else about the bridge fails silently on purpose.
+   */
+  error: string | null;
 }
 
 type PayloadListener = (payload: any) => void;
@@ -137,6 +200,12 @@ const MAX_QUEUED = 100;
  * (plugin reload mid-fetch) from wedging refreshes for the session.
  */
 const REFRESH_DEADLINE_MS = 30000;
+
+/** Used when the relay gave no words of its own (an older relay, mostly). */
+const DEFAULT_VERSION_MESSAGE =
+  `Bridge protocol mismatch. The relay and the Winden Tokens plugin are different versions ` +
+  `(this side speaks v${BRIDGE_PROTOCOL_VERSION}). Update the older half: npm i -g winden-tokens@latest, ` +
+  `or rebuild the plugin from current source.`;
 
 /**
  * Plugin-vs-browser detection.
@@ -216,6 +285,7 @@ export class BridgeClient {
   private connected = false;
   private peerAttached = false;
   private probed = false;
+  private error: string | null = null;
   private refreshDeadline = 0;
   private payloadListeners = new Set<PayloadListener>();
   private statusListeners = new Set<StatusListener>();
@@ -232,6 +302,7 @@ export class BridgeClient {
       connected: this.connected,
       peerAttached: this.peerAttached,
       probed: this.probed,
+      error: this.error,
     };
   }
 
@@ -322,7 +393,7 @@ export class BridgeClient {
 
     let socket: WebSocket;
     try {
-      socket = new WebSocket(BRIDGE_URL);
+      socket = new WebSocket(bridgeUrl(this.role));
     } catch {
       // Figma refuses the socket outright when the manifest does not allow the
       // domain. Treat it as "no relay" and stay quiet.
@@ -357,13 +428,23 @@ export class BridgeClient {
       /* no-op — `onclose` follows and drives the retry policy */
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event?: { code?: number; reason?: string }) => {
       if (this.socket !== socket) return;
       this.socket = null;
       this.setProbed();
       this.setConnected(false);
       this.setPeerAttached(false);
       this.refreshDeadline = 0;
+
+      // The relay refused us for speaking a different protocol version.
+      // Reconnecting would produce the same refusal every RECONNECT_MAX_MS
+      // forever, and the user would see nothing but an empty window — which is
+      // exactly the failure this check exists to prevent. Stop, and say why.
+      if (event?.code === BRIDGE_CLOSE_VERSION) {
+        this.giveUp(event.reason || DEFAULT_VERSION_MESSAGE);
+        return;
+      }
+
       this.scheduleReconnect();
     };
   }
@@ -449,6 +530,15 @@ export class BridgeClient {
   private handleRelayStatus(payload: Record<string, unknown> | undefined): void {
     const type = payload?.type;
 
+    // The relay turned SOMEONE ELSE away over protocol version — almost always
+    // the Figma plugin, which means this tab is about to render an empty app.
+    // This socket is fine, so it is not a `giveUp`; it is a banner.
+    if (type === RELAY_VERSION_MISMATCH) {
+      const message = payload?.message;
+      this.setError(typeof message === 'string' && message ? message : DEFAULT_VERSION_MESSAGE);
+      return;
+    }
+
     if (this.role === 'client') {
       if (type === RELAY_PLUGIN_CONNECTED) this.setPeerAttached(true);
       else if (type === RELAY_PLUGIN_DISCONNECTED) this.setPeerAttached(false);
@@ -514,6 +604,30 @@ export class BridgeClient {
     window.addEventListener('message', this.figmaListener);
   }
 
+  /**
+   * Stop for good, with a message the UI shows.
+   *
+   * The only place the bridge is allowed to be loud. Everything else about it
+   * is silent by design — a failed connect is the NORMAL state in Figma with no
+   * relay running — but a version mismatch is a thing the user must fix, and it
+   * cannot be recovered from by waiting.
+   */
+  private giveUp(message: string): void {
+    this.abandoned = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.setError(message);
+    console.error(`[winden-tokens bridge] ${message}`);
+  }
+
+  private setError(error: string | null): void {
+    if (this.error === error) return;
+    this.error = error;
+    this.emitStatus();
+  }
+
   private setConnected(connected: boolean): void {
     if (this.connected === connected) return;
     this.connected = connected;
@@ -551,6 +665,7 @@ const DISABLED_STATUS: BridgeStatus = {
   connected: false,
   peerAttached: false,
   probed: false,
+  error: null,
 };
 
 /** Starts the bridge if it is compiled in. Idempotent, safe everywhere. */

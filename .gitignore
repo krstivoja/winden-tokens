@@ -7,3 +7,9 @@ ui.html
 .claude/
 docs/_site/
 specs/.conversations/
+
+# Generated at `npm pack`/`npm publish` time inside the bridge package
+# (bridge/scripts/build-ui.mjs) — never hand-edited, never committed.
+bridge/ui/
+bridge/LICENSE
+bridge/*.tgz

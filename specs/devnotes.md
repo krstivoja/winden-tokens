@@ -56,6 +56,10 @@ npm run test:ui    # Open Vitest UI
 
 # Verification
 npm run verify     # Build + Test (pre-commit check)
+
+# Browser bridge (run the UI full-size in a browser tab)
+winden-tokens      # published CLI: relay + prebuilt UI, no repo and no vite needed
+npm run dev:bridge # this repo, while developing the UI itself
 ```
 
 ---
@@ -130,6 +134,92 @@ npm run dev:build
 3. Edit code
 4. Wait for build to complete (watch console)
 5. **Manually reload plugin in Figma**
+
+---
+
+### 4. Browser Bridge (Run the UI in a Browser Tab)
+
+**Best for:** the Relationships graph, which is cramped inside the Figma plugin iframe.
+
+The same UI runs full-size in a browser tab, driving the Figma file that is currently open.
+A small local relay pairs the Figma plugin window with the tab and forwards messages between them; it holds no state of its own.
+See [../plans/browser-bridge.md](../plans/browser-bridge.md) for the design and the threat model, and `bridge/server.mjs` for the protocol.
+
+#### Just using it — no repo, no vite
+
+```bash
+npm install -g winden-tokens
+winden-tokens
+```
+
+That one command starts the relay AND serves the prebuilt UI from the same origin, then opens a browser at it.
+Then open the Winden Tokens plugin in Figma on the file you want, and leave that window open: it is the only thing that can talk to the Figma API.
+The plugin window collapses to a status strip while the tab has the wheel.
+
+```
+winden-tokens --port <n>   relay and UI on another port (see the caveat below)
+winden-tokens --no-open    do not open a browser
+winden-tokens --dev        also accept a client from the vite dev server
+winden-tokens --help       the above, with the caveats
+```
+
+**`--port` is not a free choice.**
+The Figma plugin can only open a socket to a host its `manifest.json` lists, and the manifest lists `ws://localhost:9337`.
+Moving the relay also means changing the manifest and rebuilding the plugin, so `--port` only helps someone who can do both.
+
+#### Developing the UI itself
+
+```bash
+npm run dev:bridge
+```
+
+This runs the relay in dev mode alongside vite, and is the **only** thing that still needs vite.
+Dev mode is what puts the vite origin (`http://localhost:5173`) on the relay's Origin allowlist; a published `winden-tokens` never has it.
+Open `http://localhost:5173`, not the relay's own port, and you get hot reload against the live Figma file.
+
+For testing the bridge inside Figma you need a bridge-enabled plugin bundle, which a plain build deliberately does not produce:
+
+```bash
+VITE_BRIDGE=1 npm run build   # dist/index.html WITH the bridge client
+npm run build                 # dist/index.html with NO bridge code at all
+```
+
+A plain production build must always satisfy `grep -c WebSocket dist/index.html` → `0`.
+If you have been testing the bridge in Figma, remember that `dist/index.html` is tracked: do not commit a `VITE_BRIDGE=1` bundle.
+
+#### Do not widen the Origin allowlist
+
+A WebSocket handshake is not subject to CORS.
+The relay's Origin check is the only thing standing between a page the user happens to have open and write commands into their Figma file.
+The relay binds `127.0.0.1` only, accepts `role: 'client'` only from the page it served itself (plus the vite origin in `--dev`), and accepts `role: 'plugin'` only from a null Origin, which is what the sandboxed Figma iframe sends.
+Read the THREAT MODEL block at the top of `bridge/server.mjs` before changing any of it.
+
+---
+
+### Publishing `winden-tokens` to npm
+
+The package lives in `bridge/`, with its own `package.json`.
+Its only runtime dependency is `ws`.
+
+```bash
+cd bridge
+npm version patch        # or minor / major
+npm publish              # prepack builds and embeds the UI first
+```
+
+`prepack` (`bridge/scripts/build-ui.mjs`) runs a `VITE_BRIDGE=1` build of the current source into a temp directory and copies the result to `bridge/ui/index.html`, then refuses to continue if that file contains no bridge client.
+So a published relay can never serve a UI that predates its own protocol, and the repo's tracked `dist/` is never touched by a publish.
+
+`bridge/ui/` and `bridge/LICENSE` are generated at pack time and are gitignored.
+Check what would ship with `npm pack --dry-run` from `bridge/`: it should be exactly `package.json`, `cli.mjs`, `server.mjs`, `ui/index.html` and `LICENSE`.
+
+**The protocol version is a shipping concern now.**
+The envelope carries `v: 1`.
+Once the relay is installed globally, an old install will eventually meet a newer plugin; the relay refuses the socket with close code `4002` and a readable reason, logs it, and tells any attached tab, so both halves say what is wrong instead of showing an empty screen.
+If you ever change the wire format, bump `PROTOCOL_VERSION` in `bridge/server.mjs` **and** `BRIDGE_PROTOCOL_VERSION` in `src/ui/hooks/useBridge.ts` together.
+
+**Not solved by this package:** a *published* plugin reaching `ws://localhost` needs that entry in `manifest.json`'s `allowedDomains` with a `reasoning`, and Figma's review has to accept it.
+Until then this is a dev-machine tool. `allowedDomains` stays `["none"]`.
 
 ---
 

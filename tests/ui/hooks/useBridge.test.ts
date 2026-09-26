@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   BRIDGE_ENABLED,
   BRIDGE_EVENT_TAG,
+  BRIDGE_CLOSE_VERSION,
   BRIDGE_URL,
   BridgeClient,
   bridge,
@@ -11,6 +12,7 @@ import {
   encodeEnvelope,
   isInsideFigma,
   isSuppressedFromBrowser,
+  relayUrlFromLocation,
   sendOverBridge,
   subscribeToBridgeMessages,
 } from '../../../src/ui/hooks/useBridge';
@@ -53,6 +55,12 @@ class FakeWebSocket {
     this.readyState = 3;
     this.onerror?.({});
     this.onclose?.({});
+  }
+
+  /** The relay closing the socket with a code and a reason. */
+  rejectWith(code: number, reason = ''): void {
+    this.readyState = 3;
+    this.onclose?.({ code, reason });
   }
 
   deliver(data: string): void {
@@ -568,5 +576,120 @@ describe('messages a browser tab must not send', () => {
     expect(isSuppressedFromBrowser(undefined)).toBe(false);
     expect(isSuppressedFromBrowser(42)).toBe(false);
     expect(isSuppressedFromBrowser('some-future-command')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The relay now ships separately from the plugin (`npm i -g winden-tokens`),
+// so an old install WILL meet a newer plugin. Neither half may answer that
+// with an empty screen.
+// ---------------------------------------------------------------------------
+
+describe('relay URL', () => {
+  it('derives the relay from the page the relay served, so --port works', () => {
+    expect(relayUrlFromLocation({ protocol: 'http:', hostname: '127.0.0.1', port: '9500' }))
+      .toBe('ws://127.0.0.1:9500');
+    expect(relayUrlFromLocation({ protocol: 'https:', hostname: 'localhost', port: '9337' }))
+      .toBe('wss://localhost:9337');
+  });
+
+  it('declines anything that cannot be a relay origin', () => {
+    expect(relayUrlFromLocation({ protocol: 'file:', hostname: '', port: '' })).toBeNull();
+    expect(relayUrlFromLocation({ protocol: 'http:', hostname: 'localhost', port: '' })).toBeNull();
+  });
+});
+
+describe('protocol version mismatch', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    (globalThis as any).WebSocket = FakeWebSocket;
+    vi.useFakeTimers();
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    errorSpy.mockRestore();
+    (globalThis as any).WebSocket = originalWebSocket;
+    restoreParent();
+  });
+
+  it('stops retrying and surfaces the relay\'s own words', () => {
+    const client = new BridgeClient('client');
+    client.start();
+
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+    socket.rejectWith(BRIDGE_CLOSE_VERSION, 'bridge protocol mismatch: relay v1, you sent v2');
+
+    const status = client.getStatus();
+    expect(status.error).toBe('bridge protocol mismatch: relay v1, you sent v2');
+    expect(status.connected).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+
+    // Retrying could only ever be refused again.
+    vi.advanceTimersByTime(600000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    client.stop();
+  });
+
+  it('falls back to its own message when the relay gave no reason', () => {
+    const client = new BridgeClient('client');
+    client.start();
+    FakeWebSocket.instances[0].accept();
+    FakeWebSocket.instances[0].rejectWith(BRIDGE_CLOSE_VERSION);
+
+    expect(client.getStatus().error).toMatch(/mismatch/i);
+    client.stop();
+  });
+
+  it('keeps reconnecting for any other close code', () => {
+    const client = new BridgeClient('client');
+    client.start();
+    FakeWebSocket.instances[0].accept();
+    FakeWebSocket.instances[0].rejectWith(4001, 'no hello');
+
+    expect(client.getStatus().error).toBeNull();
+    vi.advanceTimersByTime(60000);
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(1);
+
+    client.stop();
+  });
+
+  it('tells an attached tab that the OTHER half was turned away', () => {
+    const client = new BridgeClient('client');
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+
+    socket.deliver(
+      relayStatus('bridge/version-mismatch', {
+        relay: 1,
+        peer: 2,
+        message: 'Bridge protocol mismatch: the relay speaks v1, the other side speaks v2.',
+      })
+    );
+
+    // This socket is fine — it is the peer that was refused, so the tab shows a
+    // banner and stays connected rather than giving up.
+    expect(client.getStatus().error).toMatch(/^Bridge protocol mismatch/);
+    expect(client.getStatus().connected).toBe(true);
+
+    client.stop();
+  });
+
+  it('reaches the plugin role too, not just the browser tab', () => {
+    setParent({ postMessage: vi.fn() });
+
+    const client = new BridgeClient('plugin');
+    client.start();
+    FakeWebSocket.instances[0].accept();
+    FakeWebSocket.instances[0].rejectWith(BRIDGE_CLOSE_VERSION, 'relay v1, you sent v2');
+
+    expect(client.getStatus().error).toBe('relay v1, you sent v2');
+    client.stop();
   });
 });

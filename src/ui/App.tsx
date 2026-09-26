@@ -136,6 +136,13 @@ export function App() {
     bridgeStatus.probed &&
     !bridgeStatus.peerAttached;
 
+  // A bridge protocol mismatch, in the relay's own words. It reaches BOTH
+  // roles: the rejected side learns it from its close reason, the side still
+  // attached from the relay's broadcast. Shown in preference to the generic
+  // "not connected" copy below, because "update the older half" is the actual
+  // instruction and "run npm run dev:bridge" would be a wrong one.
+  const bridgeError = BRIDGE_ENABLED ? bridgeStatus.error : null;
+
   // Nothing is rendered in headless mode, so the window must not keep the
   // size the full UI needed — shrink it to the strip and hand the old size
   // back when the browser tab lets go.
@@ -228,16 +235,17 @@ export function App() {
 
   return (
     <>
-      {isDetachedClient && (
+      {(isDetachedClient || bridgeError) && (
         <div
           role="status"
           className="flex shrink-0 items-center justify-center gap-2 border-b border-border bg-base-2 px-4 py-2 text-center"
         >
           <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
           <span className="text-xs text-text">
-            {bridgeStatus.connected
-              ? 'No plugin connected. Open the Winden Tokens plugin in Figma — this tab has no data of its own.'
-              : 'Bridge relay not reachable. Run npm run dev:bridge, then open the Winden Tokens plugin in Figma.'}
+            {bridgeError
+              ?? (bridgeStatus.connected
+                ? 'No plugin connected. Open the Winden Tokens plugin in Figma — this tab has no data of its own.'
+                : 'Bridge relay not reachable. Run winden-tokens (or npm run dev:bridge), then open the Winden Tokens plugin in Figma.')}
           </span>
         </div>
       )}
