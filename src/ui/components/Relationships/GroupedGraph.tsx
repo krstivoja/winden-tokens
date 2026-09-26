@@ -66,6 +66,7 @@ import {
   TIER_LABEL_HEIGHT,
   TIER_LABEL_GAP_Y,
   TIER_LABEL_NODE_PREFIX,
+  WRAPPER_NODE_PREFIX,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
@@ -74,6 +75,8 @@ import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
+import { GraphSearchPalette, isQuickSearchShortcut } from './GroupedGraph/GraphSearchPalette';
+import type { GraphSearchItem, GraphSearchTarget } from './GroupedGraph/GraphSearchPalette';
 import {
   getDefaultVariableValue,
   normalizePathSegment,
@@ -95,6 +98,7 @@ import {
   buildArrangeUnits,
   isTierLabelNodeId,
   getWrapperKey,
+  parseWrapperKey,
   getGroupCardKey,
   bucketUnmanagedVariables,
   buildWrapperPathOwners,
@@ -144,6 +148,11 @@ const normalizeTierLabels = (value: unknown): TierPlacement[] => {
     .map(({ tier, x, width }) => ({ tier, x, width }));
 };
 
+// Stable empty index: the quick-search palette's items are only built while
+// it is open, and this keeps the closed state from minting a new array (and a
+// fresh memo result inside the palette) on every render.
+const EMPTY_SEARCH_ITEMS: GraphSearchItem[] = [];
+
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
 };
@@ -152,7 +161,7 @@ const edgeTypes: EdgeTypes = {
 
 function GroupedGraphInner() {
   const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId, selectedNode, hasMultipleSelection } = useAppContext();
-  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
+  const { modals, openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
 
@@ -266,17 +275,6 @@ function GroupedGraphInner() {
     [collections]
   );
 
-  // Stats for the sidebar footer (based on currently selected collections)
-  const sidebarStats = useMemo(() => {
-    const filtered = variables.filter(v => localSelectedCollections.has(v.collectionId));
-    const refPattern = /^\{(.+)\}$/;
-    return {
-      total: filtered.length,
-      colors: filtered.filter(v => v.resolvedType === 'COLOR').length,
-      numbers: filtered.filter(v => v.resolvedType === 'FLOAT').length,
-      references: filtered.filter(v => refPattern.test(v.value)).length,
-    };
-  }, [variables, localSelectedCollections]);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
     position: { top: number; left: number };
@@ -680,6 +678,20 @@ function GroupedGraphInner() {
 
   const clearHighlight = useCallback(() => setHighlightTarget(null), []);
 
+  // Pan/zoom to one xyflow node, on the next frame so a node the same
+  // interaction just caused to be rebuilt has painted before we measure it.
+  // Takes a NODE id, not a card key — every card-key caller goes through
+  // nodeIdForCard first, because an absorbed card has no node of its own.
+  const zoomToNodeId = useCallback((nodeId: string) => {
+    requestAnimationFrame(() => {
+      try {
+        reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 400, padding: 0.5, maxZoom: 1 });
+      } catch {
+        // Node may not be rendered (filtered out) — any highlight still applies.
+      }
+    });
+  }, [reactFlowInstance]);
+
   // Sidebar label click — same toggle behavior as clicking the card in the graph,
   // plus panning the canvas to it since (unlike a card click) it may be off-screen.
   const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
@@ -687,19 +699,19 @@ function GroupedGraphInner() {
       const next = prev?.groupKey === graphGroupKey && prev.varName === null
         ? null
         : { groupKey: graphGroupKey, varName: null };
-      if (next) {
-        requestAnimationFrame(() => {
-          try {
-            // An absorbed card is drawn by its container, so pan to that node.
-            reactFlowInstance.fitView({ nodes: [{ id: nodeIdForCard(graphGroupKey) }], duration: 400, padding: 0.5, maxZoom: 1 });
-          } catch {
-            // Node may not be rendered (filtered out) — highlight state still applies.
-          }
-        });
-      }
+      // An absorbed card is drawn by its container, so pan to that node.
+      if (next) zoomToNodeId(nodeIdForCard(graphGroupKey));
       return next;
     });
-  }, [reactFlowInstance, nodeIdForCard]);
+  }, [zoomToNodeId, nodeIdForCard]);
+
+  // Quick-search's card/variable jump. Deliberately NOT a toggle, unlike the
+  // sidebar: searching for the card that already happens to be highlighted
+  // must still move the viewport to it, not clear it and stay put.
+  const focusCard = useCallback((cardKey: string, varName: string | null) => {
+    setHighlightTarget({ groupKey: cardKey, varName });
+    zoomToNodeId(nodeIdForCard(cardKey));
+  }, [zoomToNodeId, nodeIdForCard]);
 
   // Sidebar → canvas for a whole collection. No highlight: `highlightTarget`
   // addresses one group key, and a collection is a set of cards.
@@ -1123,6 +1135,148 @@ function GroupedGraphInner() {
 
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
+  // ── Quick search (Cmd+K / Ctrl+K) ────────────────────────────────
+  // Only the open flag lives here. The query lives inside the palette, so
+  // typing never re-renders the graph.
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Read by the shortcut listener, which is attached once. A modal open
+  // anywhere else owns the keyboard; the palette must not jump in front of it.
+  const anyModalOpenRef = useRef(false);
+  useEffect(() => {
+    anyModalOpenRef.current = Object.values(modals).some(Boolean);
+  }, [modals]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isQuickSearchShortcut(event)) return;
+      const target = event.target as HTMLElement | null;
+      // An editable target elsewhere owns the keystroke — another modal's
+      // input, the toolbar search, a rename field. The palette's own input is
+      // exempt, so Cmd+K still closes it.
+      const inPalette = !!target?.closest('[data-graph-quick-search]');
+      const isEditable = !!target && !inPalette && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      );
+      if (isEditable) return;
+      if (!inPalette && anyModalOpenRef.current) return;
+      event.preventDefault();
+      setSearchOpen(open => !open);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Built only while the palette is open — a closed palette costs nothing,
+  // and this is deliberately outside the layout effect.
+  const searchItems = useMemo<GraphSearchItem[]>(() => {
+    if (!searchOpen) return EMPTY_SEARCH_ITEMS;
+
+    const nameOf = (collectionId: string) => collectionNameById.get(collectionId) || collectionId;
+    const items: GraphSearchItem[] = [];
+    // Wrapper keys a real card sits at, so a container that merely absorbed a
+    // card is not also offered as a nameless frame.
+    const cardWrapperKeys = new Set<string>();
+    const visibleCardsPerCollection = new Map<string, number>();
+
+    groupsData.forEach(group => {
+      // The same predicate the layout effect renders as `node.hidden` and
+      // Arrange Grid packs by — never a second opinion about visibility.
+      const hidden = isCardHidden(group, cardVisibilityFilters);
+      if (!hidden) {
+        visibleCardsPerCollection.set(
+          group.collectionId,
+          (visibleCardsPerCollection.get(group.collectionId) || 0) + 1
+        );
+      }
+      if (group.kind === 'standard' || group.kind === 'collection') {
+        cardWrapperKeys.add(getWrapperKey(group.collectionId, group.sourceGroupName || ''));
+      }
+      const collectionName = nameOf(group.collectionId);
+      // A collection ROOT card with no loose rows has no chain to highlight —
+      // highlighting it would dim every other card and light up nothing, the
+      // exact case handleNodeClick already refuses. The Collection result
+      // carries the same name and is the better jump anyway, so this card is
+      // simply not offered.
+      const isEmptyCollectionCard = group.kind === 'collection' && group.variables.length === 0;
+      if (!isEmptyCollectionCard) {
+        items.push({
+          id: `card:${group.key}`,
+          label: group.title,
+          context: collectionName,
+          target: { kind: 'card', cardKey: group.key },
+          hidden,
+        });
+      }
+      group.variables.forEach(node => {
+        // Generator/palette rows are card chrome, not variables to jump to.
+        if (node.isVirtual) return;
+        items.push({
+          id: `var:${group.key}::${node.name}`,
+          label: node.name,
+          context: `${group.title} · ${collectionName}`,
+          target: { kind: 'variable', cardKey: group.key, varName: node.name },
+          hidden,
+        });
+      });
+    });
+
+    // Grouped paths no card sits at: a frame and nothing else. They get a
+    // zoom-only target — `highlightTarget` addresses CARD keys, and handing
+    // it a `wrapper:` id would dim every card and highlight none.
+    const nodesById = new Map(reactFlowInstance.getNodes().map(node => [node.id, node]));
+    groupedPaths.forEach(wrapperKey => {
+      if (cardWrapperKeys.has(wrapperKey)) return;
+      const parsed = parseWrapperKey(wrapperKey);
+      if (!parsed) return;
+      const nodeId = `${WRAPPER_NODE_PREFIX}${wrapperKey}`;
+      const node = nodesById.get(nodeId);
+      if (!node) return;
+      items.push({
+        id: `container:${nodeId}`,
+        label: parsed.path || nameOf(parsed.collectionId),
+        context: nameOf(parsed.collectionId),
+        target: { kind: 'container', nodeId },
+        hidden: node.hidden === true,
+      });
+    });
+
+    collections.forEach(collection => {
+      const visible = visibleCardsPerCollection.get(collection.id) || 0;
+      items.push({
+        id: `collection:${collection.id}`,
+        label: collection.name,
+        context: `${visible} ${visible === 1 ? 'card' : 'cards'}`,
+        target: { kind: 'collection', collectionId: collection.id },
+        // Nothing of it is on the canvas, so there is nothing to fit to —
+        // the same check handleZoomToCollection makes before moving.
+        hidden: visible === 0,
+      });
+    });
+
+    return items;
+  }, [searchOpen, groupsData, collections, collectionNameById, cardVisibilityFilters, groupedPaths, reactFlowInstance]);
+
+  const handleSearchActivate = useCallback((target: GraphSearchTarget) => {
+    setSearchOpen(false);
+    switch (target.kind) {
+      case 'collection':
+        handleZoomToCollection(target.collectionId);
+        break;
+      case 'container':
+        zoomToNodeId(target.nodeId);
+        break;
+      case 'card':
+        focusCard(target.cardKey, null);
+        break;
+      case 'variable':
+        focusCard(target.cardKey, target.varName);
+        break;
+    }
+  }, [handleZoomToCollection, zoomToNodeId, focusCard]);
+
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+
   useEffect(() => {
     if (!positionsHydrated) return;
     // Read through the ref: see savedPositionsRef above.
@@ -2027,14 +2181,6 @@ function GroupedGraphInner() {
           onHighlightGroup={handleHighlightFromSidebar}
           onZoomToCollection={handleZoomToCollection}
           showTypeFilters={true}
-          footer={
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-70">
-              <span>{sidebarStats.total} variables</span>
-              <span>{sidebarStats.colors} colors</span>
-              <span>{sidebarStats.numbers} numbers</span>
-              <span>{sidebarStats.references} references</span>
-            </div>
-          }
         />
 
         {/* Graph content */}
@@ -2069,6 +2215,13 @@ function GroupedGraphInner() {
           </ReactFlow>
         </div>
       </div>
+
+      <GraphSearchPalette
+        isOpen={searchOpen}
+        items={searchItems}
+        onClose={closeSearch}
+        onActivate={handleSearchActivate}
+      />
 
       {colorMenu.show && (
         <ColorValueMenu

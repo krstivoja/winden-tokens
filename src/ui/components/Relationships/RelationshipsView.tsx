@@ -14,11 +14,6 @@ export function RelationshipsView() {
     <div className="relative w-full h-full">
       <GroupedGraph />
 
-      {/* Instructions */}
-      <div className="absolute bottom-3 right-3 z-[5] px-3 py-2 bg-base border border-border rounded text-[11px] opacity-70">
-        Drag from point to connect · Click connection to remove
-      </div>
-
       {/* Empty state */}
       {filteredVars.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[1]">
