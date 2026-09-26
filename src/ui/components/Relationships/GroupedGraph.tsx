@@ -591,6 +591,33 @@ function GroupedGraphInner() {
     });
   }, [reactFlowInstance]);
 
+  // Sidebar → canvas for a whole collection. No highlight: `highlightTarget`
+  // addresses one group key, and a collection is a set of cards.
+  const handleZoomToCollection = useCallback((collectionId: string) => {
+    // Live nodes off the instance rather than the `nodes` state, so this
+    // callback keeps one identity across layout passes (see the drag-perf work).
+    const targets = reactFlowInstance
+      .getNodes()
+      .filter(node => (
+        node.type === 'groupNode'
+        // Filtered-out cards stay in the node list as `hidden`. Zooming to one
+        // would park the canvas on empty space.
+        && !node.hidden
+        && (node.data as { group?: GroupData } | undefined)?.group?.collectionId === collectionId
+      ))
+      .map(node => ({ id: node.id }));
+
+    // Nothing visible to move to. Silent: the collection's own checkbox is in
+    // the same row and is the reason.
+    if (targets.length === 0) return;
+
+    try {
+      reactFlowInstance.fitView({ nodes: targets, duration: 400, padding: 0.2, maxZoom: 1 });
+    } catch {
+      // Same defence as the group case — a node can leave between read and fit.
+    }
+  }, [reactFlowInstance]);
+
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(localSelectedCollections)[0];
     if (!firstCollectionId) return;
@@ -1786,6 +1813,7 @@ function GroupedGraphInner() {
           onGroupToggle={handleGroupToggle}
           highlightedGroupKey={highlightedGroupKey}
           onHighlightGroup={handleHighlightFromSidebar}
+          onZoomToCollection={handleZoomToCollection}
           showTypeFilters={true}
           footer={
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-70">

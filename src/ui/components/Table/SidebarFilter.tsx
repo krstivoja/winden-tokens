@@ -216,6 +216,9 @@ interface SidebarFilterProps {
   onGroupToggle?: (groupName: string) => void;
   highlightedGroupKey?: string | null;
   onHighlightGroup?: (graphGroupKey: string) => void;
+  /** Move the graph viewport onto everything this collection owns. Absent in
+   *  views with no canvas, where the name keeps toggling the checkbox. */
+  onZoomToCollection?: (collectionId: string) => void;
   showTypeFilters?: boolean;
   footer?: React.ReactNode;
 }
@@ -231,6 +234,7 @@ export function SidebarFilter({
   onGroupToggle,
   highlightedGroupKey,
   onHighlightGroup,
+  onZoomToCollection,
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
@@ -631,7 +635,21 @@ export function SidebarFilter({
                       onChange={handleParentToggle}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm flex-1">{collection.name}</span>
+                    <span
+                      onClick={onZoomToCollection
+                        // Inside the <label>: without preventDefault the click
+                        // also reaches the checkbox and toggles the collection.
+                        ? (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onZoomToCollection(collection.id);
+                        }
+                        : undefined}
+                      title={onZoomToCollection ? 'Click to find in graph' : undefined}
+                      className={`text-sm flex-1 ${onZoomToCollection ? 'hover:underline' : ''}`}
+                    >
+                      {collection.name}
+                    </span>
                     <span className="text-xs opacity-60">{variableCount}</span>
                   </label>
                 </div>
