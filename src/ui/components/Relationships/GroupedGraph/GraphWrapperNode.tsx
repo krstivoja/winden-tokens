@@ -18,7 +18,11 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
           {data.title}
         </span>
         <div className="flex gap-1 items-center">
-          {data.path.includes('/') && (
+          {/* A collection's own frame (empty path) is the root — there is
+              nothing above it to level up into. Every other frame levels up
+              into its parent path, or into the collection frame when its
+              path is top-level. */}
+          {data.path !== '' && (
             <IconButton
               icon={<Icon name="collapse-all" size={18} />}
               size="sm"
@@ -26,7 +30,7 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
               aria-label={`Group ${data.title} with its siblings`}
               title="Group with siblings (level up)"
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); data.onLevelUp(data.path); }}
+              onClick={(e) => { e.stopPropagation(); data.onLevelUp(data.collectionId, data.path); }}
             />
           )}
           <IconButton
@@ -36,7 +40,7 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
             aria-label={`Ungroup ${data.title}`}
             title="Ungroup"
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); data.onUngroup(data.path); }}
+            onClick={(e) => { e.stopPropagation(); data.onUngroup(data.collectionId, data.path); }}
           />
         </div>
       </div>

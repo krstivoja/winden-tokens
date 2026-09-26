@@ -49,8 +49,10 @@ export interface GroupData {
   sourceGroupName?: string;
   headerFill: string;
   collectionId: string;
-  // True when this card has a parent path it can be grouped under a wrapper
-  // frame ("level up"; standard groups only).
+  // True when this card has a parent it can be grouped under a wrapper frame
+  // ("level up"; standard groups only). Every standard card has one now: a
+  // top-level path levels up into its COLLECTION's frame. A collection root
+  // card is already the root and never sets this.
   canGroup?: boolean;
 }
 
@@ -136,7 +138,7 @@ export type GroupNodeData = {
   onRenameGroup: (group: GroupData) => void;
   onDuplicateGroup: (group: GroupData) => void;
   onEditAsText: (group: GroupData) => void;
-  onLevelUp: (path: string) => void;
+  onLevelUp: (collectionId: string, path: string) => void;
   onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
@@ -146,10 +148,13 @@ export type GroupNodeData = {
 // ── Wrapper Node Data Type ─────────────────────────────────────────
 
 export type WrapperNodeData = {
+  /** Bare path; empty for a collection's own frame, which has no level-up. */
   path: string;
+  /** The collection this frame belongs to — the other half of its key. */
+  collectionId: string;
   title: string;
-  onLevelUp: (path: string) => void;
-  onUngroup: (path: string) => void;
+  onLevelUp: (collectionId: string, path: string) => void;
+  onUngroup: (collectionId: string, path: string) => void;
 };
 
 // ── Edge Data Type ─────────────────────────────────────────────────

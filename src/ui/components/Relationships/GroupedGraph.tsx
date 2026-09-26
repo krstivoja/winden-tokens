@@ -92,6 +92,10 @@ import {
   isCardHidden,
   buildArrangeUnits,
   isTierLabelNodeId,
+  getWrapperKey,
+  buildWrapperPathOwners,
+  migrateGroupedPaths,
+  migrateGraphPositions,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 
@@ -195,9 +199,21 @@ function GroupedGraphInner() {
   const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
   const highlightedGroupKey = highlightTarget?.groupKey ?? null;
   const highlightedVarName = highlightTarget?.varName ?? null;
-  // Parent paths the user has wrapped into a group frame. Empty = flat leaf
-  // cards. A path here draws a wrapper around all cards sharing that parent.
+  // Frames the user has wrapped, as `<collectionId>::<path>` keys (see
+  // getWrapperKey). Empty = flat leaf cards. A key here draws a wrapper
+  // around every card of THAT collection at or below that path; the empty
+  // path is the collection's own frame.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
+  // Records read from client storage that still hold the pre-3a bare-path
+  // shape. Migrating them needs the collections/variables to work out which
+  // collection owns a bare path, and storage answers long before the plugin
+  // sends data — so the raw payload is parked here and the effect below
+  // applies it as soon as data lands. Never dropped for arriving early.
+  const pendingStorageRef = useRef<{
+    positions: unknown;
+    groupedPaths: unknown;
+  }>({ positions: null, groupedPaths: null });
+  const [pendingStorageRevision, setPendingStorageRevision] = useState(0);
   const reactFlowInstance = useReactFlow();
   // One-step undo for the last "Arrange Grid" run: the top-level positions it
   // overwrote, so a single click can put everything back. Cleared after use
@@ -223,6 +239,13 @@ function GroupedGraphInner() {
   const variablesById = useMemo(
     () => new Map(variables.map(variable => [variable.id, variable])),
     [variables]
+  );
+  // Collection frames (`<cid>::`) are titled with the collection's name.
+  // Memoized so the layout effect's dep on it only changes when the
+  // collections do, never on a drag.
+  const collectionNameById = useMemo(
+    () => new Map(collections.map(collection => [collection.id, collection.name])),
+    [collections]
   );
 
   // Stats for the sidebar footer (based on currently selected collections)
@@ -287,17 +310,20 @@ function GroupedGraphInner() {
     const storageKey = `graph-positions`;
     setSavedPositions({});
     setPositionsHydrated(false);
+    pendingStorageRef.current.positions = null;
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
-        setSavedPositions(msg.value || {});
+        // Parked, not applied: the record may still hold bare `wrapper:<path>`
+        // keys, and rewriting those needs the collections. The migration
+        // effect below bumps savedPositionsRevision when it applies, which is
+        // also what covers a response landing after the 100ms fallback has
+        // already flipped positionsHydrated.
+        pendingStorageRef.current.positions = msg.value || {};
+        setPendingStorageRevision(rev => rev + 1);
         setPositionsHydrated(true);
-        // Covers a storage response that lands after the 100ms fallback has
-        // already flipped positionsHydrated — without this the restored
-        // positions would never reach the layout effect.
-        setSavedPositionsRevision(rev => rev + 1);
       }
     };
 
@@ -333,18 +359,69 @@ function GroupedGraphInner() {
   useEffect(() => {
     const storageKey = `graph-grouped-paths`;
     setGroupedPaths(new Set());
+    pendingStorageRef.current.groupedPaths = null;
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
-        setGroupedPaths(new Set(Array.isArray(msg.value) ? msg.value : []));
+        // Parked for the migration effect below — see pendingStorageRef.
+        pendingStorageRef.current.groupedPaths = msg.value;
+        setPendingStorageRevision(rev => rev + 1);
       }
     };
 
     window.addEventListener('message', handleStorage);
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
+
+  // Apply the parked storage records, migrating the pre-3a bare-path shape to
+  // collection-scoped wrapper keys on the way in.
+  //
+  // This is deliberately NOT done in the storage handlers: resolving which
+  // collection owns a bare path needs the variables, and client storage
+  // answers well before the plugin has sent any. Holding the raw record until
+  // data lands is what keeps an early response from being silently dropped.
+  //
+  // `collections.length > 0` is the readiness signal. With no collections
+  // there is nothing to key against, every entry would resolve to nothing and
+  // be dropped — so the record stays parked instead, and is applied the
+  // moment real data arrives.
+  //
+  // Each record is consumed (set back to null) as it is applied, so this runs
+  // exactly once per storage response and can never clobber a drag.
+  useEffect(() => {
+    if (pendingStorageRevision === 0) return;
+    const pending = pendingStorageRef.current;
+    if (pending.positions === null && pending.groupedPaths === null) return;
+    if (collections.length === 0) return;
+
+    const owners = buildWrapperPathOwners(collections, variables);
+
+    if (pending.groupedPaths !== null) {
+      const raw = pending.groupedPaths;
+      const migrated = migrateGroupedPaths(raw, owners);
+      pending.groupedPaths = null;
+      setGroupedPaths(new Set(migrated));
+      // Write the migrated shape back only when it actually changed, so the
+      // old record is gone after one load and an already-migrated one costs
+      // no write at all.
+      if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+        post({ type: 'set-client-storage', key: `graph-grouped-paths`, value: migrated });
+      }
+    }
+
+    if (pending.positions !== null) {
+      const raw = pending.positions;
+      const migrated = migrateGraphPositions(raw, owners);
+      pending.positions = null;
+      setSavedPositions(migrated);
+      setSavedPositionsRevision(rev => rev + 1);
+      if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+        post({ type: 'set-client-storage', key: `graph-positions`, value: migrated });
+      }
+    }
+  }, [pendingStorageRevision, collections, variables]);
 
   // Load the tier captions the last arrange produced, so a reloaded plugin
   // shows the same captions over the same (also persisted) positions.
@@ -374,24 +451,29 @@ function GroupedGraphInner() {
   }, []);
 
   // "Level up": wrap a card/wrapper together with its siblings into a frame
-  // for their shared parent path.
-  const handleLevelUp = useCallback((path: string) => {
-    if (!path || !path.includes('/')) return;
+  // for their shared parent.
+  //
+  // A top-level path yields the EMPTY parent, which is the collection's own
+  // frame — the case that used to return early and leave a card like `test`
+  // with nowhere to rise to. The empty path itself has no parent (a
+  // collection frame is the root), which is also why neither the collection
+  // frame nor the collection root card offers the button.
+  const handleLevelUp = useCallback((collectionId: string, path: string) => {
+    if (!collectionId || !path) return;
     const parent = path.split('/').slice(0, -1).join('/');
-    if (!parent) return;
     persistGroupedPaths(prev => {
       const next = new Set(prev);
-      next.add(parent);
+      next.add(getWrapperKey(collectionId, parent));
       return next;
     });
   }, [persistGroupedPaths]);
 
   // Remove a wrapper frame (its cards/sub-wrappers pop back out).
-  const handleUngroup = useCallback((path: string) => {
-    if (!path) return;
+  const handleUngroup = useCallback((collectionId: string, path: string) => {
+    if (!collectionId) return;
     persistGroupedPaths(prev => {
       const next = new Set(prev);
-      next.delete(path);
+      next.delete(getWrapperKey(collectionId, path));
       return next;
     });
   }, [persistGroupedPaths]);
@@ -863,7 +945,8 @@ function GroupedGraphInner() {
         x: 0, y: 0, initialX: 0, initialY: primitiveY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
-        canGroup: entry.groupName.includes('/'),
+        // Always: a top-level path levels up into its collection's frame.
+        canGroup: true,
       };
       groupsArray.push(groupData);
       entry.groupVariables.forEach((vNode, variableIndex) => {
@@ -898,7 +981,8 @@ function GroupedGraphInner() {
         x: 0, y: 0, initialX: 0, initialY: semanticY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
-        canGroup: entry.groupName.includes('/'),
+        // Always: a top-level path levels up into its collection's frame.
+        canGroup: true,
       };
       groupsArray.push(groupData);
       semanticGroups.push(groupData);
@@ -1226,9 +1310,13 @@ function GroupedGraphInner() {
         newNodes.push(buildCardNode(p.group, p.position, p.parentId));
       } else {
         // Wrapper hidden when every card it contains is filtered out.
+        // Membership is the same rule buildWrapperLayout used: same
+        // collection, and the empty path (the collection's own frame) holds
+        // all of them.
         const hasVisibleChild = standardCards.some(g => {
+          if (g.collectionId !== p.collectionId) return false;
           const path = g.sourceGroupName || '';
-          const within = path === p.path || path.startsWith(p.path + '/');
+          const within = p.path === '' || path === p.path || path.startsWith(p.path + '/');
           return within && !cardHiddenByKey.get(g.key);
         });
         newNodes.push({
@@ -1239,7 +1327,15 @@ function GroupedGraphInner() {
           hidden: !hasVisibleChild,
           selectable: false,
           style: { width: p.width, height: p.height },
-          data: { path: p.path, title: p.path, onLevelUp: handleLevelUp, onUngroup: handleUngroup },
+          data: {
+            path: p.path,
+            collectionId: p.collectionId,
+            // A collection's own frame is titled with the COLLECTION NAME —
+            // its path is empty and the raw id means nothing to the user.
+            title: p.path || collectionNameById.get(p.collectionId) || p.collectionId,
+            onLevelUp: handleLevelUp,
+            onUngroup: handleUngroup,
+          },
           dragHandle: '.group-header',
         });
       }
@@ -1398,7 +1494,7 @@ function GroupedGraphInner() {
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
       tierLabels,
-      cardVisibilityFilters, variablesById, selectedNode, selectedLayers,
+      cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,

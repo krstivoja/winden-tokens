@@ -5,6 +5,11 @@ import {
   buildArrangeUnits,
   isCardHidden,
   outermostGroupedAncestor,
+  getWrapperKey,
+  parseWrapperKey,
+  buildWrapperPathOwners,
+  migrateGroupedPaths,
+  migrateGraphPositions,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type { CardVisibilityFilters } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import { STANDARD_GROUP_HEADER_FILL } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
@@ -52,57 +57,63 @@ const parentOf = (placements: Placement[], id: string): string | null | undefine
 
 // ── The bug ────────────────────────────────────────────────────────
 
+// Every acyclicity assertion in this file runs through here: no placement is
+// its own parent, and every parent chain terminates at a root rather than
+// looping. `<cid>::a/b` → `<cid>::a` → `<cid>::` → nothing.
+const expectAcyclic = (placements: Placement[]) => {
+  placements.forEach(p => expect(p.parentId).not.toBe(p.id));
+  const byId = new Map(placements.map(p => [p.id, p]));
+  placements.forEach(p => {
+    const seen = new Set<string>();
+    let current: Placement | undefined = p;
+    while (current?.parentId) {
+      expect(seen.has(current.parentId)).toBe(false);
+      seen.add(current.parentId);
+      current = byId.get(current.parentId);
+    }
+  });
+};
+
 describe('wrapper membership — a frame contains the card at its own path', () => {
   it('puts the card whose own path is the grouped path inside that frame', () => {
     // Live symptom: wrapper `test` held `group:test/test` but not `group:test`,
     // which was parked 3,800px away and read as a missing card.
     const placements = buildWrapperLayout(
       [card('test'), card('test/test')],
-      new Set(['test']),
+      new Set(['c1::test']),
       {}
     );
 
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:test');
-    expect(parentOf(placements, 'group:test/test')).toBe('wrapper:test');
-    expect(parentOf(placements, 'wrapper:test')).toBeNull();
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:test/test')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'wrapper:c1::test')).toBeNull();
   });
 
   it('creates the frame even when the self-path card is the only member', () => {
     // Otherwise attach() would look for a wrapper that was never built and
     // the card would pop back out, while Arrange still folded it into the
     // missing frame's unit key.
-    const placements = buildWrapperLayout([card('test')], new Set(['test']), {});
+    const placements = buildWrapperLayout([card('test')], new Set(['c1::test']), {});
 
-    expect(placements.some(p => p.id === 'wrapper:test')).toBe(true);
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:test');
+    expect(placements.some(p => p.id === 'wrapper:c1::test')).toBe(true);
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
   });
 
   it('never makes a frame its own parent, at any nesting depth', () => {
     const placements = buildWrapperLayout(
       [card('a'), card('a/b'), card('a/b/c')],
-      new Set(['a', 'a/b']),
+      new Set(['c1::a', 'c1::a/b']),
       {}
     );
 
     // Wrappers nest strictly: a/b under a, a at the top.
-    expect(parentOf(placements, 'wrapper:a/b')).toBe('wrapper:a');
-    expect(parentOf(placements, 'wrapper:a')).toBeNull();
+    expect(parentOf(placements, 'wrapper:c1::a/b')).toBe('wrapper:c1::a');
+    expect(parentOf(placements, 'wrapper:c1::a')).toBeNull();
     // Cards join the frame named after their own path.
-    expect(parentOf(placements, 'group:a')).toBe('wrapper:a');
-    expect(parentOf(placements, 'group:a/b')).toBe('wrapper:a/b');
-    expect(parentOf(placements, 'group:a/b/c')).toBe('wrapper:a/b');
-    // No placement is its own parent, and the chain terminates at a root.
-    placements.forEach(p => expect(p.parentId).not.toBe(p.id));
-    const byId = new Map(placements.map(p => [p.id, p]));
-    placements.forEach(p => {
-      const seen = new Set<string>();
-      let current: Placement | undefined = p;
-      while (current?.parentId) {
-        expect(seen.has(current.parentId)).toBe(false);
-        seen.add(current.parentId);
-        current = byId.get(current.parentId);
-      }
-    });
+    expect(parentOf(placements, 'group:a')).toBe('wrapper:c1::a');
+    expect(parentOf(placements, 'group:a/b')).toBe('wrapper:c1::a/b');
+    expect(parentOf(placements, 'group:a/b/c')).toBe('wrapper:c1::a/b');
+    expectAcyclic(placements);
   });
 
   it('emits every nested node after its parent frame', () => {
@@ -110,7 +121,7 @@ describe('wrapper membership — a frame contains the card at its own path', () 
     // parentId node.
     const placements = buildWrapperLayout(
       [card('a'), card('a/b'), card('a/b/c')],
-      new Set(['a', 'a/b']),
+      new Set(['c1::a', 'c1::a/b']),
       {}
     );
 
@@ -122,10 +133,10 @@ describe('wrapper membership — a frame contains the card at its own path', () 
     });
   });
 
-  it('leaves a collection root card (empty path) at the top level', () => {
+  it('leaves a collection root card at the top level while its collection is not framed', () => {
     const placements = buildWrapperLayout(
       [collectionCard(), card('test')],
-      new Set(['test']),
+      new Set(['c1::test']),
       {}
     );
 
@@ -133,20 +144,215 @@ describe('wrapper membership — a frame contains the card at its own path', () 
   });
 });
 
+// ── 3a: the collection is part of the key space ────────────────────
+
+describe('collection frames', () => {
+  it('holds every card of its collection, at any depth, plus the root card', () => {
+    const placements = buildWrapperLayout(
+      [collectionCard(), card('test'), card('test/test2'), card('other')],
+      new Set(['c1::']),
+      {}
+    );
+
+    expect(parentOf(placements, 'collection:c1')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'group:other')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'wrapper:c1::')).toBeNull();
+    expectAcyclic(placements);
+  });
+
+  it('nests a path frame inside its collection frame, deepest wins for cards', () => {
+    const placements = buildWrapperLayout(
+      [collectionCard(), card('test'), card('test/test2'), card('other')],
+      new Set(['c1::', 'c1::test']),
+      {}
+    );
+
+    expect(parentOf(placements, 'wrapper:c1::test')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'wrapper:c1::')).toBeNull();
+    // The collection frame is the root: it never becomes its own parent even
+    // though depth 0 is a match for it too.
+    expect(parentOf(placements, 'collection:c1')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:other')).toBe('wrapper:c1::');
+    expectAcyclic(placements);
+  });
+
+  it('keeps one collection out of another collection\'s frame', () => {
+    // Pre-3a, a frame named `test` gathered `test*` cards from EVERY
+    // collection, because the key carried no collection at all.
+    const placements = buildWrapperLayout(
+      [card('test'), card('test', { key: 'group:c2:test', collectionId: 'c2' })],
+      new Set(['c1::test']),
+      {}
+    );
+
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:c2:test')).toBeNull();
+    expect(placements.some(p => p.id === 'wrapper:c2::test')).toBe(false);
+  });
+
+  it('gives each collection its own frame for the same bare path', () => {
+    const placements = buildWrapperLayout(
+      [card('test'), card('test', { key: 'group:c2:test', collectionId: 'c2' })],
+      new Set(['c1::test', 'c2::test']),
+      {}
+    );
+
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:c2:test')).toBe('wrapper:c2::test');
+    expectAcyclic(placements);
+  });
+
+  it('emits nested nodes after their parent even with a collection frame', () => {
+    const placements = buildWrapperLayout(
+      [collectionCard(), card('a'), card('a/b')],
+      new Set(['c1::', 'c1::a']),
+      {}
+    );
+
+    placements.forEach((p, index) => {
+      if (!p.parentId) return;
+      const parentIndex = placements.findIndex(q => q.id === p.parentId);
+      expect(parentIndex).toBeGreaterThanOrEqual(0);
+      expect(parentIndex).toBeLessThan(index);
+    });
+  });
+});
+
+describe('wrapper keys', () => {
+  it('round-trips, and splits on the FIRST :: so a Figma id keeps its colons', () => {
+    const key = getWrapperKey('VariableCollectionId:5:2', 'color/brand');
+    expect(key).toBe('VariableCollectionId:5:2::color/brand');
+    expect(parseWrapperKey(key)).toEqual({
+      collectionId: 'VariableCollectionId:5:2',
+      path: 'color/brand',
+    });
+  });
+
+  it('represents the collection itself as the empty path', () => {
+    expect(parseWrapperKey(getWrapperKey('c1', ''))).toEqual({ collectionId: 'c1', path: '' });
+  });
+
+  it('reports a bare (pre-3a) path as unparseable', () => {
+    expect(parseWrapperKey('color/brand')).toBeNull();
+  });
+});
+
 describe('outermostGroupedAncestor', () => {
   it('matches the path itself', () => {
-    expect(outermostGroupedAncestor('test', new Set(['test']))).toBe('test');
+    expect(outermostGroupedAncestor('c1', 'test', new Set(['c1::test']))).toBe('c1::test');
   });
 
   it('still prefers the shallowest ancestor over the path itself', () => {
-    expect(outermostGroupedAncestor('a/b', new Set(['a', 'a/b']))).toBe('a');
+    expect(outermostGroupedAncestor('c1', 'a/b', new Set(['c1::a', 'c1::a/b']))).toBe('c1::a');
   });
 
-  it('returns null for an unwrapped path and for the empty path', () => {
-    expect(outermostGroupedAncestor('test', new Set(['other']))).toBeNull();
-    // The empty path is what collection root cards carry — it must never
-    // match the empty prefix and get swallowed by a frame.
-    expect(outermostGroupedAncestor('', new Set([''] ))).toBeNull();
+  it('prefers the collection frame over every path frame', () => {
+    expect(outermostGroupedAncestor('c1', 'a/b', new Set(['c1::', 'c1::a']))).toBe('c1::');
+  });
+
+  it('puts a collection root card (empty path) in its collection frame only', () => {
+    expect(outermostGroupedAncestor('c1', '', new Set(['c1::']))).toBe('c1::');
+    expect(outermostGroupedAncestor('c1', '', new Set(['c1::test']))).toBeNull();
+    // Another collection's frame never claims it.
+    expect(outermostGroupedAncestor('c1', '', new Set(['c2::']))).toBeNull();
+  });
+
+  it('returns null for an unwrapped path and ignores another collection', () => {
+    expect(outermostGroupedAncestor('c1', 'test', new Set(['c1::other']))).toBeNull();
+    expect(outermostGroupedAncestor('c1', 'test', new Set(['c2::test']))).toBeNull();
+  });
+});
+
+// ── 3a migration ───────────────────────────────────────────────────
+
+describe('3a migration — bare wrapper paths become collection-scoped', () => {
+  const collections = [{ id: 'c1' }, { id: 'c2' }];
+  const variables = [
+    { collectionId: 'c1', name: 'test/test2/leaf' },
+    { collectionId: 'c1', name: 'only1/leaf' },
+    { collectionId: 'c2', name: 'test/leaf' },
+    { collectionId: 'c2', name: 'only2/leaf' },
+    // Loose variables carry no group path and own nothing.
+    { collectionId: 'c1', name: 'loose' },
+  ];
+  const owners = buildWrapperPathOwners(collections, variables);
+
+  it('lists owners in collection order, and only real ones', () => {
+    expect(owners.get('test')).toEqual(['c1', 'c2']);
+    expect(owners.get('test/test2')).toEqual(['c1']);
+    expect(owners.get('only1')).toEqual(['c1']);
+    expect(owners.get('only2')).toEqual(['c2']);
+    expect(owners.get('loose')).toBeUndefined();
+    expect(owners.get('gone')).toBeUndefined();
+  });
+
+  it('splits a shared bare path into one entry per owning collection', () => {
+    // Honest: the one old frame really did hold cards from both.
+    expect(migrateGroupedPaths(['test'], owners).sort()).toEqual(['c1::test', 'c2::test']);
+  });
+
+  it('drops a path no collection owns any more', () => {
+    expect(migrateGroupedPaths(['gone'], owners)).toEqual([]);
+  });
+
+  it('is idempotent — a second run is a no-op', () => {
+    const once = migrateGroupedPaths(['test', 'only1'], owners);
+    expect(migrateGroupedPaths(once, owners).sort()).toEqual(once.sort());
+    expect(once.sort()).toEqual(['c1::only1', 'c1::test', 'c2::test']);
+  });
+
+  it('tolerates a junk record', () => {
+    expect(migrateGroupedPaths(null, owners)).toEqual([]);
+    expect(migrateGroupedPaths(['', 42 as unknown as string], owners)).toEqual([]);
+  });
+
+  it('rewrites wrapper positions, keeping the FIRST owner of an ambiguous path', () => {
+    const migrated = migrateGraphPositions({
+      'wrapper:test': { x: 1, y: 2 },
+      'wrapper:only2': { x: 3, y: 4 },
+      'rel:wrapper:test/test2': { x: 5, y: 6 },
+    }, owners);
+
+    // One position, not two: two frames on one coordinate is worse than one
+    // arranged frame.
+    expect(migrated).toEqual({
+      'wrapper:c1::test': { x: 1, y: 2 },
+      'wrapper:c2::only2': { x: 3, y: 4 },
+      'rel:wrapper:c1::test/test2': { x: 5, y: 6 },
+    });
+  });
+
+  it('leaves card keys alone — those are part 3b', () => {
+    const stored = {
+      'group:test': { x: 1, y: 1 },
+      'rel:group:test/test2': { x: 2, y: 2 },
+      'collection:c1': { x: 3, y: 3 },
+      'source:v1': { x: 4, y: 4 },
+    };
+    expect(migrateGraphPositions(stored, owners)).toEqual(stored);
+  });
+
+  it('drops an unresolvable wrapper position rather than keeping it stale', () => {
+    expect(migrateGraphPositions({ 'wrapper:gone': { x: 1, y: 2 } }, owners)).toEqual({});
+  });
+
+  it('is idempotent for positions too, and never loses an already-scoped key', () => {
+    const once = migrateGraphPositions({ 'wrapper:test': { x: 1, y: 2 } }, owners);
+    expect(migrateGraphPositions(once, owners)).toEqual(once);
+    // A half-migrated record: the scoped entry wins over the bare one.
+    expect(migrateGraphPositions({
+      'wrapper:c1::test': { x: 9, y: 9 },
+      'wrapper:test': { x: 1, y: 2 },
+    }, owners)).toEqual({ 'wrapper:c1::test': { x: 9, y: 9 } });
+  });
+
+  it('tolerates a junk record', () => {
+    expect(migrateGraphPositions(null, owners)).toEqual({});
+    expect(migrateGraphPositions([], owners)).toEqual({});
   });
 });
 
@@ -168,13 +374,29 @@ describe('Arrange folds the self-path card into the same frame', () => {
 
     const { unitKeyByGroupKey, units } = buildArrangeUnits(
       cards,
-      new Set(['test']),
+      new Set(['c1::test']),
       filters,
       new Map()
     );
 
-    expect(unitKeyByGroupKey.get('group:test')).toBe('wrapper:test');
-    expect(unitKeyByGroupKey.get('group:test/test')).toBe('wrapper:test');
-    expect(units.map(u => u.key)).toEqual(['wrapper:test']);
+    expect(unitKeyByGroupKey.get('group:test')).toBe('wrapper:c1::test');
+    expect(unitKeyByGroupKey.get('group:test/test')).toBe('wrapper:c1::test');
+    expect(units.map(u => u.key)).toEqual(['wrapper:c1::test']);
+  });
+
+  it('folds the collection ROOT card into the collection frame too', () => {
+    // buildWrapperLayout nests it, so Arrange has to agree — otherwise it
+    // would move a parent-relative node with absolute coordinates.
+    const cards = [collectionCard(), card('test')];
+    const { unitKeyByGroupKey, units } = buildArrangeUnits(
+      cards,
+      new Set(['c1::']),
+      filters,
+      new Map()
+    );
+
+    expect(unitKeyByGroupKey.get('collection:c1')).toBe('wrapper:c1::');
+    expect(unitKeyByGroupKey.get('group:test')).toBe('wrapper:c1::');
+    expect(units.map(u => u.key)).toEqual(['wrapper:c1::']);
   });
 });

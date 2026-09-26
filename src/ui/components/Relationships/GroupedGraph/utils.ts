@@ -21,6 +21,7 @@ import {
   GROUP_GAP_Y,
   GROUP_WIDTH,
   TIER_LABEL_NODE_PREFIX,
+  WRAPPER_NODE_PREFIX,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   WRAPPER_HEADER_HEIGHT,
@@ -543,28 +544,173 @@ function isTierLabelNodeId(id: string): boolean {
 
 // ── Arrange units ──────────────────────────────────────────────────
 
-// Shallowest (outermost) grouped ancestor of `path` — the top-level wrapper
-// that ultimately contains it, even when wrappers are nested inside one
-// another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
-// FIRST match (ascending depth) instead of the deepest one, since Arrange
-// treats a whole nested wrapper frame as a single movable unit.
+// ── Wrapper frame keys ─────────────────────────────────────────────
+
+/**
+ * A wrapper frame's key: `<collectionId>::<path>`, where the EMPTY path means
+ * the collection itself.
+ *
+ * A bare path is not an identity. A frame named `test` used to gather `test*`
+ * cards from every collection, and a top-level card like `test` had no parent
+ * at all to level up into — the collection, its obvious parent, was simply
+ * not part of the key space. `::` is the separator already used by
+ * `getCollectionGroupKey` for group filters: collection ids contain `:` but
+ * never `::`, so the first `::` always separates the two halves.
+ */
+function getWrapperKey(collectionId: string, path: string): string {
+  return `${collectionId}::${path}`;
+}
+
+/** Inverse of `getWrapperKey`; null for a bare (pre-3a) path. */
+function parseWrapperKey(key: string): { collectionId: string; path: string } | null {
+  const index = key.indexOf('::');
+  if (index < 0) return null;
+  return { collectionId: key.slice(0, index), path: key.slice(index + 2) };
+}
+
+// Shallowest (outermost) grouped ancestor of `(collectionId, path)` — the
+// top-level wrapper that ultimately contains it, even when wrappers are
+// nested inside one another. Mirrors wrapperLayout.ts's path-prefix walk but
+// stops at the FIRST match (ascending depth) instead of the deepest one,
+// since Arrange treats a whole nested wrapper frame as a single movable unit.
 //
-// `path` itself counts as a match: the card for path `p` lives INSIDE the
-// frame named `p`, it is not a sibling of it. Only the wrapper→parent walk in
-// wrapperLayout.ts stays strict, so a frame can never parent itself.
-function outermostGroupedAncestor(path: string, grouped: Set<string>): string | null {
-  // An empty path (collection cards) has no ancestors and must never match the
-  // empty prefix `''`.
-  if (!path) return null;
-  const parts = path.split('/');
-  for (let depth = 1; depth <= parts.length; depth++) {
-    const prefix = parts.slice(0, depth).join('/');
-    if (grouped.has(prefix)) return prefix;
+// Depth 0 is the collection's own frame, which contains every card of that
+// collection — including the collection ROOT card, whose path is empty and
+// which belongs to no other frame. `path` itself also counts as a match: the
+// card for path `p` lives INSIDE the frame named `p`, it is not a sibling of
+// it. Only the wrapper→parent walk in wrapperLayout.ts stays strict, so a
+// frame can never parent itself.
+//
+// Returns the wrapper KEY (`<collectionId>::<path>`), not a bare path.
+function outermostGroupedAncestor(
+  collectionId: string,
+  path: string,
+  grouped: Set<string>
+): string | null {
+  const parts = path ? path.split('/') : [];
+  for (let depth = 0; depth <= parts.length; depth++) {
+    const key = getWrapperKey(collectionId, parts.slice(0, depth).join('/'));
+    if (grouped.has(key)) return key;
   }
   return null;
 }
 
-/** Live geometry of a wrapper frame node, keyed by `wrapper:<path>`. */
+// ── 3a migration: bare wrapper paths → collection-scoped keys ──────
+
+/**
+ * Bare group path → the collections that own it, in the order `collections`
+ * was given.
+ *
+ * A collection owns path `p` when one of its variables sits at that group
+ * path or below it — which is exactly when the old, collection-blind frame
+ * named `p` really did draw a card from that collection. Loose (slash-less)
+ * variables contribute nothing: they have no group path.
+ */
+function buildWrapperPathOwners(
+  collections: Array<Pick<CollectionData, 'id'>>,
+  variables: Array<Pick<VariableData, 'collectionId' | 'name'>>
+): Map<string, string[]> {
+  const order = new Map(collections.map((collection, index) => [collection.id, index]));
+  const byPath = new Map<string, Set<string>>();
+
+  variables.forEach(variable => {
+    if (!order.has(variable.collectionId)) return;
+    const parts = variable.name.split('/');
+    // `parts.length - 1`: the last segment is the variable's own name, not a
+    // group path. A slash-less variable therefore contributes nothing.
+    for (let depth = 1; depth <= parts.length - 1; depth++) {
+      const prefix = parts.slice(0, depth).join('/');
+      let owners = byPath.get(prefix);
+      if (!owners) {
+        owners = new Set<string>();
+        byPath.set(prefix, owners);
+      }
+      owners.add(variable.collectionId);
+    }
+  });
+
+  const result = new Map<string, string[]>();
+  byPath.forEach((owners, path) => {
+    result.set(path, Array.from(owners).sort((a, b) => order.get(a)! - order.get(b)!));
+  });
+  return result;
+}
+
+/**
+ * Rewrite the persisted `graph-grouped-paths` record to collection-scoped
+ * wrapper keys.
+ *
+ * A bare path becomes one entry per collection that owns it — a path two
+ * collections both used becomes TWO frames, which is honest: the single old
+ * frame really did contain cards from both. A path no collection owns any
+ * more is dropped, not kept.
+ *
+ * Idempotent with no version flag: an entry that already contains `::` is
+ * collection-scoped by construction and passes through untouched, so running
+ * this twice is a no-op.
+ */
+function migrateGroupedPaths(stored: unknown, owners: Map<string, string[]>): string[] {
+  if (!Array.isArray(stored)) return [];
+  const out = new Set<string>();
+  stored.forEach(entry => {
+    if (typeof entry !== 'string' || !entry) return;
+    if (entry.includes('::')) {
+      out.add(entry);
+      return;
+    }
+    (owners.get(entry) || []).forEach(collectionId => out.add(getWrapperKey(collectionId, entry)));
+  });
+  return Array.from(out);
+}
+
+/**
+ * Rewrite the persisted `graph-positions` record's wrapper keys
+ * (`wrapper:<path>` and the nested-drag `rel:wrapper:<path>`) the same way.
+ *
+ * Unlike the grouped paths, a position cannot be duplicated: two frames at
+ * one coordinate is worse than one arranged frame. An ambiguous path keeps
+ * its FIRST owner (collection order) and the rest are dropped. Card keys and
+ * everything else pass through untouched — those are part 3b.
+ */
+function migrateGraphPositions(
+  stored: unknown,
+  owners: Map<string, string[]>
+): Record<string, { x: number; y: number }> {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+  const source = stored as Record<string, { x: number; y: number }>;
+  const out: Record<string, { x: number; y: number }> = {};
+  const migrated: Array<[string, { x: number; y: number }]> = [];
+
+  Object.entries(source).forEach(([key, value]) => {
+    const relPrefix = key.startsWith('rel:') ? 'rel:' : '';
+    const inner = key.slice(relPrefix.length);
+    if (!inner.startsWith(WRAPPER_NODE_PREFIX)) {
+      out[key] = value;
+      return;
+    }
+    const path = inner.slice(WRAPPER_NODE_PREFIX.length);
+    if (path.includes('::')) {
+      // Already collection-scoped — idempotence.
+      out[key] = value;
+      return;
+    }
+    const first = (owners.get(path) || [])[0];
+    if (!first) return; // unresolvable: dropped, not kept
+    migrated.push([
+      `${relPrefix}${WRAPPER_NODE_PREFIX}${getWrapperKey(first, path)}`,
+      value,
+    ]);
+  });
+
+  // Pass-through keys win over a migrated one landing on the same key, so a
+  // half-migrated record never loses the already-correct entry.
+  migrated.forEach(([key, value]) => {
+    if (!(key in out)) out[key] = value;
+  });
+  return out;
+}
+
+/** Live geometry of a wrapper frame node, keyed by `wrapper:<collectionId>::<path>`. */
 export interface WrapperFrameGeometry {
   position: { x: number; y: number };
   measuredHeight?: number;
@@ -613,9 +759,17 @@ function buildArrangeUnits(
   wrapperFrames: Map<string, WrapperFrameGeometry>
 ): ArrangeUnits {
   const unitKeyForGroup = (group: GroupData): string => {
-    if (group.kind !== 'standard') return group.key;
-    const outermost = outermostGroupedAncestor(group.sourceGroupName || '', groupedPaths);
-    return outermost ? `wrapper:${outermost}` : group.key;
+    // Exactly the cards buildWrapperLayout lays out (see isStandardLayoutCard
+    // in GroupedGraph.tsx). A collection ROOT card is wrappable too now: it
+    // sits inside its collection's own frame, so Arrange has to fold it into
+    // that unit or it would try to move a parent-relative node absolutely.
+    if (group.kind !== 'standard' && group.kind !== 'collection') return group.key;
+    const outermost = outermostGroupedAncestor(
+      group.collectionId,
+      group.sourceGroupName || '',
+      groupedPaths
+    );
+    return outermost ? `${WRAPPER_NODE_PREFIX}${outermost}` : group.key;
   };
 
   const hiddenByKey = new Map<string, boolean>();
@@ -640,10 +794,13 @@ function buildArrangeUnits(
     }
     if (!unitGroups.has(unitKey)) {
       const frame = wrapperFrames.get(unitKey);
+      const parsed = parseWrapperKey(unitKey.slice(WRAPPER_NODE_PREFIX.length));
       unitGroups.set(unitKey, {
         ...group,
         key: unitKey,
-        title: unitKey.slice('wrapper:'.length),
+        // The bare path reads as the frame's name; the collection frame has
+        // no path, so it falls back to the collection it wraps.
+        title: parsed ? (parsed.path || parsed.collectionId) : unitKey.slice(WRAPPER_NODE_PREFIX.length),
         x: frame?.position.x ?? group.x,
         y: frame?.position.y ?? group.y,
       });
@@ -659,7 +816,7 @@ function buildArrangeUnits(
   // chrome buildWrapperLayout adds (header + top/bottom padding).
   const heightOverrides = new Map<string, number>();
   unitGroups.forEach((_group, unitKey) => {
-    if (!unitKey.startsWith('wrapper:')) return;
+    if (!unitKey.startsWith(WRAPPER_NODE_PREFIX)) return;
     const measured = wrapperFrames.get(unitKey)?.measuredHeight;
     if (typeof measured === 'number' && measured > 0) {
       heightOverrides.set(unitKey, measured);
@@ -803,6 +960,11 @@ export {
   isCardHidden,
   buildArrangeUnits,
   outermostGroupedAncestor,
+  getWrapperKey,
+  parseWrapperKey,
+  buildWrapperPathOwners,
+  migrateGroupedPaths,
+  migrateGraphPositions,
   getCollectionCardKey,
   getDefaultVariableValue,
   normalizePathSegment,

@@ -51,7 +51,40 @@ Measured live: `wrapper:test` at (-360, 6440), `group:test/test` at (-344, 6492)
 - [x] `handleLevelUp` still terminates: it requires a `/` in the path and a non-empty parent, so it only ever adds a STRICT ancestor and a card can never group itself into existence.
 - [x] Tests: `tests/ui/components/Relationships/wrapperMembership.test.ts` — membership, nesting, acyclicity, parent-before-child array order.
 
-## 3. Card identity carries no collection
+## 3a. Level-up cannot reach the collection
+
+A wrapper is keyed by a bare path from the variable names (`color`, `color/brand`), and `handleLevelUp` drops the last segment:
+
+```ts
+const parent = path.split('/').slice(0, -1).join('/');
+if (!parent) return;           // top-level card: nothing to group into
+```
+
+A collection is never a segment of any variable name, so a top-level card has no parent to rise to and the level-up button is not even offered.
+The collection is the obvious parent and it is simply absent from the key space.
+
+Separately, because wrapper paths carry no collection, a frame named `test` would gather `test*` cards from EVERY collection.
+
+**Decision: wrapper keys become `<collectionId>::<path>`, with the empty path meaning the collection itself.**
+
+- [x] Node id `wrapper:<collectionId>::<path>` (`WRAPPER_NODE_PREFIX` + `getWrapperKey`); `<collectionId>::` is the collection's own frame, titled with the collection name (`collectionNameById`, falling back to the id).
+- [x] Membership: card belongs to frame `(cid, p)` when `card.collectionId === cid` AND (`p === ''` OR `cardPath === p` OR `cardPath` starts with `p + '/'`). The collection root card (no path) belongs to its collection frame only. The part-2 self-path inclusion is kept: `deepestGroupedAncestor`/`outermostGroupedAncestor` walk depth 0 (the collection) through `parts.length`.
+- [x] `handleLevelUp` on a top-level path yields `<cid>::`, which is the collection frame — the case that returned early. Every standard card now sets `canGroup: true`.
+- [x] A collection frame has no level-up of its own (`GraphWrapperNode` gates on `data.path !== ''`, was `includes('/')`). A collection ROOT CARD has none either: `GraphNode`'s collection branch renders the "+" alone, unchanged.
+- [x] `WrapperNodeData` gains `collectionId`; `onLevelUp`/`onUngroup` take `(collectionId, path)`. `WrapperPlacement.collectionId` is wired through at the wrapper-node construction site.
+- [x] The wrapper→parent walk stays strict and terminates: `<cid>::a/b` → `<cid>::a` → `<cid>::` → nothing. The collection frame has no candidates at all (`maxDepth = -1`).
+- [x] Arrange folds collection ROOT cards too — `buildWrapperLayout` now nests them, so `buildArrangeUnits` had to widen from `kind === 'standard'` to the same `isStandardLayoutCard` set, or it would move a parent-relative node absolutely.
+
+### Migration for 3a
+
+- [x] `graph-grouped-paths` holds bare paths. Rewritten to `<cid>::<path>` for every collection that actually owns that path — a bare path that two collections both use becomes two entries, which is what the user saw as one frame before.
+- [x] `graph-positions` keys `wrapper:<path>` (and `rel:wrapper:<path>`) rewrite the same way; ambiguous ones keep the first collection (collections-prop order) and drop the rest. Card keys pass through untouched — those are 3b.
+- [x] Unresolvable entries (a path no collection owns any more) are dropped, not kept.
+- [x] Idempotent with no version flag: a `wrapper:` key or grouped path with no `::` is old by construction. A pass-through key wins over a migrated one landing on it, so a half-migrated record never loses the correct entry. The migrated shape is written back only when it actually changed.
+- [x] **Where it runs:** ownership needs the variables, and client storage answers long before the plugin sends any — so the raw records are parked in `pendingStorageRef` and applied by a dedicated effect once `collections.length > 0`. Nothing is dropped for arriving early; each record is consumed as it is applied, so the effect runs once per storage response and can never clobber a drag.
+- [x] `buildWrapperPathOwners` defines ownership as "some variable of that collection sits at that group path or below it" — exactly when the old collection-blind frame really did draw a card from that collection. Loose (slash-less) variables own nothing.
+
+## 3b. Card identity carries no collection
 
 `unmanagedGroupsMap` (`810-822`) is keyed by group **name alone**, and the bucket's `collectionId` comes from whichever variable arrived first.
 Two collections owning `color/brand` therefore merge into ONE card attributed to the first collection — the merge happens before the key is built, so re-keying alone does not fix it.
@@ -83,12 +116,15 @@ Two collections owning `color/brand` therefore merge into ONE card attributed to
 
 ## Order
 
-1 and 2 are independent bug fixes and land first, smallest first.
-3 lands after, because it rewrites the same keys that 1 and 2 touch and would otherwise force both to be written twice.
+1 and 2 are independent bug fixes and landed first, smallest first (commit `7f7fa59`).
+3a next: it is what makes the collection reachable by level-up, and it touches only wrapper keys.
+3b last, because it rewrites card keys, which are the noisiest part and the one with a real migration cost.
 
 ## Verify
 
 - [x] Parts 1 and 2: `npm run build` clean (0 `WebSocket` in `dist/index.html`), `npx vitest run` 217 passing (was 200), `tsc` 251 — identical error set.
+- [x] Part 3a: `npm run build` clean (0 `WebSocket` in `dist/index.html`), `npx vitest run` 243 passing (was 217), `tsc` 251 — identical error set, nothing in a touched file.
 - [x] Verified live in the browser against the mock dataset, which carries the same shape: the slash-less variable `red` now renders as a row of the `colors` collection card (`collection:VariableCollectionId:5:2`), no `group:red` card exists, the header keeps its "+" and the row keeps its delete. `red` used to be a card of its own.
 - [ ] NOT verified against the real Figma file — the plugin disconnected mid-session, so the browser tab had no data. Still to check there: the `marko` card holds `test`; the `test` card holds only `test/test2`; the `test` frame holds both `test` and `test/test`; the five other collections each gain a row-less root card.
 - [ ] After 3: reload with an existing `graph-positions` and confirm the layout survives rather than resetting.
+- [ ] NOT verified against Figma for 3a — no plugin connection this session. Still to check there: a top-level card like `test` now shows the level-up button and grouping it draws a frame titled with the COLLECTION name holding every card of that collection; the frame itself offers ungroup but no level-up; two collections that both use path `test` get two separate frames; and a reload with a pre-3a `graph-grouped-paths`/`graph-positions` keeps the frames and their positions.

@@ -20,6 +20,8 @@ export const TIER_LABEL_GAP_Y = 14;
 export const TIER_LABEL_NODE_PREFIX = 'tier-label:';
 
 // ── Wrapper (expanded group frame) constants ───────────────────────
+// Node-id namespace for a wrapper frame: `wrapper:<collectionId>::<path>`.
+export const WRAPPER_NODE_PREFIX = 'wrapper:';
 export const WRAPPER_HEADER_HEIGHT = 36;
 export const WRAPPER_PADDING = 16;
 export const WRAPPER_GAP = 28;

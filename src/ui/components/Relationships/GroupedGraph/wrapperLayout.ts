@@ -1,18 +1,29 @@
 // Layout for expanded group "wrapper" frames.
 //
-// Given the flat list of standard (unmanaged) cards and the set of expanded
-// group paths, this builds a nested tree of wrapper frames containing cards
-// and computes React-Flow positions. Cards/wrappers inside a wrapper use
-// positions relative to that wrapper (React Flow parent-node coordinates);
-// top-level units use absolute positions.
+// Given the flat list of standard (unmanaged) cards plus the collection root
+// cards, and the set of expanded frames, this builds a nested tree of wrapper
+// frames containing cards and computes React-Flow positions. Cards/wrappers
+// inside a wrapper use positions relative to that wrapper (React Flow
+// parent-node coordinates); top-level units use absolute positions.
+//
+// A frame is identified by `<collectionId>::<path>`, where the empty path is
+// the collection's own frame — see getWrapperKey in ./utils.
 
 import { GroupData } from './types';
-import { GROUP_WIDTH, WRAPPER_HEADER_HEIGHT, WRAPPER_PADDING, WRAPPER_GAP } from './constants';
-import { getGroupHeight } from './utils';
+import {
+  GROUP_WIDTH,
+  WRAPPER_HEADER_HEIGHT,
+  WRAPPER_PADDING,
+  WRAPPER_GAP,
+  WRAPPER_NODE_PREFIX,
+} from './constants';
+import { getGroupHeight, getWrapperKey, parseWrapperKey } from './utils';
 
 export interface WrapperPlacement {
   kind: 'wrapper';
+  /** `wrapper:<collectionId>::<path>` — the React Flow node id. */
   id: string;
+  /** Bare path, empty for a collection's own frame. */
   path: string;
   collectionId: string;
   parentId: string | null;
@@ -43,7 +54,12 @@ interface Unit {
 }
 
 /**
- * Deepest grouped path containing `path` — the wrapper frame it belongs in.
+ * Deepest grouped frame containing `(collectionId, path)` — the wrapper it
+ * belongs in, as a wrapper KEY (`<collectionId>::<path>`).
+ *
+ * Depth 0 is the collection's own frame: every card of that collection is in
+ * it, including the collection ROOT card whose path is empty and which
+ * belongs to no other frame.
  *
  * `includeSelf` decides whether `path` itself counts:
  * - Cards pass `true`. The card for path `p` lives INSIDE the frame named `p`
@@ -52,35 +68,39 @@ interface Unit {
  * - Wrapper units pass `false`, and must. A wrapper's own path is grouped by
  *   definition, so a self-match would make frame `p` its own parent — and the
  *   deepest-match walk would pick that self-match over the real parent `p`'s
- *   ancestor. Strict prefixes are strictly shorter, so the wrapper→parent
- *   chain always terminates.
+ *   ancestor. Strict prefixes are strictly shorter and the chain bottoms out
+ *   at the collection frame (`<cid>::`), which has no candidates at all, so
+ *   the wrapper→parent walk always terminates:
+ *   `<cid>::a/b` → `<cid>::a` → `<cid>::` → nothing.
  */
 function deepestGroupedAncestor(
+  collectionId: string,
   path: string,
   grouped: Set<string>,
   includeSelf: boolean
 ): string | null {
-  // An empty path (collection cards) has no ancestors and must never match the
-  // empty prefix `''`.
-  if (!path) return null;
-  const parts = path.split('/');
+  const parts = path ? path.split('/') : [];
   const maxDepth = includeSelf ? parts.length : parts.length - 1;
   let result: string | null = null;
-  for (let depth = 1; depth <= maxDepth; depth++) {
-    const prefix = parts.slice(0, depth).join('/');
-    if (grouped.has(prefix)) result = prefix;
+  for (let depth = 0; depth <= maxDepth; depth++) {
+    const key = getWrapperKey(collectionId, parts.slice(0, depth).join('/'));
+    if (grouped.has(key)) result = key;
   }
   return result;
 }
 
-const wrapperId = (path: string) => `wrapper:${path}`;
+const wrapperId = (collectionId: string, path: string) =>
+  `${WRAPPER_NODE_PREFIX}${getWrapperKey(collectionId, path)}`;
 
 /**
  * Build placements for standard cards, nesting them inside wrapper frames for
  * every expanded ancestor path. Managed groups are not handled here.
  *
+ * `groupedPaths` holds wrapper KEYS (`<collectionId>::<path>`), not bare
+ * paths — a frame belongs to exactly one collection.
+ *
  * `savedPositions` holds two namespaces in one record: a top-level unit's id
- * (card key or `wrapper:<path>`) maps to its absolute position, while
+ * (card key or `wrapper:<collectionId>::<path>`) maps to its absolute position, while
  * `rel:<id>` maps a *nested* unit to a manually-dragged position relative to
  * its parent wrapper — used instead of the auto vertical stack for that one
  * child, at whatever nesting depth it lives.
@@ -92,32 +112,32 @@ export function buildWrapperLayout(
 ): Placement[] {
   if (cards.length === 0) return [];
 
-  // Collect wrapper paths actually needed (grouped ancestors of some card).
-  const wrapperPaths = new Set<string>();
-  const collectionByWrapper = new Map<string, string>();
+  // Collect wrapper frames actually needed (grouped ancestors of some card),
+  // as `<collectionId>::<path>` keys.
+  const wrapperKeys = new Set<string>();
   cards.forEach(card => {
     const path = card.sourceGroupName || '';
-    if (!path) return;
-    const parts = path.split('/');
-    // `<= parts.length`: a card whose own path is grouped needs that frame to
-    // exist, otherwise attach() below would look for a wrapper that was never
-    // created and the card would silently pop back out to the top level —
-    // and Arrange (outermostGroupedAncestor) would still fold it into the
-    // missing frame's unit. The two walks have to agree.
-    for (let depth = 1; depth <= parts.length; depth++) {
-      const prefix = parts.slice(0, depth).join('/');
-      if (groupedPaths.has(prefix)) {
-        wrapperPaths.add(prefix);
-        if (!collectionByWrapper.has(prefix)) collectionByWrapper.set(prefix, card.collectionId);
-      }
+    const parts = path ? path.split('/') : [];
+    // From depth 0 (the collection's own frame, which a collection ROOT card
+    // joins) through `parts.length`: a card whose own path is grouped needs
+    // that frame to exist, otherwise attach() below would look for a wrapper
+    // that was never created and the card would silently pop back out to the
+    // top level — and Arrange (outermostGroupedAncestor) would still fold it
+    // into the missing frame's unit. The two walks have to agree.
+    for (let depth = 0; depth <= parts.length; depth++) {
+      const key = getWrapperKey(card.collectionId, parts.slice(0, depth).join('/'));
+      if (groupedPaths.has(key)) wrapperKeys.add(key);
     }
   });
 
   // Create units.
   const units = new Map<string, Unit>();
-  wrapperPaths.forEach(path => {
-    units.set(wrapperId(path), {
-      kind: 'wrapper', path, collectionId: collectionByWrapper.get(path) || '',
+  wrapperKeys.forEach(key => {
+    // Always parses: every key in here was minted by getWrapperKey above.
+    const parsed = parseWrapperKey(key);
+    if (!parsed) return;
+    units.set(wrapperId(parsed.collectionId, parsed.path), {
+      kind: 'wrapper', path: parsed.path, collectionId: parsed.collectionId,
       children: [], width: 0, height: 0, rel: { x: 0, y: 0 },
     });
   });
@@ -133,28 +153,34 @@ export function buildWrapperLayout(
   const attach = (unit: Unit) => {
     // Cards may land in the frame named after their own path; wrappers may
     // not (see deepestGroupedAncestor) — that is what keeps the tree acyclic.
-    const parentPath = deepestGroupedAncestor(unit.path, groupedPaths, unit.kind === 'card');
-    if (parentPath && units.has(wrapperId(parentPath))) {
-      units.get(wrapperId(parentPath))!.children.push(unit);
+    const parentKey = deepestGroupedAncestor(
+      unit.collectionId, unit.path, groupedPaths, unit.kind === 'card'
+    );
+    const parentId = parentKey ? `${WRAPPER_NODE_PREFIX}${parentKey}` : null;
+    if (parentId && units.has(parentId)) {
+      units.get(parentId)!.children.push(unit);
     } else {
       roots.push(unit);
     }
   };
   units.forEach(unit => attach(unit));
 
-  // Stable child ordering by path.
+  // Stable ordering by collection then path. Within one frame every child
+  // shares the collection, so this reduces to the path comparison it was.
+  const sortKey = (unit: Unit) => getWrapperKey(unit.collectionId, unit.path);
   const sortChildren = (unit: Unit) => {
-    unit.children.sort((a, b) => a.path.localeCompare(b.path));
+    unit.children.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
     unit.children.forEach(sortChildren);
   };
-  roots.sort((a, b) => a.path.localeCompare(b.path));
+  roots.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   roots.forEach(sortChildren);
 
   // Size + relative layout: cards/sub-wrappers stacked vertically,
   // left-aligned, inside the wrapper — unless the user dragged one to a
   // manual spot (rel:<id> in savedPositions), in which case that position
   // wins and the auto-stack skips over it for the *other* children.
-  const unitId = (unit: Unit) => unit.kind === 'card' && unit.group ? unit.group.key : wrapperId(unit.path);
+  const unitId = (unit: Unit) =>
+    unit.kind === 'card' && unit.group ? unit.group.key : wrapperId(unit.collectionId, unit.path);
   const sizeUnit = (unit: Unit) => {
     if (unit.kind === 'card') {
       unit.width = GROUP_WIDTH;
@@ -214,12 +240,13 @@ export function buildWrapperLayout(
     if (unit.kind === 'card' && unit.group) {
       placements.push({ kind: 'card', id: unit.group.key, group: unit.group, parentId, position });
     } else {
+      const id = wrapperId(unit.collectionId, unit.path);
       placements.push({
-        kind: 'wrapper', id: wrapperId(unit.path), path: unit.path,
+        kind: 'wrapper', id, path: unit.path,
         collectionId: unit.collectionId, parentId, position,
         width: unit.width, height: unit.height,
       });
-      unit.children.forEach(child => emit(child, wrapperId(unit.path), child.rel));
+      unit.children.forEach(child => emit(child, id, child.rel));
     }
   };
 

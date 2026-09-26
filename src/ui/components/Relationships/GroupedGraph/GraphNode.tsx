@@ -101,7 +101,7 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
                 aria-label={`Group ${group.title} with its siblings`}
                 title="Group with siblings (level up)"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onLevelUp(group.sourceGroupName!); }}
+                onClick={(e) => { e.stopPropagation(); onLevelUp(group.collectionId, group.sourceGroupName!); }}
               />
             )}
             <IconButton

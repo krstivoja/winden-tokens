@@ -195,15 +195,15 @@ describe('buildArrangeUnits', () => {
     const inner = card('group:color/brand/deep', 'color', 'color/brand/deep', [row('v-color-1', 'color/brand/deep/x')]);
     const { units, unitKeyByGroupKey } = buildArrangeUnits(
       [colorCard, inner],
-      new Set(['color', 'color/brand']),
+      new Set(['color::color', 'color::color/brand']),
       filters(),
       new Map()
     );
 
     // Outermost grouped ancestor wins, not the deepest one.
-    expect(unitKeyByGroupKey.get(inner.key)).toBe('wrapper:color');
-    expect(unitKeyByGroupKey.get(colorCard.key)).toBe('wrapper:color');
-    expect(units.map(u => u.key)).toEqual(['wrapper:color']);
+    expect(unitKeyByGroupKey.get(inner.key)).toBe('wrapper:color::color');
+    expect(unitKeyByGroupKey.get(colorCard.key)).toBe('wrapper:color::color');
+    expect(units.map(u => u.key)).toEqual(['wrapper:color::color']);
   });
 
   it('keeps a wrapper unit whose members are only PARTLY hidden, sized for all of them', () => {
@@ -215,16 +215,16 @@ describe('buildArrangeUnits', () => {
 
     const { units, hiddenUnits, heightOverrides } = buildArrangeUnits(
       [visible, hidden],
-      new Set(['color']),
+      new Set(['color::color']),
       filters({ selectedGroups: new Set(['color::color/brand']) }),
       new Map()
     );
 
-    expect(units.map(u => u.key)).toEqual(['wrapper:color']);
+    expect(units.map(u => u.key)).toEqual(['wrapper:color::color']);
     expect(hiddenUnits).toEqual([]);
     // buildWrapperLayout stacks hidden members too, so the frame on screen is
     // as tall as ALL of its members — the override must say so.
-    expect(heightOverrides.get('wrapper:color')).toBe(
+    expect(heightOverrides.get('wrapper:color::color')).toBe(
       getGroupHeight(visible) + WRAPPER_GAP + getGroupHeight(hidden)
       + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
@@ -236,35 +236,37 @@ describe('buildArrangeUnits', () => {
 
     const { units, hiddenUnits } = buildArrangeUnits(
       [a, b, globalCard],
-      new Set(['color']),
+      new Set(['color::color']),
       filters({ selectedCollections: new Set(['_global']) }),
       new Map()
     );
 
     expect(units.map(u => u.key)).toEqual([globalCard.key]);
-    expect(hiddenUnits.map(u => u.key)).toEqual(['wrapper:color']);
+    expect(hiddenUnits.map(u => u.key)).toEqual(['wrapper:color::color']);
   });
 
   it('prefers the measured frame height over the summed fallback', () => {
     const { heightOverrides } = buildArrangeUnits(
       [colorCard],
-      new Set(['color']),
+      new Set(['color::color']),
       filters(),
-      new Map([['wrapper:color', { position: { x: 12, y: 34 }, measuredHeight: 999 }]])
+      new Map([['wrapper:color::color', { position: { x: 12, y: 34 }, measuredHeight: 999 }]])
     );
 
-    expect(heightOverrides.get('wrapper:color')).toBe(999);
+    expect(heightOverrides.get('wrapper:color::color')).toBe(999);
   });
 
   it('seeds a wrapper unit from its live frame position', () => {
     const { units } = buildArrangeUnits(
       [colorCard],
-      new Set(['color']),
+      new Set(['color::color']),
       filters(),
-      new Map([['wrapper:color', { position: { x: 12, y: 34 } }]])
+      new Map([['wrapper:color::color', { position: { x: 12, y: 34 } }]])
     );
 
-    expect(units[0]).toMatchObject({ key: 'wrapper:color', title: 'color', x: 12, y: 34 });
+    // The unit title stays the bare path — the collection half of the key is
+    // identity, not a name.
+    expect(units[0]).toMatchObject({ key: 'wrapper:color::color', title: 'color', x: 12, y: 34 });
   });
 });
 
@@ -322,18 +324,18 @@ describe('Arrange Grid over filtered cards', () => {
     });
     const { units, heightOverrides } = buildArrangeUnits(
       [visible, hidden, other],
-      new Set(['w']),
+      new Set(['color::w']),
       visibility,
       new Map()
     );
     const { positions } = arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
 
-    expect(Array.from(positions.keys()).sort()).toEqual(['group:other', 'wrapper:w']);
+    expect(Array.from(positions.keys()).sort()).toEqual(['group:other', 'wrapper:color::w']);
     // The wrapper is first in the column (title 'other' vs 'w'), and the card
     // after it clears the frame's FULL height, hidden member included.
-    const wrapperHeight = heightOverrides.get('wrapper:w')!;
+    const wrapperHeight = heightOverrides.get('wrapper:color::w')!;
     expect(positions.get('group:other')).toEqual({ x: 0, y: 0 });
-    expect(positions.get('wrapper:w')).toEqual({
+    expect(positions.get('wrapper:color::w')).toEqual({
       x: 0,
       y: getGroupHeight(other) + GROUP_GAP_Y,
     });
