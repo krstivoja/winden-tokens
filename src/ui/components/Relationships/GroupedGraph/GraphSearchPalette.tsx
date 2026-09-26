@@ -11,6 +11,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalOverlay, ModalContainer } from '../../Modals/Modal';
 import { Search } from '../../common/Search';
+import { Icon, type IconName } from '../../icons/Icon';
+import { TypeIcon } from '../../Icons';
+import type { VariableType } from '../../../types';
 
 // ── Targets ────────────────────────────────────────────────────────
 
@@ -48,9 +51,31 @@ export interface GraphSearchItem {
    * so the palette can say how many matches it is withholding.
    */
   hidden: boolean;
+  /**
+   * A variable's resolved type, so the row shows the same COLOR/FLOAT/STRING
+   * icon the Types filter does. Absent for every other kind.
+   */
+  variableType?: VariableType;
 }
 
-/** The badge each kind gets, so identical names stay distinguishable. */
+/**
+ * The icon each kind gets. A variable shows its TYPE icon instead — the same
+ * one the Types filter uses, so a row is readable at a glance rather than by
+ * reading a word.
+ *
+ * `folder` for a collection, and the group/ungroup icons for the two kinds of
+ * group: `collapse-all` is already "group with siblings" on a card header, and
+ * a container is the expanded form of the same idea. Both are existing library
+ * icons; a dedicated group glyph would be better and is not mine to draw.
+ */
+const KIND_ICON: Record<GraphSearchTarget['kind'], IconName> = {
+  collection: 'folder',
+  card: 'collapse-all',
+  container: 'expand-all',
+  variable: 'color',
+};
+
+/** Still the accessible name for each row — the icon alone is not a label. */
 const KIND_LABEL: Record<GraphSearchTarget['kind'], string> = {
   collection: 'Collection',
   card: 'Card',
@@ -267,10 +292,17 @@ export function GraphSearchPalette({ isOpen, items, onClose, onActivate }: Graph
                   aria-selected={index === activeIndex}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-base-2 ${index === activeIndex ? 'bg-base-3' : ''}`}
                   onClick={() => activate(item)}
+                  title={`${KIND_LABEL[item.target.kind]} · ${item.label}`}
                 >
-                  <span className="shrink-0 rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase text-text opacity-60">
-                    {KIND_LABEL[item.target.kind]}
+                  <span
+                    className="flex size-4 shrink-0 items-center justify-center text-text opacity-60 [&_svg]:size-4"
+                    aria-hidden="true"
+                  >
+                    {item.variableType
+                      ? <TypeIcon type={item.variableType} />
+                      : <Icon name={KIND_ICON[item.target.kind]} size={16} />}
                   </span>
+                  <span className="sr-only">{KIND_LABEL[item.target.kind]}</span>
                   <span className="truncate text-xs text-text">{item.label}</span>
                   <span className="ml-auto shrink-0 truncate text-[11px] text-text opacity-50">{item.context}</span>
                 </button>

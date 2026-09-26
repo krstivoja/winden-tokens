@@ -1217,6 +1217,13 @@ function GroupedGraphInner() {
           context: `${group.title} · ${collectionName}`,
           target: { kind: 'variable', cardKey: group.key, varName: node.name },
           hidden,
+          // Drives the row's COLOR/FLOAT/STRING icon. A row formatted from a
+          // variable carries its resolved type; fall back to the variable
+          // itself when it does not, and to COLOR only as a last resort so
+          // the row never renders without an icon.
+          variableType: node.resolvedType
+            ?? variablesById.get(node.id ?? '')?.resolvedType
+            ?? 'COLOR',
         });
       });
     });
