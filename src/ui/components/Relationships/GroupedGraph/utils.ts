@@ -11,6 +11,7 @@ import {
   GridLayoutSettings,
   GridLayoutDraft,
   ConnectionRecord,
+  TierPlacement,
 } from './types';
 import {
   HEADER_HEIGHT,
@@ -20,6 +21,8 @@ import {
   GROUP_GAP_Y,
   GRID_MAX_COLUMN_HEIGHT,
   GROUP_WIDTH,
+  TIER_GAP_MULTIPLIER,
+  TIER_LABEL_NODE_PREFIX,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   WRAPPER_HEADER_HEIGHT,
@@ -276,13 +279,23 @@ interface ArrangeGridOptions {
   maxColumnHeight?: number;
 }
 
+/** What Arrange Grid produces: where every unit goes, and where the tier
+ *  captions that span those units go. */
+interface ArrangeGridResult {
+  positions: Map<string, { x: number; y: number }>;
+  /** One entry per non-empty tier, left to right. Empty when nothing was
+   *  arranged. Never contains an entry for a parked (hidden) unit — parking
+   *  happens in the caller, after this returns. */
+  tiers: TierPlacement[];
+}
+
 function arrangeGroupsByConnectedBlocks(
   groups: GroupData[],
   connections: ConnectionRecord[],
   gapX: number,
   gapY: number,
   options: ArrangeGridOptions = {}
-): Map<string, { x: number; y: number }> {
+): ArrangeGridResult {
   const { heightOverrides, depthConnections, maxColumnHeight } = options;
   const columnStep = GROUP_WIDTH + gapX;
   const columnHeightLimit = typeof maxColumnHeight === 'number' && maxColumnHeight > 0
@@ -535,34 +548,45 @@ function arrangeGroupsByConnectedBlocks(
     laneChunks.set(lane, chunks);
   });
 
-  // ── Pass 3: lane → column index ──────────────────────────────────
+  // ── Pass 3: lane → left edge ─────────────────────────────────────
   // Lanes with nothing visible in them collapse: the remaining lanes renumber
   // contiguously in their original order, so hiding a whole tier leaves no
   // horizontal void. A lane that wrapped consumes as many columns as it has
   // sub-columns, pushing every later tier right by that much.
+  //
+  // Sub-columns within one lane are spaced by `gapX`; the step from one LANE
+  // to the next uses the wider `tierGap` (see TIER_GAP_MULTIPLIER). Without
+  // that difference a wrapped tier is pixel-for-pixel identical to several
+  // real tiers, which is exactly how a 29-card tier-1 palette came to read as
+  // four dependency levels.
   const usedLanes = Array.from(new Set([...chainLanes, ...sortedLanes])).sort((a, b) => a - b);
-  const laneStartColumn = new Map<number, number>();
-  let nextColumn = 0;
-  usedLanes.forEach(lane => {
-    laneStartColumn.set(lane, nextColumn);
-    nextColumn += Math.max(laneChunks.get(lane)?.length ?? 0, 1);
+  const tierGap = gapX * TIER_GAP_MULTIPLIER;
+  const laneStartX = new Map<number, number>();
+  const tiers: TierPlacement[] = [];
+  let nextX = 0;
+  usedLanes.forEach((lane, index) => {
+    const columns = Math.max(laneChunks.get(lane)?.length ?? 0, 1);
+    const width = columns * GROUP_WIDTH + (columns - 1) * gapX;
+    laneStartX.set(lane, nextX);
+    tiers.push({ tier: index + 1, x: nextX, width, columns });
+    nextX += width + tierGap;
   });
 
   // ── Pass 4: emit positions ───────────────────────────────────────
   chainPlacements.forEach(placement => {
     positions.set(placement.key, {
-      x: (laneStartColumn.get(placement.lane) ?? 0) * columnStep,
+      x: laneStartX.get(placement.lane) ?? 0,
       y: placement.y,
     });
   });
 
   sortedLanes.forEach(lane => {
-    const startColumn = laneStartColumn.get(lane) ?? 0;
+    const startX = laneStartX.get(lane) ?? 0;
     const startY = laneBottoms.get(lane) ?? 0;
     let laneBottom = startY;
 
     (laneChunks.get(lane) || []).forEach((chunk, subColumn) => {
-      const x = (startColumn + subColumn) * columnStep;
+      const x = startX + subColumn * columnStep;
       let nextColumnY = startY;
       chunk.forEach(key => {
         const group = groupMap.get(key);
@@ -576,7 +600,12 @@ function arrangeGroupsByConnectedBlocks(
     laneBottoms.set(lane, laneBottom);
   });
 
-  return positions;
+  return { positions, tiers };
+}
+
+/** Whether an xyflow node id belongs to a tier caption rather than a card. */
+function isTierLabelNodeId(id: string): boolean {
+  return id.startsWith(TIER_LABEL_NODE_PREFIX);
 }
 
 // ── Arrange units ──────────────────────────────────────────────────
@@ -824,7 +853,7 @@ function getCollectionCardKey(collectionId: string): string {
   return `collection:${collectionId}`;
 }
 
-export type { CardVisibilityFilters, ArrangeGridOptions };
+export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult };
 
 export {
   buildEmptyCollectionCards,
@@ -847,4 +876,5 @@ export {
   createPaletteNode,
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
+  isTierLabelNodeId,
 };

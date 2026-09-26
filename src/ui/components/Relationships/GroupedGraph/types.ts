@@ -93,6 +93,29 @@ export interface GridLayoutDraft {
   maxColumnHeight: string;
 }
 
+// ── Tier captions ──────────────────────────────────────────────────
+
+/**
+ * One "Tier N" caption Arrange Grid emits, spanning every sub-column that
+ * tier wrapped into. A plain object (not an interface) so it satisfies
+ * xyflow's `Record<string, unknown>` node-data constraint directly, and the
+ * very same object can be handed to the node as `data` — the layout effect
+ * must not mint a fresh identity for it on every pass.
+ */
+export type TierPlacement = {
+  /** 1-based, as displayed. Empty tiers collapse, so this is the tier's
+   *  position among the tiers that actually hold something. */
+  tier: number;
+  /** Left edge — the x of the tier's first sub-column. */
+  x: number;
+  /** Width across all of the tier's sub-columns and the gaps between them. */
+  width: number;
+  /** How many sub-columns the tier wrapped into (1 when it did not wrap). */
+  columns: number;
+};
+
+export type TierLabelNodeData = TierPlacement;
+
 // ── Node Data Type ─────────────────────────────────────────────────
 
 export type GroupNodeData = {

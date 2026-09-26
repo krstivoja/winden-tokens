@@ -823,6 +823,8 @@ Colors, primary, COLOR, #FF0000
 - Component selections (component, component set, instance) show one collapsible section per visible layer (root + descendants, indented by depth)
 - Component sections list only bound/styled rows and rows with a real value; "Add property" (per section) reveals a hidden bindable row for the session
 - Rows are pure-helper driven: `GroupedGraph/propertyLayers.ts` (flatten, visibility, card height); handle ids `prop:<layerIndex>:<entryIndex>::in|out`
+- Arrange Grid separates dependency tiers by `gapX * TIER_GAP_MULTIPLIER`, and a tier's own wrapped sub-columns by plain `gapX`, so a wrapped tier no longer reads as several tiers
+- Tier captions (`GroupedGraph/TierLabelNode.tsx`) sit above each tier, spanning its sub-columns; inert nodes (`tier-label:` ids) that never enter `savedPositions`, arrange or `isCardHidden`
 
 ---
 

@@ -274,7 +274,7 @@ describe('Arrange Grid over filtered cards', () => {
   // Same composition handleArrangeGrid performs: fold into units, then pack.
   const arrange = (groups: GroupData[], visibility: CardVisibilityFilters) => {
     const { units, heightOverrides } = buildArrangeUnits(groups, new Set(), visibility, new Map());
-    return arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
+    return arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides }).positions;
   };
 
   const three = [
@@ -326,7 +326,7 @@ describe('Arrange Grid over filtered cards', () => {
       visibility,
       new Map()
     );
-    const positions = arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
+    const { positions } = arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
 
     expect(Array.from(positions.keys()).sort()).toEqual(['group:other', 'wrapper:w']);
     // The wrapper is first in the column (title 'other' vs 'w'), and the card
@@ -346,7 +346,7 @@ describe('Arrange Grid over filtered cards', () => {
   it('keeps the arranged grid clear of cards parked for being hidden', () => {
     const visibility = { ...threeFilters, selectedCollections: new Set(['color']) };
     const { units, hiddenUnits, heightOverrides } = buildArrangeUnits(three, new Set(), visibility, new Map());
-    const positions = arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
+    const { positions } = arrangeGroupsByConnectedBlocks(units, [], GROUP_GAP_X, GROUP_GAP_Y, { heightOverrides });
 
     // Mirrors the parking pass in handleArrangeGrid.
     const parkX = Math.max(...Array.from(positions.values(), p => p.x)) + GROUP_WIDTH + GROUP_GAP_X;

@@ -45,6 +45,7 @@ import {
   ConnectionFlags,
   GridLayoutSettings,
   GridLayoutDraft,
+  TierPlacement,
 } from './GroupedGraph/types';
 import {
   GROUP_WIDTH,
@@ -60,9 +61,13 @@ import {
   IDLE_HANDLE_FILL_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   SHADER_GROUP_HEADER_FILL,
+  TIER_LABEL_HEIGHT,
+  TIER_LABEL_GAP_Y,
+  TIER_LABEL_NODE_PREFIX,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
+import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
@@ -86,6 +91,7 @@ import {
   buildEmptyCollectionCards,
   isCardHidden,
   buildArrangeUnits,
+  isTierLabelNodeId,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 
@@ -95,7 +101,12 @@ const nodeTypes: NodeTypes = {
   groupNode: GroupNodeComponent,
   groupWrapper: GroupWrapperComponent,
   propertyNode: PropertyNodeComponent,
+  tierLabel: TierLabelNode,
 };
+
+// Every arranged tier's cards start at y = 0, so the captions form one row
+// just above that.
+const TIER_LABEL_Y = -(TIER_LABEL_HEIGHT + TIER_LABEL_GAP_Y);
 
 const PROPERTY_COLUMN_GAP = 220;
 
@@ -105,6 +116,18 @@ const PROPERTY_COLUMN_GAP = 220;
 // bounds, and edges whose target handle can't be located are silently dropped
 // (the row's handle still shows, but no connecting line is drawn).
 const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
+
+/** Tier captions read back out of client storage, which is untyped. */
+const normalizeTierLabels = (value: unknown): TierPlacement[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is TierPlacement => (
+    !!entry && typeof entry === 'object'
+    && typeof (entry as TierPlacement).tier === 'number'
+    && typeof (entry as TierPlacement).x === 'number'
+    && typeof (entry as TierPlacement).width === 'number'
+    && typeof (entry as TierPlacement).columns === 'number'
+  ));
+};
 
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
@@ -141,6 +164,12 @@ function GroupedGraphInner() {
   const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>(
     () => toGridLayoutDraft(normalizeGridLayoutSettings({}))
   );
+  // Tier captions from the last Arrange Grid run. Pure wayfinding chrome:
+  // they carry no graph meaning, never reach `savedPositions`, and are
+  // replaced only by Arrange, its undo, or hydration. The element objects are
+  // handed to the caption nodes as `data` unchanged, so the layout effect
+  // does not mint a fresh data identity on every pass.
+  const [tierLabels, setTierLabels] = useState<TierPlacement[]>([]);
   const [positionsHydrated, setPositionsHydrated] = useState(false);
   // The layout effect seeds node positions from `savedPositions`, but that
   // state is rewritten by the 300ms debounce after every drag — keeping it in
@@ -168,6 +197,8 @@ function GroupedGraphInner() {
   // overwrote, so a single click can put everything back. Cleared after use
   // or once superseded by a fresh arrange.
   const lastArrangeUndoRef = useRef<Record<string, { x: number; y: number }> | null>(null);
+  // The captions that were on screen before that arrange, restored with it.
+  const lastArrangeTierLabelsRef = useRef<TierPlacement[]>([]);
   const [hasArrangeUndo, setHasArrangeUndo] = useState(false);
 
   // Get filter state from context
@@ -302,6 +333,24 @@ function GroupedGraphInner() {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
         setGroupedPaths(new Set(Array.isArray(msg.value) ? msg.value : []));
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, [variableType]);
+
+  // Load the tier captions the last arrange produced, so a reloaded plugin
+  // shows the same captions over the same (also persisted) positions.
+  useEffect(() => {
+    const storageKey = `graph-tier-labels`;
+    setTierLabels([]);
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setTierLabels(normalizeTierLabels(msg.value));
       }
     };
 
@@ -1076,6 +1125,32 @@ function GroupedGraphInner() {
 
     const newNodes: Node[] = [];
 
+    // Tier captions go in FIRST, so xyflow (which stacks in array order)
+    // draws them beneath every card — a caption is chrome and must never sit
+    // over a card that overlaps it. Their position in the array is otherwise
+    // free: a caption has no `parentId` and is no node's parent, so it cannot
+    // break the "nested node must follow its parentId" rule, and prepending
+    // leaves the relative order of every real node untouched.
+    tierLabels.forEach(label => {
+      newNodes.push({
+        id: `${TIER_LABEL_NODE_PREFIX}${label.tier}`,
+        type: 'tierLabel',
+        position: { x: label.x, y: TIER_LABEL_Y },
+        // `pointerEvents: none` on the node wrapper itself, so panning and
+        // rubber-band selection pass straight through the caption row.
+        style: { width: label.width, height: TIER_LABEL_HEIGHT, pointerEvents: 'none' },
+        // Inert in every way xyflow understands: no dragging, no selection,
+        // no connecting, no keyboard focus, no delete.
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        focusable: false,
+        deletable: false,
+        // The state object itself — see `tierLabels`.
+        data: label,
+      });
+    });
+
     // Managed groups (shader/steps/source) stay top-level and absolute.
     managedGroups.forEach(group => {
       const position = savedPositions[group.key] || { x: group.initialX, y: group.initialY };
@@ -1263,6 +1338,7 @@ function GroupedGraphInner() {
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
+      tierLabels,
       cardVisibilityFilters, variablesById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
@@ -1335,6 +1411,10 @@ function GroupedGraphInner() {
         const currentNodes = reactFlowInstance.getNodes();
         const positionsObj: Record<string, { x: number; y: number }> = {};
         currentNodes.forEach(n => {
+          // Tier captions are not part of the graph and must never enter the
+          // persisted record: on the next hydration they would come back as
+          // phantom cards.
+          if (isTierLabelNodeId(n.id)) return;
           // Top-level nodes save their absolute position as-is. Nested
           // cards/wrappers are normally auto-stacked inside their parent each
           // render, but a manual drag is remembered under a `rel:` key (same
@@ -1451,7 +1531,11 @@ function GroupedGraphInner() {
       visibleConnections.push(remapped);
     });
 
-    const newPositions = arrangeGroupsByConnectedBlocks(
+    // `tiers` describes the caption row: one entry per non-empty tier,
+    // spanning however many sub-columns that tier wrapped into. It is taken
+    // BEFORE the hidden units are parked below, so a parked column never gets
+    // a caption of its own.
+    const { positions: newPositions, tiers } = arrangeGroupsByConnectedBlocks(
       arrangeUnits, visibleConnections, settings.gapX, settings.gapY,
       {
         heightOverrides,
@@ -1483,9 +1567,13 @@ function GroupedGraphInner() {
     const previousPositions: Record<string, { x: number; y: number }> = {};
     currentNodes.forEach(n => {
       if (n.parentId) return;
+      // Captions are chrome, not positions — keeping them out here keeps them
+      // out of `savedPositions` when the undo writes this record back.
+      if (isTierLabelNodeId(n.id)) return;
       previousPositions[n.id] = { x: n.position.x, y: n.position.y };
     });
     lastArrangeUndoRef.current = previousPositions;
+    lastArrangeTierLabelsRef.current = tierLabels;
     setHasArrangeUndo(true);
 
     setNodes(prevNodes =>
@@ -1504,11 +1592,14 @@ function GroupedGraphInner() {
     setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
 
+    setTierLabels(tiers);
+    post({ type: 'set-client-storage', key: `graph-tier-labels`, value: tiers });
+
     // Deferred so the new positions are committed before we measure for fit.
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;
@@ -1525,7 +1616,12 @@ function GroupedGraphInner() {
     setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: previousPositions });
 
+    const previousTierLabels = lastArrangeTierLabelsRef.current;
+    setTierLabels(previousTierLabels);
+    post({ type: 'set-client-storage', key: `graph-tier-labels`, value: previousTierLabels });
+
     lastArrangeUndoRef.current = null;
+    lastArrangeTierLabelsRef.current = [];
     setHasArrangeUndo(false);
   }, [setNodes]);
 
