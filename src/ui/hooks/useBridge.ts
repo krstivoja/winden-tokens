@@ -61,6 +61,10 @@ export const BROWSER_SUPPRESSED_MESSAGES: ReadonlySet<string> = new Set([
   'resize',
   'ui-ready',
   'get-history-state',
+  // `cancel` makes the sandbox call figma.closePlugin(). Nothing in the UI
+  // sends it today, but a browser tab must never be able to close the user's
+  // plugin window — that would also kill the bridge the tab depends on.
+  'cancel',
 ]);
 
 /** True for a message a browser tab must not put on the relay (see above). */

@@ -41,7 +41,10 @@ export interface GroupData {
   y: number;
   initialX: number;
   initialY: number;
-  kind: 'standard' | 'source' | 'shader' | 'shades';
+  // 'collection' is a placeholder card for a variable collection that holds no
+  // variables at all — it has no sourceGroupName and no rows, and exists only
+  // so the collection still has a visible "+" to create its first variable.
+  kind: 'standard' | 'source' | 'shader' | 'shades' | 'collection';
   sourceGroupName?: string;
   headerFill: string;
   collectionId: string;

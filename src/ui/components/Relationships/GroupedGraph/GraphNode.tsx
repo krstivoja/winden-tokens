@@ -16,12 +16,14 @@ import {
   IDLE_HANDLE_BORDER_COLOR,
 } from './constants';
 
-// Helper function to calculate group height
+// Helper function to calculate group height.
+// Mirrors getGroupHeight() in ./utils, including its one-row floor for the
+// empty collection placeholder — keep the two in step.
 function getGroupHeight(variableCount: number): number {
   const HEADER_HEIGHT = 36;
   const ROW_HEIGHT = 32;
   const GROUP_PADDING = 8;
-  return HEADER_HEIGHT + variableCount * ROW_HEIGHT + GROUP_PADDING * 2;
+  return HEADER_HEIGHT + Math.max(variableCount, 1) * ROW_HEIGHT + GROUP_PADDING * 2;
 }
 
 function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
@@ -49,6 +51,11 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
   const height = getGroupHeight(group.variables.length);
   const canManageGroupVariables = group.kind === 'standard';
+  // Placeholder card for a collection that has no variables yet: title + "+"
+  // only. Every dropdown action (highlight path, rename, duplicate, edit as
+  // text, delete) and the level-up button operate on a group path or on a set
+  // of variable ids, and this card has neither — so none are offered.
+  const isEmptyCollectionCard = group.kind === 'collection';
   // True when the row-level highlight seed lives in THIS card — its sibling
   // rows get a faded highlight marker to show group membership.
   const seedInCard = !!highlightedVarSeed && group.variables.some(v => v.name === highlightedVarSeed);
@@ -69,6 +76,16 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
         >
           {group.title}
         </span>
+        {isEmptyCollectionCard && (
+          <IconButton
+            icon={<Icon name="plus" size={20} />}
+            size="sm"
+            variant="ghost"
+            aria-label={`Add variable to ${group.title}`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
+          />
+        )}
         {canManageGroupVariables && (
           <div className="flex gap-1 items-center">
             {group.canGroup && group.sourceGroupName && (
@@ -126,6 +143,11 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
       {/* Variable rows */}
       <div className="bg-base py-2">
+        {isEmptyCollectionCard && group.variables.length === 0 && (
+          <div className="flex items-center justify-center h-8 px-2 text-xs text-text-muted select-none">
+            No variables yet
+          </div>
+        )}
         {group.variables.map((node) => {
           const flags = connectedVars.get(node.name);
           const hasInput = flags?.hasInput || false;

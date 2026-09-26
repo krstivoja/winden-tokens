@@ -18,6 +18,7 @@ import {
   GROUP_GAP_Y,
   GROUP_WIDTH,
   GENERATED_CONNECTION_COLOR,
+  STANDARD_GROUP_HEADER_FILL,
 } from './constants';
 
 // ── Utility functions ──────────────────────────────────────────────
@@ -40,7 +41,10 @@ function normalizePathSegment(value: string): string {
 }
 
 function getGroupHeight(group: GroupData): number {
-  return HEADER_HEIGHT + group.variables.length * ROW_HEIGHT + GROUP_PADDING * 2;
+  // An empty collection placeholder has no rows but still reserves one row's
+  // worth of body, so its "No variables yet" line has somewhere to sit.
+  const rows = Math.max(group.variables.length, 1);
+  return HEADER_HEIGHT + rows * ROW_HEIGHT + GROUP_PADDING * 2;
 }
 
 function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
@@ -471,7 +475,58 @@ function arrangeGroupsByConnectedBlocks(
   return positions;
 }
 
+/**
+ * Placeholder cards for collections that hold no variables at all.
+ *
+ * Every other card is derived from variables, so a brand-new, still-empty
+ * collection renders nothing on the canvas and the user has no way to create
+ * its first variable. One minimal card per empty collection fixes that; the
+ * card is derived from the same variable list, so it stops being produced the
+ * moment the collection has a variable and the real group cards take over.
+ *
+ * Deliberately keyed on "has zero variables in total" rather than "has no
+ * visible variables": a collection whose variables are merely hidden by the
+ * type/search filters already has real cards, and a placeholder beside them
+ * would read as a duplicate.
+ *
+ * Cards are stacked downwards in column 0 starting at `startY`, ordered by
+ * collection name so the layout is stable across reloads.
+ */
+function buildEmptyCollectionCards(
+  collections: CollectionData[],
+  variables: VariableData[],
+  startY: number
+): GroupData[] {
+  const collectionsWithVariables = new Set(variables.map(variable => variable.collectionId));
+  const empty = collections
+    .filter(collection => !collectionsWithVariables.has(collection.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  let y = startY;
+  return empty.map(collection => {
+    const card: GroupData = {
+      key: getCollectionCardKey(collection.id),
+      title: collection.name,
+      variables: [],
+      x: 0, y: 0, initialX: 0, initialY: y,
+      kind: 'collection',
+      headerFill: STANDARD_GROUP_HEADER_FILL,
+      collectionId: collection.id,
+    };
+    y += getGroupHeight(card) + GROUP_GAP_Y;
+    return card;
+  });
+}
+
+// Own key namespace, so an empty collection's card can never collide with a
+// `group:` / `source:` / `shader:` / `shades:` / `ext-group:` card.
+function getCollectionCardKey(collectionId: string): string {
+  return `collection:${collectionId}`;
+}
+
 export {
+  buildEmptyCollectionCards,
+  getCollectionCardKey,
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,

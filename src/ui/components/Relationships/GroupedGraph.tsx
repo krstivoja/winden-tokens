@@ -85,6 +85,7 @@ import {
   createPaletteNode,
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
+  buildEmptyCollectionCards,
 } from './GroupedGraph/utils';
 
 // ── Node & Edge type registrations ─────────────────────────────────
@@ -381,10 +382,14 @@ function GroupedGraphInner() {
   }, [isColorType, openShadesModal, openStepsModal, selectedModeId]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
-    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+    // An empty collection's placeholder card has no group path, so its
+    // variable is created at the collection root — no name prefix.
+    const isCollectionCard = group.kind === 'collection';
+    if (!isCollectionCard && (group.kind !== 'standard' || !group.sourceGroupName)) return;
+    const namePrefix = isCollectionCard ? '' : `${group.sourceGroupName}/`;
 
     openAddVariableModal({
-      title: `New Variable in ${group.sourceGroupName}`,
+      title: `New Variable in ${isCollectionCard ? group.title : group.sourceGroupName}`,
       confirmText: 'Add',
       onConfirm: (name, type) => {
         const variableName = normalizePathSegment(name);
@@ -392,7 +397,7 @@ function GroupedGraphInner() {
         post({
           type: 'create-variable',
           collectionId: group.collectionId,
-          name: `${group.sourceGroupName}/${variableName}`,
+          name: `${namePrefix}${variableName}`,
           varType: type,
           value: getDefaultVariableValue(type),
         });
@@ -514,6 +519,9 @@ function GroupedGraphInner() {
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
+    // An empty collection placeholder has no variables and therefore no chain
+    // to highlight — clicking it would just dim the whole graph.
+    if ((node.data as { group?: GroupData } | undefined)?.group?.kind === 'collection') return;
     setHighlightTarget(prev => (
       prev?.groupKey === node.id && prev.varName === null
         ? null
@@ -783,6 +791,15 @@ function GroupedGraphInner() {
       primitiveY += getGroupHeight(groupData) + GROUP_GAP_Y;
     });
 
+    // Collections with no variables at all get a minimal placeholder card so
+    // the "+" to create their first variable still exists somewhere. Derived
+    // from `typeVars`, so it stops being emitted as soon as the collection has
+    // a variable and its real group cards appear instead.
+    buildEmptyCollectionCards(collections, typeVars, primitiveY).forEach(card => {
+      groupsArray.push(card);
+      primitiveY += getGroupHeight(card) + GROUP_GAP_Y;
+    });
+
     // Semantic groups (with references) - we'll set initialX after building connections
     // so we can compute depth. For now, place them temporarily.
     const semanticGroups: GroupData[] = [];
@@ -995,6 +1012,10 @@ function GroupedGraphInner() {
     // Determine whether a card is hidden by the active filters.
     const isCardHidden = (group: GroupData): boolean => {
       if (!localSelectedCollections.has(group.collectionId)) return true;
+      // An empty collection's card has no variables to match against the type
+      // or group filters — the collection filter above is the only one that
+      // can meaningfully apply to it.
+      if (group.kind === 'collection') return false;
 
       const hasMatchingType = group.variables.some(v => {
         if (v.isVirtual) return true;
@@ -1067,8 +1088,12 @@ function GroupedGraphInner() {
       };
     };
 
-    const standardCards = groupsData.filter(g => g.kind === 'standard');
-    const managedGroups = groupsData.filter(g => g.kind !== 'standard');
+    // Empty-collection placeholders lay out alongside the standard cards
+    // (buildWrapperLayout treats their empty path as a top-level root), so
+    // they share the same column packing instead of floating absolutely.
+    const isStandardLayoutCard = (g: GroupData) => g.kind === 'standard' || g.kind === 'collection';
+    const standardCards = groupsData.filter(isStandardLayoutCard);
+    const managedGroups = groupsData.filter(g => !isStandardLayoutCard(g));
 
     const newNodes: Node[] = [];
 

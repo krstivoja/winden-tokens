@@ -39,6 +39,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   // Track if filters have been initialized
   const hasInitialized = React.useRef(false);
   const knownGroupKeysRef = React.useRef<Set<string>>(new Set());
+  const knownCollectionIdsRef = React.useRef<Set<string>>(new Set());
 
   // Initialize filters when data is first loaded
   useEffect(() => {
@@ -51,6 +52,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 
     // Initialize selectedCollectionIds with all collections
     collectionFilter.setItems(new Set(collections.map(c => c.id)));
+    knownCollectionIdsRef.current = new Set(collections.map(c => c.id));
 
     // Initialize selectedGroups with all groups from variables
     const groups = new Set<string>();
@@ -72,6 +74,29 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collections, variables]);
+
+  // Auto-select any collection created after the initial load. Without this a
+  // brand-new collection stays unchecked in the sidebar, which in the
+  // Relationships view means its (empty) card never renders and there is no
+  // way to add its first variable.
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      return;
+    }
+
+    const currentCollectionIds = new Set(collections.map(c => c.id));
+    const newIds = Array.from(currentCollectionIds).filter(id => !knownCollectionIdsRef.current.has(id));
+    if (newIds.length > 0) {
+      collectionFilter.setItems(prev => {
+        const next = new Set(prev);
+        newIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+
+    knownCollectionIdsRef.current = currentCollectionIds;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collections]);
 
   // Auto-select any group created after the initial load (e.g. via "New Group")
   // so it shows up in the Relationships view without an extra manual click.
