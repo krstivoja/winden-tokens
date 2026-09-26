@@ -24,7 +24,7 @@ function getGroupHeight(variableCount: number): number {
   return HEADER_HEIGHT + variableCount * ROW_HEIGHT + GROUP_PADDING * 2;
 }
 
-export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
+function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
   const {
     group,
     connectedVars,
@@ -238,3 +238,8 @@ export function GroupNodeComponent({ data }: NodeProps<Node<GroupNodeData>>) {
     </div>
   );
 }
+
+// React Flow re-renders every custom node on each store update, and a drag
+// emits one per frame. Node `data` identity is rebuilt only by the layout
+// effect, so memoizing here skips every card that is not itself moving.
+export const GroupNodeComponent = React.memo(GroupNodeComponentInner);

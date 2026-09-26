@@ -157,7 +157,10 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     return { shown: filteredVariables.length, total };
   }, [variables, selectedCollectionId, filteredVariables.length]);
 
-  const value: FilterContextValue = {
+  // Memoized so a re-render of this provider (it consumes DataContext) does
+  // not push a new value to every consumer — the Relationships graph subtree
+  // in particular.
+  const value = useMemo<FilterContextValue>(() => ({
     selectedModeId,
     setSelectedModeId,
     selectedVariableTypes: typeFilter.items,
@@ -173,7 +176,23 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     setSearchQuery,
     filteredVariables,
     getFilteredCount,
-  };
+  }), [
+    selectedModeId,
+    setSelectedModeId,
+    typeFilter.items,
+    toggleVariableType,
+    toggleAllVariableTypes,
+    collectionFilter.items,
+    toggleCollection,
+    toggleAllCollections,
+    groupFilter.items,
+    toggleSelectedGroup,
+    toggleAllGroups,
+    searchQuery,
+    setSearchQuery,
+    filteredVariables,
+    getFilteredCount,
+  ]);
 
   return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 }

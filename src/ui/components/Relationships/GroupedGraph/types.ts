@@ -1,7 +1,7 @@
 // Types for GroupedGraph component
 
 import type { Node, Edge } from '@xyflow/react';
-import { CollectionData, ShadeGroupData, VariableData } from '../../../types';
+import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../../types';
 
 // ── Main Component Props ───────────────────────────────────────────
 
@@ -140,7 +140,14 @@ export type CustomEdgeData = {
   // Off-chain edge touching the highlighted row's own card — drawn in the
   // highlight color but faded, to show group membership vs. selection.
   isGroupSibling?: boolean;
-  onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
+  // Token-to-token edges: reset the receiving variable to a literal value.
+  onDisconnect?: (receiverVarName: string, resolvedValue: string) => void;
+  // Token-to-property edges: unbind a property on the selected Figma node.
+  // Held as plain values + one stable callback rather than a per-edge closure,
+  // so the edge's `data` keeps a stable shape across layout passes.
+  onUnbindProperty?: (nodeId: string, target: InspectorBindingTarget) => void;
+  unbindNodeId?: string;
+  unbindTarget?: InspectorBindingTarget;
 };
 
 // ── React Flow Types ───────────────────────────────────────────────

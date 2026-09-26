@@ -7,7 +7,7 @@ import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../common/Button/IconButton/IconButton';
 import { WrapperNodeData } from './types';
 
-export function GroupWrapperComponent({ data }: NodeProps<Node<WrapperNodeData>>) {
+function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) {
   return (
     <div className="rf-group-wrapper w-full h-full rounded-md border border-dashed border-text/30 bg-text/[0.03]">
       <div className="group-header flex items-center justify-between px-3 cursor-move select-none h-9 rounded-t-md bg-base-2/60">
@@ -43,3 +43,7 @@ export function GroupWrapperComponent({ data }: NodeProps<Node<WrapperNodeData>>
     </div>
   );
 }
+
+// See GraphNode.tsx — memoized so store updates during a drag don't re-render
+// every wrapper frame.
+export const GroupWrapperComponent = React.memo(GroupWrapperComponentInner);

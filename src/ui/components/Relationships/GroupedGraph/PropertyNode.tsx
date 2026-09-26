@@ -215,7 +215,7 @@ function AnchoredHandles({ sections, anchorLayerIndex }: {
   );
 }
 
-export function PropertyNodeComponent({ id, data }: NodeProps<Node<PropertyNodeData>>) {
+function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeData>>) {
   const { nodeName, nodeType, layers, truncated } = data;
   const isComponent = isComponentType(nodeType);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -345,3 +345,8 @@ export function PropertyNodeComponent({ id, data }: NodeProps<Node<PropertyNodeD
     </div>
   );
 }
+
+// See GraphNode.tsx. The card's session state (revealedKeys, collapsedLayerIds)
+// and its own updateNodeInternals effect live inside the memoized component, so
+// reveal/collapse still repaint normally.
+export const PropertyNodeComponent = React.memo(PropertyNodeComponentInner);

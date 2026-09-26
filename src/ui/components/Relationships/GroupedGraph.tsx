@@ -22,7 +22,7 @@ import type {
   OnConnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CollectionData, ShadeGroupData, VariableData } from '../../types';
+import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
 import { getCollectionGroupKey, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
@@ -156,6 +156,19 @@ function GroupedGraphInner() {
     gapY: String(GROUP_GAP_Y),
   });
   const [positionsHydrated, setPositionsHydrated] = useState(false);
+  // The layout effect seeds node positions from `savedPositions`, but that
+  // state is rewritten by the 300ms debounce after every drag — keeping it in
+  // the effect's deps made every drag-end rebuild every node and edge. The
+  // effect reads it through this ref instead, and `savedPositionsRevision` is
+  // bumped only by the paths that genuinely need a re-layout from stored
+  // positions: hydration from client storage, Arrange Grid, and its undo.
+  const savedPositionsRef = useRef(savedPositions);
+  const [savedPositionsRevision, setSavedPositionsRevision] = useState(0);
+  // Declared above the layout effect on purpose: effects run in declaration
+  // order, so the ref is already current when the layout effect reads it.
+  useEffect(() => {
+    savedPositionsRef.current = savedPositions;
+  }, [savedPositions]);
   // Highlight target: a group card (varName null = whole card's chain) or a
   // single variable row inside it (varName set = only that row's chain).
   const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
@@ -258,6 +271,10 @@ function GroupedGraphInner() {
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
         setSavedPositions(msg.value || {});
         setPositionsHydrated(true);
+        // Covers a storage response that lands after the 100ms fallback has
+        // already flipped positionsHydrated — without this the restored
+        // positions would never reach the layout effect.
+        setSavedPositionsRevision(rev => rev + 1);
       }
     };
 
@@ -469,6 +486,13 @@ function GroupedGraphInner() {
       : selectedModeId;
     post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId });
   }, [collections, selectedModeId, variablesById]);
+
+  // Unbind a property on the selected Figma node. Stable identity so the
+  // selection card's edges can carry plain values (unbindNodeId/unbindTarget)
+  // instead of a fresh closure per edge per layout pass.
+  const handleUnbindProperty = useCallback((nodeId: string, target: InspectorBindingTarget) => {
+    post({ type: 'unbind-node-property', nodeId, target });
+  }, []);
 
   // Highlight the full connected chain of a group (toggle off if re-selected)
   const handleHighlightPath = useCallback((group: GroupData) => {
@@ -863,6 +887,8 @@ function GroupedGraphInner() {
   // Note: Filtering applied here to hide nodes/edges without removing connections
   useEffect(() => {
     if (!positionsHydrated) return;
+    // Read through the ref: see savedPositionsRef above.
+    const savedPositions = savedPositionsRef.current;
 
     // Resolve the highlighted lineage of the selected card. References are
     // per-variable (row), so we trace the chain at the VARIABLE level using
@@ -1222,9 +1248,9 @@ function GroupedGraphInner() {
             receiverName: entry.property,
             receiverShortName: entry.property,
             resolvedValue: '',
-            onDisconnect: () => {
-              post({ type: 'unbind-node-property', nodeId: layerNodeId, target: bindingTarget });
-            },
+            onUnbindProperty: handleUnbindProperty,
+            unbindNodeId: layerNodeId,
+            unbindTarget: bindingTarget,
           },
         });
       }));
@@ -1232,24 +1258,65 @@ function GroupedGraphInner() {
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
+  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
       localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
-      handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
+      handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
       handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
+
+  // Everything that can add, remove or move a handle *under an existing node
+  // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
+  // output handle is suppressed for connection-disabled rows), and the
+  // selection card's bindable rows. A drag, a highlight click or a filter
+  // toggle changes none of it.
+  const handleSignature = useMemo(() => {
+    const cards = groupsData
+      .map(g => `${g.key}[${g.variables
+        .map(v => `${v.name}|${v.connectionsDisabled ? 1 : 0}|${v.virtualType || ''}`)
+        .join(',')}]`)
+      .join(';');
+    const selection = selectedNode
+      ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
+        .map(layer => `${layer.layerIndex}:${layer.entries
+          .map(e => `${e.kind}|${e.bindingTarget ? 1 : 0}|${e.token?.name || ''}`)
+          .join(',')}`)
+        .join(';')}]`
+      : '';
+    return `${cards}#${selection}`;
+  }, [groupsData, selectedNode, selectedLayers]);
+
+  const lastHandleSignatureRef = useRef<string | null>(null);
+  const pendingMeasureNodesRef = useRef<Node[] | null>(null);
 
   // The selection card now carries a per-element id (see getSelectionNodeId),
   // so switching elements mounts a fresh node with correctly measured handles.
   // We still refresh internals here to cover in-place changes — e.g. rebinding a
   // property on the *same* selected element adds/removes handles under one id.
+  //
+  // `nodes` stays in the deps only so the re-measure runs against the array the
+  // layout effect just committed; the signature guard turns every other `nodes`
+  // identity change (a drag emits one per frame) into an early return, instead
+  // of scheduling a re-measure of every node id in the graph.
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (lastHandleSignatureRef.current !== handleSignature) {
+      lastHandleSignatureRef.current = handleSignature;
+      // The layout effect's setNodes lands in a *later* commit; remember the
+      // pre-rebuild array so we measure the rebuilt one, not this one.
+      pendingMeasureNodesRef.current = nodes;
+    }
+    if (pendingMeasureNodesRef.current === null) return;
+    if (nodes.length === 0 || nodes === pendingMeasureNodesRef.current) return;
+    const ids = nodes.map(n => n.id);
     const raf = requestAnimationFrame(() => {
-      updateNodeInternals(nodes.map(n => n.id));
+      // Cleared only once the measure actually runs: if another `nodes` change
+      // cancels this frame first, the request is still pending and the next
+      // run re-schedules it against the newer array.
+      pendingMeasureNodesRef.current = null;
+      updateNodeInternals(ids);
     });
     return () => cancelAnimationFrame(raf);
-  }, [nodes, updateNodeInternals]);
+  }, [nodes, handleSignature, updateNodeInternals]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1437,6 +1504,9 @@ function GroupedGraphInner() {
     const positionsObj: Record<string, { x: number; y: number }> = {};
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
     setSavedPositions(positionsObj);
+    // Arrange also drops the `rel:` overrides of manually moved nested cards,
+    // so the graph must be re-laid out from the new record.
+    setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
 
     // Deferred so the new positions are committed before we measure for fit.
@@ -1457,6 +1527,7 @@ function GroupedGraphInner() {
       })
     );
     setSavedPositions(previousPositions);
+    setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: previousPositions });
 
     lastArrangeUndoRef.current = null;
