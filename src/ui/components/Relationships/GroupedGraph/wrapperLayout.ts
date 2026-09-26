@@ -42,11 +42,31 @@ interface Unit {
   rel: { x: number; y: number };
 }
 
-// Deepest grouped path that is a proper ancestor of `path` (its wrapper), or null.
-function deepestGroupedAncestor(path: string, grouped: Set<string>): string | null {
+/**
+ * Deepest grouped path containing `path` — the wrapper frame it belongs in.
+ *
+ * `includeSelf` decides whether `path` itself counts:
+ * - Cards pass `true`. The card for path `p` lives INSIDE the frame named `p`
+ *   (a card `test` and a card `test/test` are both members of frame `test`);
+ *   treating it as a sibling is what parked it thousands of pixels away.
+ * - Wrapper units pass `false`, and must. A wrapper's own path is grouped by
+ *   definition, so a self-match would make frame `p` its own parent — and the
+ *   deepest-match walk would pick that self-match over the real parent `p`'s
+ *   ancestor. Strict prefixes are strictly shorter, so the wrapper→parent
+ *   chain always terminates.
+ */
+function deepestGroupedAncestor(
+  path: string,
+  grouped: Set<string>,
+  includeSelf: boolean
+): string | null {
+  // An empty path (collection cards) has no ancestors and must never match the
+  // empty prefix `''`.
+  if (!path) return null;
   const parts = path.split('/');
+  const maxDepth = includeSelf ? parts.length : parts.length - 1;
   let result: string | null = null;
-  for (let depth = 1; depth < parts.length; depth++) {
+  for (let depth = 1; depth <= maxDepth; depth++) {
     const prefix = parts.slice(0, depth).join('/');
     if (grouped.has(prefix)) result = prefix;
   }
@@ -77,8 +97,14 @@ export function buildWrapperLayout(
   const collectionByWrapper = new Map<string, string>();
   cards.forEach(card => {
     const path = card.sourceGroupName || '';
+    if (!path) return;
     const parts = path.split('/');
-    for (let depth = 1; depth < parts.length; depth++) {
+    // `<= parts.length`: a card whose own path is grouped needs that frame to
+    // exist, otherwise attach() below would look for a wrapper that was never
+    // created and the card would silently pop back out to the top level —
+    // and Arrange (outermostGroupedAncestor) would still fold it into the
+    // missing frame's unit. The two walks have to agree.
+    for (let depth = 1; depth <= parts.length; depth++) {
       const prefix = parts.slice(0, depth).join('/');
       if (groupedPaths.has(prefix)) {
         wrapperPaths.add(prefix);
@@ -105,7 +131,9 @@ export function buildWrapperLayout(
   // Link units to parents.
   const roots: Unit[] = [];
   const attach = (unit: Unit) => {
-    const parentPath = deepestGroupedAncestor(unit.path, groupedPaths);
+    // Cards may land in the frame named after their own path; wrappers may
+    // not (see deepestGroupedAncestor) — that is what keeps the tree acyclic.
+    const parentPath = deepestGroupedAncestor(unit.path, groupedPaths, unit.kind === 'card');
     if (parentPath && units.has(wrapperId(parentPath))) {
       units.get(wrapperId(parentPath))!.children.push(unit);
     } else {

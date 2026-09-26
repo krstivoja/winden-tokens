@@ -51,11 +51,16 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
   const height = getGroupHeight(group.variables.length);
   const canManageGroupVariables = group.kind === 'standard';
-  // Placeholder card for a collection that has no variables yet: title + "+"
-  // only. Every dropdown action (highlight path, rename, duplicate, edit as
-  // text, delete) and the level-up button operate on a group path or on a set
-  // of variable ids, and this card has neither — so none are offered.
-  const isEmptyCollectionCard = group.kind === 'collection';
+  // The collection's root card. Its header carries the "+" and nothing else:
+  // every dropdown action (rename, duplicate, edit as text, delete) and the
+  // level-up button address a GROUP PATH, and a collection root has none —
+  // renaming or deleting one would mean renaming or deleting the collection,
+  // which is not what those messages do.
+  //
+  // Its ROWS, however, are ordinary variables, so they get the ordinary row
+  // controls (rename, delete) — see canRenameVariable/showDeleteAction below.
+  // Those address a variable id, not a path, and work here unchanged.
+  const isCollectionCard = group.kind === 'collection';
   // True when the row-level highlight seed lives in THIS card — its sibling
   // rows get a faded highlight marker to show group membership.
   const seedInCard = !!highlightedVarSeed && group.variables.some(v => v.name === highlightedVarSeed);
@@ -76,7 +81,7 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
         >
           {group.title}
         </span>
-        {isEmptyCollectionCard && (
+        {isCollectionCard && (
           <IconButton
             icon={<Icon name="plus" size={20} />}
             size="sm"
@@ -143,7 +148,7 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
       {/* Variable rows */}
       <div className="bg-base py-2">
-        {isEmptyCollectionCard && group.variables.length === 0 && (
+        {isCollectionCard && group.variables.length === 0 && (
           <div className="flex items-center justify-center h-8 px-2 text-xs text-text-muted select-none">
             No variables yet
           </div>
@@ -155,8 +160,9 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
           const inputColor = flags?.inputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
           const outputColor = flags?.outputKind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
           const rowInteractive = group.kind === 'shader' && node.virtualType === 'shader';
-          const canRenameVariable = !node.isVirtual && (group.kind === 'standard' || group.kind === 'source');
-          const showDeleteAction = group.kind === 'standard' && !node.isVirtual;
+          const canRenameVariable = !node.isVirtual
+            && (group.kind === 'standard' || group.kind === 'source' || isCollectionCard);
+          const showDeleteAction = (group.kind === 'standard' || isCollectionCard) && !node.isVirtual;
           const showOutputHandle = !node.connectionsDisabled || node.virtualType === 'shader';
           // Dim off-chain rows only within a card that's on the chain; fully
           // off-chain cards are already dimmed as a whole.

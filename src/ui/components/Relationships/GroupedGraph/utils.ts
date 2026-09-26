@@ -548,9 +548,16 @@ function isTierLabelNodeId(id: string): boolean {
 // another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
 // FIRST match (ascending depth) instead of the deepest one, since Arrange
 // treats a whole nested wrapper frame as a single movable unit.
+//
+// `path` itself counts as a match: the card for path `p` lives INSIDE the
+// frame named `p`, it is not a sibling of it. Only the wrapper→parent walk in
+// wrapperLayout.ts stays strict, so a frame can never parent itself.
 function outermostGroupedAncestor(path: string, grouped: Set<string>): string | null {
+  // An empty path (collection cards) has no ancestors and must never match the
+  // empty prefix `''`.
+  if (!path) return null;
   const parts = path.split('/');
-  for (let depth = 1; depth < parts.length; depth++) {
+  for (let depth = 1; depth <= parts.length; depth++) {
     const prefix = parts.slice(0, depth).join('/');
     if (grouped.has(prefix)) return prefix;
   }
@@ -706,10 +713,13 @@ function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean
   // Force-show wins over every filter below.
   if (filters.selectionProviderGroupKeys?.has(group.key)) return false;
   if (!filters.selectedCollections.has(group.collectionId)) return true;
-  // An empty collection's card has no variables to match against the type
-  // or group filters — the collection filter above is the only one that
-  // can meaningfully apply to it.
-  if (group.kind === 'collection') return false;
+  // A collection root card with no loose variables has nothing to match
+  // against the type or group filters — the collection filter above is the
+  // only one that can meaningfully apply to it, and an empty `.some()` below
+  // would otherwise park the collection's own root (and its "+") off screen.
+  // With rows it is an ordinary card and takes the ordinary rules, so a
+  // loose variable still disappears when its type is filtered out.
+  if (group.kind === 'collection' && group.variables.length === 0) return false;
 
   const hasMatchingType = group.variables.some(v => {
     if (v.isVirtual) return true;
@@ -738,38 +748,38 @@ function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean
 }
 
 /**
- * Placeholder cards for collections that hold no variables at all.
+ * The root card of every variable collection — one per collection, always.
  *
- * Every other card is derived from variables, so a brand-new, still-empty
- * collection renders nothing on the canvas and the user has no way to create
- * its first variable. One minimal card per empty collection fixes that; the
- * card is derived from the same variable list, so it stops being produced the
- * moment the collection has a variable and the real group cards take over.
+ * A collection's root is a real place: it is where a variable with no `/` in
+ * its name lives, and it is the only "+" that can create one. Deriving the
+ * card from the variables instead (emit it only when the collection is empty,
+ * or only when it happens to hold a slash-less variable) leaves a collection
+ * whose variables are all grouped with no root card and therefore no way back
+ * to the root — which is the gap this card exists to close. So it is
+ * unconditional, and a collection with no loose variables simply gets a card
+ * with no rows.
  *
- * Deliberately keyed on "has zero variables in total" rather than "has no
- * visible variables": a collection whose variables are merely hidden by the
- * type/search filters already has real cards, and a placeholder beside them
- * would read as a duplicate.
+ * Rows are the collection's loose (slash-less) variables. They used to be
+ * bucketed into a synthetic `group:<variableName>` card, which collided with
+ * the real group of the same name: variable `test` and the parent path of
+ * `test/test2` produced one key and merged into one card.
  *
  * Cards are stacked downwards in column 0 starting at `startY`, ordered by
  * collection name so the layout is stable across reloads.
  */
-function buildEmptyCollectionCards(
+function buildCollectionCards(
   collections: CollectionData[],
-  variables: VariableData[],
+  looseVariablesByCollection: Map<string, VariableNode[]>,
   startY: number
 ): GroupData[] {
-  const collectionsWithVariables = new Set(variables.map(variable => variable.collectionId));
-  const empty = collections
-    .filter(collection => !collectionsWithVariables.has(collection.id))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const ordered = [...collections].sort((a, b) => a.name.localeCompare(b.name));
 
   let y = startY;
-  return empty.map(collection => {
+  return ordered.map(collection => {
     const card: GroupData = {
       key: getCollectionCardKey(collection.id),
       title: collection.name,
-      variables: [],
+      variables: looseVariablesByCollection.get(collection.id) || [],
       x: 0, y: 0, initialX: 0, initialY: y,
       kind: 'collection',
       headerFill: STANDARD_GROUP_HEADER_FILL,
@@ -780,7 +790,7 @@ function buildEmptyCollectionCards(
   });
 }
 
-// Own key namespace, so an empty collection's card can never collide with a
+// Own key namespace, so a collection's root card can never collide with a
 // `group:` / `source:` / `shader:` / `shades:` / `ext-group:` card.
 function getCollectionCardKey(collectionId: string): string {
   return `collection:${collectionId}`;
@@ -789,7 +799,7 @@ function getCollectionCardKey(collectionId: string): string {
 export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult };
 
 export {
-  buildEmptyCollectionCards,
+  buildCollectionCards,
   isCardHidden,
   buildArrangeUnits,
   outermostGroupedAncestor,

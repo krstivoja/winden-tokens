@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { GroupNodeComponent } from '../../../../src/ui/components/Relationships/GroupedGraph/GraphNode';
-import { buildEmptyCollectionCards } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
+import { buildCollectionCards } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type {
   GroupData,
   GroupNodeData,
@@ -54,12 +54,21 @@ function renderCard(group: GroupData, overrides: Partial<GroupNodeData> = {}) {
   );
 }
 
-describe('GroupNodeComponent — empty collection card', () => {
-  const emptyCollectionCard = buildEmptyCollectionCards(
+const markoRow: VariableNode = {
+  id: 'v2', name: 'marko', shortName: 'marko', displayName: '#00ff00',
+  color: '#00ff00', value: '#00ff00', resolvedValue: '#00ff00',
+  isReference: false, referenceName: null,
+};
+
+const collectionCard = (variables: VariableNode[] = []): GroupData =>
+  buildCollectionCards(
     [{ id: 'c1', name: 'Marco', modes: [{ modeId: 'm1', name: 'Mode 1' }] }],
-    [],
+    new Map(variables.length ? [['c1', variables]] : []),
     0
   )[0];
+
+describe('GroupNodeComponent — collection root card', () => {
+  const emptyCollectionCard = collectionCard();
 
   it('renders the collection name as the card title', () => {
     renderCard(emptyCollectionCard);
@@ -83,6 +92,37 @@ describe('GroupNodeComponent — empty collection card', () => {
   it('omits group-only actions that cannot work without a group path', () => {
     renderCard(emptyCollectionCard);
     // No actions dropdown and no "level up" — both need a sourceGroupName.
+    expect(screen.queryByLabelText('Open actions for Marco')).toBeNull();
+    expect(screen.queryByLabelText('Group Marco with its siblings')).toBeNull();
+  });
+
+  it('keeps the "+" once the card holds loose variables', () => {
+    const onAddVariable = vi.fn();
+    renderCard(collectionCard([markoRow]), { onAddVariable });
+
+    expect(screen.getByLabelText('Add variable to Marco')).toBeInTheDocument();
+    expect(screen.queryByText('No variables yet')).toBeNull();
+  });
+
+  it('gives its rows the ordinary row controls', () => {
+    // Rows are ordinary variables addressed by id, so rename (double-click)
+    // and delete work here exactly as on a group card — only the header's
+    // path-based actions are withheld.
+    const onRenameVariable = vi.fn();
+    const onDeleteVariable = vi.fn();
+    const { container } = renderCard(collectionCard([markoRow]), { onRenameVariable, onDeleteVariable });
+
+    fireEvent.doubleClick(screen.getByTitle('marko (double-click to rename)'));
+    expect(onRenameVariable).toHaveBeenCalledWith(markoRow);
+
+    const deleteButton = container.querySelector('button.absolute.right-3\\.5') as HTMLElement;
+    expect(deleteButton).toBeTruthy();
+    fireEvent.click(deleteButton);
+    expect(onDeleteVariable).toHaveBeenCalledWith(markoRow);
+  });
+
+  it('still withholds the group-only actions once it holds rows', () => {
+    renderCard(collectionCard([markoRow]));
     expect(screen.queryByLabelText('Open actions for Marco')).toBeNull();
     expect(screen.queryByLabelText('Group Marco with its siblings')).toBeNull();
   });

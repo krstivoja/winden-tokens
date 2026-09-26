@@ -88,7 +88,7 @@ import {
   createPaletteNode,
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
-  buildEmptyCollectionCards,
+  buildCollectionCards,
   isCardHidden,
   buildArrangeUnits,
   isTierLabelNodeId,
@@ -559,9 +559,11 @@ function GroupedGraphInner() {
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
-    // An empty collection placeholder has no variables and therefore no chain
-    // to highlight — clicking it would just dim the whole graph.
-    if ((node.data as { group?: GroupData } | undefined)?.group?.kind === 'collection') return;
+    // A collection root card with no loose variables has no chain to
+    // highlight — clicking it would just dim the whole graph. One that does
+    // hold rows behaves like any other card.
+    const clickedGroup = (node.data as { group?: GroupData } | undefined)?.group;
+    if (clickedGroup?.kind === 'collection' && clickedGroup.variables.length === 0) return;
     setHighlightTarget(prev => (
       prev?.groupKey === node.id && prev.varName === null
         ? null
@@ -808,16 +810,28 @@ function GroupedGraphInner() {
       v => !managedSourceIds.has(v.id) && !managedGeneratedIds.has(v.id)
     );
     const unmanagedGroupsMap = new Map<string, { nodes: VariableNode[]; collectionId: string }>();
+    // Loose (slash-less) variables have no parent path and belong to their
+    // collection's root card, not to a synthetic group named after themselves
+    // — that fallback made variable `test` and the parent path of `test/test2`
+    // share one key and merge into one card.
+    const looseVariablesByCollection = new Map<string, VariableNode[]>();
 
     unmanagedVars.forEach(variable => {
       // Cards are leaf groups (one per parent path) — wrappers group cards
       // visually without merging their variables.
       const parts = variable.name.split('/');
-      const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
-      const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
       // Use the actual variable's type instead of global isColorType
       const varIsColorType = variable.resolvedType === 'COLOR';
-      existing.nodes.push(formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId));
+      const node = formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId);
+      if (parts.length === 1) {
+        const loose = looseVariablesByCollection.get(variable.collectionId) || [];
+        loose.push(node);
+        looseVariablesByCollection.set(variable.collectionId, loose);
+        return;
+      }
+      const groupName = parts.slice(0, -1).join('/');
+      const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
+      existing.nodes.push(node);
       unmanagedGroupsMap.set(groupName, existing);
     });
 
@@ -858,12 +872,18 @@ function GroupedGraphInner() {
       primitiveY += getGroupHeight(groupData) + GROUP_GAP_Y;
     });
 
-    // Collections with no variables at all get a minimal placeholder card so
-    // the "+" to create their first variable still exists somewhere. Derived
-    // from `typeVars`, so it stops being emitted as soon as the collection has
-    // a variable and its real group cards appear instead.
-    buildEmptyCollectionCards(collections, typeVars, primitiveY).forEach(card => {
+    // Every collection gets a root card: it holds the collection's loose
+    // (slash-less) variables and carries the only "+" that can create a
+    // variable at the collection root. Emitted unconditionally, so a
+    // collection whose variables are all grouped still has a reachable root.
+    // Kept in column 0 with the primitives rather than in the depth-based
+    // semantic columns below: a collection root is structural, not derived
+    // from what its rows happen to reference.
+    buildCollectionCards(collections, looseVariablesByCollection, primitiveY).forEach(card => {
       groupsArray.push(card);
+      card.variables.forEach((vNode, variableIndex) => {
+        varMap.set(vNode.name, { group: card.key, index: variableIndex, node: vNode });
+      });
       primitiveY += getGroupHeight(card) + GROUP_GAP_Y;
     });
 
@@ -1073,6 +1093,12 @@ function GroupedGraphInner() {
         // selectionProviderGroupKeys (hoisted above the effect).
         if (variableMap.get(entry.token.name)) return;
         // No local match — bucket into a synthetic card by path prefix.
+        // The slash-less fallback below has the same collision local cards
+        // just lost (external token `test` and the parent path of
+        // `test/test2` share one key). Left as is deliberately: the fix for
+        // local cards was to host loose variables on their collection's root
+        // card, and a published library token has no local collection card to
+        // host it. Mirrored at handleFocusSelection — keep the two in step.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         const cardKey = `ext-group:${groupName}`;
@@ -1149,7 +1175,7 @@ function GroupedGraphInner() {
       };
     };
 
-    // Empty-collection placeholders lay out alongside the standard cards
+    // Collection root cards lay out alongside the standard cards
     // (buildWrapperLayout treats their empty path as a top-level root), so
     // they share the same column packing instead of floating absolutely.
     const isStandardLayoutCard = (g: GroupData) => g.kind === 'standard' || g.kind === 'collection';
