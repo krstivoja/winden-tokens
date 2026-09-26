@@ -21,6 +21,13 @@ export type ActiveTab = TabId;
 // Headless is a status line, not a screen: one row, no scroll, no resize grips.
 const HEADLESS_WINDOW = { width: 320, height: 52 };
 
+// Whether a browser tab attaching may take the wheel on its own.
+// A relay with a tab still open is the normal state of a dev machine, so
+// treating "a tab is there" as "hand the window over" cost a click on every
+// single launch. The plugin UI is the default; handing over is a decision,
+// and it is remembered so it only has to be made once.
+const HANDOVER_STORAGE_KEY = 'bridge-auto-handover';
+
 export function App() {
   const { setData, setSelection } = useAppContext();
   // The browser tab exists to give the Relationships graph room, so it opens
@@ -74,7 +81,47 @@ export function App() {
   // stays open (only it can reach the Figma API) but stops rendering the app,
   // so the graph is not paid for twice.
   const bridgeStatus = useBridge();
-  const isHeadless = bridgeStatus.role === 'plugin' && bridgeStatus.connected && bridgeStatus.peerAttached;
+  const hasBrowserPeer = bridgeStatus.role === 'plugin'
+    && bridgeStatus.connected
+    && bridgeStatus.peerAttached;
+
+  // Persisted across plugin launches, so the answer survives the window being
+  // reopened. Starts false: with nothing stored, a launch lands in the plugin
+  // UI, which is what someone who never set this up expects to see.
+  const [autoHandover, setAutoHandover] = useState(false);
+
+  useEffect(() => {
+    if (!BRIDGE_ENABLED || isBrowserClient) {
+      return;
+    }
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data?.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === HANDOVER_STORAGE_KEY) {
+        setAutoHandover(msg.value === true);
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    post({ type: 'get-client-storage', key: HANDOVER_STORAGE_KEY });
+    return () => window.removeEventListener('message', handleStorage);
+  }, [isBrowserClient]);
+
+  const setHandover = useCallback((value: boolean) => {
+    setAutoHandover(value);
+    post({ type: 'set-client-storage', key: HANDOVER_STORAGE_KEY, value });
+  }, []);
+
+  const handOverToBrowser = useCallback(() => setHandover(true), [setHandover]);
+
+  // Taking the window back also cancels the standing permission, otherwise the
+  // very next launch hands it straight back and the click bought nothing.
+  const takeBackFromBrowser = useCallback(() => {
+    setHandover(false);
+    releaseBridgePeer();
+  }, [setHandover]);
+
+  const isHeadless = hasBrowserPeer && autoHandover;
 
   // The browser tab is a remote control with no document of its own: with no
   // plugin window on the other end it renders a perfectly normal, perfectly
@@ -171,7 +218,7 @@ export function App() {
           variant="outline"
           size="sm"
           className="ml-auto shrink-0 px-2 py-1 text-xs"
-          onClick={releaseBridgePeer}
+          onClick={takeBackFromBrowser}
         >
           Take over
         </TextButton>
@@ -192,6 +239,26 @@ export function App() {
               ? 'No plugin connected. Open the Winden Tokens plugin in Figma — this tab has no data of its own.'
               : 'Bridge relay not reachable. Run npm run dev:bridge, then open the Winden Tokens plugin in Figma.'}
           </span>
+        </div>
+      )}
+
+      {hasBrowserPeer && !autoHandover && (
+        <div
+          role="status"
+          className="flex shrink-0 items-center gap-2 border-b border-border bg-base-2 px-4 py-2"
+        >
+          <span className="size-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
+          <span className="truncate text-xs text-text">
+            Browser tab connected. Both windows are live — edits from either one land in this file.
+          </span>
+          <TextButton
+            variant="outline"
+            size="sm"
+            className="ml-auto shrink-0 px-2 py-1 text-xs"
+            onClick={handOverToBrowser}
+          >
+            Hand over
+          </TextButton>
         </div>
       )}
 
