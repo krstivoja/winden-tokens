@@ -8,8 +8,10 @@
 //      module never touches WebSocket. Set VITE_BRIDGE=1 to build a bridge
 //      enabled bundle for Figma; the vite dev server enables it on its own.
 //   2. Even when enabled, a failed connect is completely silent: no logging
-//      from the plugin role, no UI change, and a hard cap on cold retries so
-//      a missing relay can never turn into a retry storm.
+//      from the plugin role and no UI change. Retries continue for the life of
+//      the window, but with capped backoff (one attempt per RECONNECT_MAX_MS
+//      once cold), so "relay started after Figma" — the normal dev order —
+//      attaches on its own instead of needing the plugin window reopened.
 
 import { useEffect, useState } from 'react';
 
@@ -34,6 +36,38 @@ export const BRIDGE_PROTOCOL_VERSION = 1;
  */
 export const BRIDGE_EVENT_TAG = '__windenBridge';
 
+/**
+ * Plugin messages a browser tab must never put on the relay.
+ *
+ * THE RULE: a browser tab may send anything that acts on the *document* — the
+ * Figma file, its variables, its nodes — and nothing that acts on the *plugin
+ * window* or duplicates what the bridge handshake already does on its behalf.
+ * The tab does not own the Figma plugin window, and its own dimensions,
+ * lifecycle and mount-time bootstrap say nothing about that window.
+ *
+ *   resize            — carries the BROWSER window's size. The plugin hands it
+ *                       to the sandbox, which calls `figma.ui.resize()`, so the
+ *                       user's Figma panel jumps to the size of a browser tab.
+ *   ui-ready          — the bootstrap pair. The relay forwards every client
+ *   get-history-state   hello to the plugin, and the plugin answers it with
+ *                       exactly these two messages (`requestFullRefresh`), so a
+ *                       tab that sends them again asks a 678-variable file to
+ *                       be re-read for nothing.
+ *
+ * Add a message here only if both halves hold: it targets the plugin window
+ * rather than the document, or the bridge already issues it.
+ */
+export const BROWSER_SUPPRESSED_MESSAGES: ReadonlySet<string> = new Set([
+  'resize',
+  'ui-ready',
+  'get-history-state',
+]);
+
+/** True for a message a browser tab must not put on the relay (see above). */
+export function isSuppressedFromBrowser(type: unknown): boolean {
+  return typeof type === 'string' && BROWSER_SUPPRESSED_MESSAGES.has(type);
+}
+
 /** Build-time switch. Folds to a literal in a production build. */
 export const BRIDGE_ENABLED =
   import.meta.env.MODE !== 'test' &&
@@ -42,14 +76,26 @@ export const BRIDGE_ENABLED =
     import.meta.env.VITE_BRIDGE === 'true');
 
 export type BridgeRole = 'plugin' | 'client';
-export type BridgeKind = 'hello' | 'message';
+/** The relay speaks too, under a third role it alone may claim. */
+export type BridgeSender = BridgeRole | 'relay';
+export type BridgeKind = 'hello' | 'message' | 'status';
 
 export interface BridgeEnvelope {
   v: number;
-  role: BridgeRole;
+  role: BridgeSender;
   kind: BridgeKind;
   payload?: unknown;
 }
+
+/**
+ * Relay status frames (`role: 'relay'`, `kind: 'status'`). The relay never
+ * looks inside an application payload; these are the only frames it authors.
+ * See the PROTOCOL block in bridge/server.mjs.
+ */
+export const RELAY_PLUGIN_CONNECTED = 'bridge/plugin-connected';
+export const RELAY_PLUGIN_DISCONNECTED = 'bridge/plugin-disconnected';
+export const RELAY_CLIENT_ATTACHED = 'bridge/client-attached';
+export const RELAY_CLIENT_DETACHED = 'bridge/client-detached';
 
 export interface BridgeStatus {
   /** The bridge was compiled in and is allowed to open a socket. */
@@ -58,8 +104,18 @@ export interface BridgeStatus {
   role: BridgeRole;
   /** A relay socket is open. */
   connected: boolean;
-  /** The other side (browser tab, or plugin) has said hello over the relay. */
+  /**
+   * The other side is on the relay: for a browser tab, the Figma plugin window;
+   * for the plugin, at least one browser tab. Driven by the relay's own status
+   * frames, so it also goes false when the peer disappears.
+   */
   peerAttached: boolean;
+  /**
+   * The first connect attempt has resolved (opened, or failed). Before that the
+   * UI knows nothing and must not claim the relay is down — otherwise every
+   * page load flashes a "not connected" banner for the duration of a handshake.
+   */
+  probed: boolean;
 }
 
 type PayloadListener = (payload: any) => void;
@@ -67,15 +123,16 @@ type StatusListener = (status: BridgeStatus) => void;
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
-/**
- * How many times the plugin retries a relay that has never answered. After
- * this it gives up for the session — a developer who starts the relay later
- * reloads the plugin. A browser tab has no other transport, so it keeps
- * retrying with the same backoff.
- */
-const PLUGIN_COLD_ATTEMPTS = 4;
 /** Outbound messages held while a browser tab is still connecting. */
 const MAX_QUEUED = 100;
+/**
+ * A full refresh of a real file is expensive (678 variables in the file this
+ * was measured on). Several things can ask for one at once — a client hello,
+ * the relay's `client-attached`, a second tab — so a request is coalesced while
+ * an earlier one is still outstanding. The deadline only stops a lost reply
+ * (plugin reload mid-fetch) from wedging refreshes for the session.
+ */
+const REFRESH_DEADLINE_MS = 30000;
 
 /**
  * Plugin-vs-browser detection.
@@ -116,9 +173,13 @@ export function decodeEnvelope(raw: unknown): BridgeEnvelope | null {
 
   if (!parsed || typeof parsed !== 'object') return null;
   if (parsed.v !== BRIDGE_PROTOCOL_VERSION) return null;
-  if (parsed.role !== 'plugin' && parsed.role !== 'client') return null;
-  if (parsed.kind !== 'hello' && parsed.kind !== 'message') return null;
-  if (parsed.kind === 'message' && (!parsed.payload || typeof parsed.payload !== 'object')) return null;
+  if (parsed.role !== 'plugin' && parsed.role !== 'client' && parsed.role !== 'relay') return null;
+  if (parsed.kind !== 'hello' && parsed.kind !== 'message' && parsed.kind !== 'status') return null;
+  // `status` is the relay's own kind and the relay's only kind: a peer must not
+  // be able to impersonate the relay's view of who is attached, and the relay
+  // never sends anything else.
+  if ((parsed.role === 'relay') !== (parsed.kind === 'status')) return null;
+  if (parsed.kind !== 'hello' && (!parsed.payload || typeof parsed.payload !== 'object')) return null;
 
   return parsed as BridgeEnvelope;
 }
@@ -150,6 +211,8 @@ export class BridgeClient {
   private queue: Record<string, unknown>[] = [];
   private connected = false;
   private peerAttached = false;
+  private probed = false;
+  private refreshDeadline = 0;
   private payloadListeners = new Set<PayloadListener>();
   private statusListeners = new Set<StatusListener>();
   private figmaListener: ((event: MessageEvent) => void) | null = null;
@@ -164,6 +227,7 @@ export class BridgeClient {
       role: this.role,
       connected: this.connected,
       peerAttached: this.peerAttached,
+      probed: this.probed,
     };
   }
 
@@ -258,6 +322,7 @@ export class BridgeClient {
     } catch {
       // Figma refuses the socket outright when the manifest does not allow the
       // domain. Treat it as "no relay" and stay quiet.
+      this.setProbed();
       this.scheduleReconnect();
       return;
     }
@@ -273,6 +338,7 @@ export class BridgeClient {
       } catch {
         return;
       }
+      this.setProbed();
       this.setConnected(true);
       this.flushQueue();
     };
@@ -290,8 +356,10 @@ export class BridgeClient {
     socket.onclose = () => {
       if (this.socket !== socket) return;
       this.socket = null;
+      this.setProbed();
       this.setConnected(false);
       this.setPeerAttached(false);
+      this.refreshDeadline = 0;
       this.scheduleReconnect();
     };
   }
@@ -300,13 +368,13 @@ export class BridgeClient {
     if (this.abandoned || this.timer) return;
 
     if (!this.everConnected) {
-      if (this.role === 'plugin' && this.attempts >= PLUGIN_COLD_ATTEMPTS) {
-        // Nothing is listening. Give up for good: the plugin is now exactly
-        // what it is today, with no timers left running.
-        this.abandoned = true;
-        this.queue = [];
-        return;
-      }
+      // No cold give-up, in either role. The dev flow is "open Figma, then run
+      // `npm run dev:bridge`", so a plugin that stopped trying after ~15s could
+      // only be recovered by closing and reopening the plugin window. Retrying
+      // for the life of the window costs one silent, failed socket per
+      // RECONNECT_MAX_MS and is invisible with no relay running. A production
+      // build has no WebSocket code at all (BRIDGE_ENABLED), so this loop
+      // cannot exist there — that is the guarantee that makes it affordable.
       if (this.role === 'client' && this.attempts === 1) {
         // No relay for the browser preview either — fall back to the mock data
         // index.html would have injected.
@@ -331,6 +399,12 @@ export class BridgeClient {
 
   private handleEnvelope(envelope: BridgeEnvelope | null): void {
     if (!envelope) return;
+
+    if (envelope.role === 'relay') {
+      this.handleRelayStatus(envelope.payload as Record<string, unknown>);
+      return;
+    }
+
     // Frames the relay echoed back from this same side are not interesting.
     if (envelope.role === this.role) return;
 
@@ -361,8 +435,51 @@ export class BridgeClient {
     window.postMessage({ pluginMessage: payload, [BRIDGE_EVENT_TAG]: true }, '*');
   }
 
-  /** Plugin only: re-send the bootstrap the UI sends on mount. */
+  /**
+   * The relay's own view of who is attached. This is the only way either side
+   * learns that its peer went away: the relay forwards a client hello to the
+   * plugin, but it never forwards the plugin's hello to clients, and a socket
+   * that stays open tells a browser tab nothing about the Figma window behind
+   * it. Without these frames a tab whose plugin closed just sits there empty.
+   */
+  private handleRelayStatus(payload: Record<string, unknown> | undefined): void {
+    const type = payload?.type;
+
+    if (this.role === 'client') {
+      if (type === RELAY_PLUGIN_CONNECTED) this.setPeerAttached(true);
+      else if (type === RELAY_PLUGIN_DISCONNECTED) this.setPeerAttached(false);
+      return;
+    }
+
+    if (type === RELAY_CLIENT_ATTACHED) {
+      this.setPeerAttached(true);
+      // Covers the tab-first case: a tab already on the relay when the plugin
+      // connects gets no forwarded hello, so this is its only refresh cue.
+      // Coalesced against the hello path, which fires for the same event.
+      this.requestFullRefresh();
+      return;
+    }
+
+    if (type === RELAY_CLIENT_DETACHED && payload?.clients === 0) {
+      // Last tab gone: leave headless mode instead of waiting for a human.
+      this.setPeerAttached(false);
+    }
+  }
+
+  /**
+   * Plugin only: re-send the bootstrap the UI sends on mount.
+   *
+   * Coalesced. Every client hello and every `client-attached` asks for this, so
+   * N tabs (or one tab plus its own relay status frame) would otherwise mean N
+   * full reads of the file, serialised in the single-threaded sandbox. One
+   * outstanding refresh answers all of them: the reply is broadcast to every
+   * attached client, so a tab that arrives mid-refresh still gets the data.
+   */
   private requestFullRefresh(): void {
+    const now = Date.now();
+    if (now < this.refreshDeadline) return;
+    this.refreshDeadline = now + REFRESH_DEADLINE_MS;
+
     window.parent.postMessage({ pluginMessage: { type: 'ui-ready' } }, '*');
     window.parent.postMessage({ pluginMessage: { type: 'get-history-state' } }, '*');
   }
@@ -375,8 +492,19 @@ export class BridgeClient {
   private mirrorFigmaMessages(): void {
     if (this.figmaListener) return;
     this.figmaListener = (event: MessageEvent) => {
+      // Never mirror a frame this module itself re-emitted onto `window`: that
+      // frame came off the relay, and sending it back would be an echo. Only
+      // the client role re-emits today, and only the plugin role mirrors, so
+      // this cannot fire in the current wiring — it is the invariant that keeps
+      // it that way if a future change ever re-emits on the plugin side.
+      if (event.data?.[BRIDGE_EVENT_TAG]) return;
+
       const payload = event.data?.pluginMessage;
       if (!payload || typeof payload !== 'object') return;
+
+      // The outstanding refresh has been answered; the next cue may ask again.
+      if (payload.type === 'data-loaded') this.refreshDeadline = 0;
+
       this.send(payload);
     };
     window.addEventListener('message', this.figmaListener);
@@ -386,6 +514,12 @@ export class BridgeClient {
     if (this.connected === connected) return;
     this.connected = connected;
     if (!connected) this.peerAttached = false;
+    this.emitStatus();
+  }
+
+  private setProbed(): void {
+    if (this.probed) return;
+    this.probed = true;
     this.emitStatus();
   }
 
@@ -412,6 +546,7 @@ const DISABLED_STATUS: BridgeStatus = {
   role: 'plugin',
   connected: false,
   peerAttached: false,
+  probed: false,
 };
 
 /** Starts the bridge if it is compiled in. Idempotent, safe everywhere. */

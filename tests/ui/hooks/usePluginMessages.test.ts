@@ -65,6 +65,19 @@ describe('post', () => {
     expect(postMessage).toHaveBeenCalledWith({ pluginMessage: { type: 'refresh' } }, '*');
   });
 
+  it('still resizes the real plugin window from inside Figma', () => {
+    // The browser tab is the only side that must not send `resize`.
+    const postMessage = vi.fn();
+    setParent({ postMessage });
+
+    post({ type: 'resize', width: 800, height: 600 });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { pluginMessage: { type: 'resize', width: 800, height: 600 } },
+      '*'
+    );
+  });
+
   it('keeps the pre-bridge behaviour in a browser when the bridge is compiled out', () => {
     const postMessage = vi.fn();
     setParent(undefined);

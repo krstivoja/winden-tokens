@@ -5,6 +5,7 @@ import {
   BRIDGE_ENABLED,
   BRIDGE_EVENT_TAG,
   isInsideFigma,
+  isSuppressedFromBrowser,
   sendOverBridge,
   startBridge,
   subscribeToBridgeMessages,
@@ -53,6 +54,14 @@ export function post(msg: Record<string, unknown>): void {
   }
 
   // Browser tab: `parent.postMessage` goes nowhere, the relay is the transport.
+  //
+  // A tab may drive the DOCUMENT and must not drive the PLUGIN WINDOW, and it
+  // must not repeat what the bridge handshake already sends on its behalf.
+  // `BROWSER_SUPPRESSED_MESSAGES` in useBridge.ts states the rule and lists
+  // what it covers. Dropped before the queue, so a message held while the relay
+  // is down cannot be delivered later either.
+  if (BRIDGE_ENABLED && isSuppressedFromBrowser(msg.type)) return;
+
   if (sendOverBridge(msg)) return;
 
   // Bridge compiled out (a production bundle opened directly in a browser):

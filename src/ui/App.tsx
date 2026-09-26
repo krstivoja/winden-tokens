@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
-import { useBridge, releaseBridgePeer } from './hooks/useBridge';
+import { useBridge, releaseBridgePeer, isInsideFigma, BRIDGE_ENABLED } from './hooks/useBridge';
 import { TextButton } from './components/common/Button';
 import { TabBar, type TabId } from './components/Tabs/TabBar';
 import { TabContent } from './components/Tabs/TabContent';
@@ -20,7 +20,12 @@ export type ActiveTab = TabId;
 
 export function App() {
   const { setData, setSelection } = useAppContext();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('table');
+  // The browser tab exists to give the Relationships graph room, so it opens
+  // straight into it and hides the tab bar. The plugin keeps every tab.
+  const isBrowserClient = !isInsideFigma();
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    isBrowserClient ? 'relationships' : 'table'
+  );
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: '', type: '' });
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
 
@@ -67,6 +72,19 @@ export function App() {
   // so the graph is not paid for twice.
   const bridgeStatus = useBridge();
   const isHeadless = bridgeStatus.role === 'plugin' && bridgeStatus.connected && bridgeStatus.peerAttached;
+
+  // The browser tab is a remote control with no document of its own: with no
+  // plugin window on the other end it renders a perfectly normal, perfectly
+  // empty app, which reads as "selection is broken" rather than "nothing is
+  // connected". Say so, persistently, until the plugin attaches — the relay's
+  // status frames clear this the moment it does.
+  // `BRIDGE_ENABLED` first so a production build folds the whole banner away
+  // rather than shipping dead dev-only markup.
+  const isDetachedClient =
+    BRIDGE_ENABLED &&
+    bridgeStatus.role === 'client' &&
+    bridgeStatus.probed &&
+    !bridgeStatus.peerAttached;
 
   useEffect(() => {
     post({ type: 'ui-ready' });
@@ -129,12 +147,28 @@ export function App() {
 
   return (
     <>
-      <TabBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        canUndo={historyState.canUndo}
-        canRedo={historyState.canRedo}
-      />
+      {isDetachedClient && (
+        <div
+          role="status"
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-border bg-base-2 px-4 py-2 text-center"
+        >
+          <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
+          <span className="text-xs text-text">
+            {bridgeStatus.connected
+              ? 'No plugin connected. Open the Winden Tokens plugin in Figma — this tab has no data of its own.'
+              : 'Bridge relay not reachable. Run npm run dev:bridge, then open the Winden Tokens plugin in Figma.'}
+          </span>
+        </div>
+      )}
+
+      {!isBrowserClient && (
+        <TabBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+        />
+      )}
 
       <TabContent
         activeTab={activeTab}

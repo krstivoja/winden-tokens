@@ -48,8 +48,8 @@ Mitigations, both required:
       A browser cannot forge `Origin`, so this is sufficient against a hostile page.
       A local process can forge it, but that already implies code execution on the machine.
 
-- [ ] Confirm what `Origin` the Figma plugin iframe actually sends (likely `null`) before relying on it.
-      If it is `null`, accept `null` for the plugin role only, and document why.
+- [x] Confirmed live: the Figma plugin iframe sends `Origin: null`. `devAllowedDomains` with `ws://localhost:9337` works — the socket is allowed out.
+      `[10:35:02.904] OPEN socket #1 accepted (Origin: null)` / `[10:35:02.905] HELLO plugin socket #1 identified`.
 
 ## Steps
 
@@ -94,3 +94,72 @@ Mitigations, both required:
 - Any packaged/shipped version for other users.
 - Auth beyond the Origin check. Loopback only, dev machine only.
 - The MCP server. Same transport could serve it later; not built here.
+
+
+## Verified live (2026-09-26)
+
+Relay running, bridge-enabled bundle (`VITE_BRIDGE=1 npm run build`) loaded in Figma, browser tab on localhost:5173.
+
+- [x] Figma allows the outbound WebSocket. Plugin iframe Origin is `null`, as the threat model assumed.
+- [x] Browser tab receives the real open file: `_global 116 / color 118 / typography 51 / components 342 / dimensions 51`, 678 variables, 443 colors, 511 references.
+- [x] Relationships graph renders the whole real file at browser size.
+- [x] Figma selection propagates to the browser — the component selection card appears for the node selected in Figma.
+- [x] Origin check rejects a hostile origin with 403 before upgrade; loopback binding proved with `lsof`/`nc`.
+- [x] Production build contains no bridge code: `grep -c WebSocket dist/index.html` → 0, `ws://localhost` → 0.
+- [x] Gates in the main checkout: build OK, 136 tests passing (114 baseline + 22 new), tsc exactly 251.
+
+## Bugs found during the live test — fixed 2026-09-26
+
+1. **Frame amplification.** Fixed.
+      Two real mechanisms, both per client: the relay forwards every client `hello` to the plugin, which answers with `requestFullRefresh()`, *and* the browser tab's own `App` mount posted `ui-ready` + `get-history-state` again — two full reads of a 678-variable file per tab, times the number of tabs.
+      `requestFullRefresh()` is now coalesced while a refresh is outstanding (cleared when the mirror sees `data-loaded`), and a browser tab no longer sends the bootstrap pair at all (`BROWSER_SUPPRESSED_MESSAGES`).
+      One attach = one `ui-ready` = one `data-loaded` + one `selection-changed`, however many tabs attach at once.
+      The mirror's missing `BRIDGE_EVENT_TAG` filter was NOT a live mechanism — only the client role re-emits tagged frames and only the plugin role mirrors, so the two never met. The guard is in anyway, as an invariant.
+
+2. **First load is very slow.** Cause still not established; measurement needs Figma.
+      Bug 1 halved the number of full `fetchData` runs per tab load (2 → 1), and `ui-ready` also runs `sendSelection()`, which is where the extra `selection-changed` frames came from.
+      Whether a single run still takes a minute on this file is unmeasured — no way to run `fetchData` outside Figma.
+      To measure: in the relay log, diff the `FWD client #N → plugin kind=hello` line against the next `FWD plugin → N client(s) type=data-loaded`. That is one full refresh, end to end, and needs no code change.
+
+3. **The browser tab sends `resize` to the plugin.** Fixed.
+      Generalised: a tab may drive the *document* and never the *plugin window*, and must not repeat what the bridge handshake already sends for it. The rule and its list live in `BROWSER_SUPPRESSED_MESSAGES` (`src/ui/hooks/useBridge.ts`), dropped in `post()` before the outbound queue.
+
+4. **The browser gave no sign the plugin was gone.** Fixed.
+      `decodeEnvelope` rejected the relay's own frames (`role: 'relay'`, `kind: 'status'`), so `bridge/plugin-connected` / `bridge/plugin-disconnected` were dropped unread — and since the relay never forwards the plugin's `hello` to clients, a tab's `peerAttached` was in fact *never* true. The tab had no signal at all.
+      The envelope now carries the relay role, and a detached tab shows a persistent banner until the plugin attaches.
+
+5. **A tab attached before the plugin never got data.** Fixed (found while fixing 2).
+      The relay forwards a client `hello` only if a plugin is already connected; when the plugin connects later it sends `bridge/client-attached` instead, which nothing was listening to. The plugin now treats that as a refresh cue (coalesced), and `bridge/client-detached` with `clients: 0` leaves headless mode.
+
+6. **The plugin gave up on a relay that was not running yet.** Fixed.
+      Four cold attempts (~15s) meant the normal dev order — Figma first, `npm run dev:bridge` second — could only be recovered by reopening the plugin window. Both roles now retry for the life of the window with the backoff capped at 15s. A production build still contains no WebSocket code, which is what makes an endless retry loop affordable.
+
+## Still open
+
+- [ ] Headless strip unverified in Figma — built and checked in the browser only.
+- [x] Closing the plugin degrades cleanly in the browser — verified against the real relay with the real client code, not in Figma: both tabs flipped to "no plugin" within 1ms of the socket closing and back when it returned.
+- [ ] Writing from the browser back into Figma (edit a token, see it change) not yet exercised.
+
+## Decided: a second, minimal UI entry point (2026-09-26)
+
+The plugin currently loads the full 1.15MB app and mounts React just to show a status strip in headless mode.
+A separate "Winden Bridge" plugin was considered and rejected: `src/plugin/code.ts` (~4,500 lines) is exactly the part that must come along, since it executes the Figma API calls, so only the UI half would shrink — at the cost of a second manifest, a second plugin id, a second install, and a duplicated or awkwardly shared sandbox.
+
+Instead: same plugin, second entry point, selected by a menu command.
+Figma supports this — `ui` may be a map of command to HTML, `menu` declares the commands, and the sandbox picks with `figma.command` + `__uiFiles__` (verified against the current manifest docs).
+
+```json
+"ui": { "open": "dist/index.html", "bridge": "dist/bridge.html" },
+"menu": [
+  { "name": "Open Winden Tokens", "command": "open" },
+  { "name": "Bridge to browser (dev)", "command": "bridge" }
+]
+```
+
+`bridge.html` is the WS client, a connection indicator, and the message relay — no React app, no contexts, no graph.
+The plugin-role relay logic already exists in `useBridge` (forward sandbox messages out, hand browser commands to `parent`), so the entry is that plus a status line.
+
+User decided the menu item **ships to everyone**, named so it reads as developer-only.
+The alternative — keeping it out of the production manifest behind the existing `VITE_BRIDGE` split — was declined.
+
+- [ ] Build it. Queued behind the bug-fix pass, because both touch `src/ui/hooks/useBridge.ts`.
