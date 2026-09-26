@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"tsc --watch --project tsconfig.plugin.json\"",
+    "dev:bridge": "concurrently -n bridge,vite -c magenta,cyan \"node bridge/server.mjs\" \"vite\"",
     "build": "vite build && tsc --project tsconfig.plugin.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -38,6 +39,7 @@
     "typescript": "^5.3.2",
     "vite": "^5.0.4",
     "vite-plugin-singlefile": "^0.13.5",
-    "vitest": "^1.0.4"
+    "vitest": "^1.0.4",
+    "ws": "^8.21.3"
   }
 }

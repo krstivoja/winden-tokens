@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
+import { useBridge, releaseBridgePeer } from './hooks/useBridge';
+import { TextButton } from './components/common/Button';
 import { TabBar, type TabId } from './components/Tabs/TabBar';
 import { TabContent } from './components/Tabs/TabContent';
 import { ShadesModal } from './components/Modals/ShadesModal';
@@ -60,6 +62,12 @@ export function App() {
 
   usePluginMessages(messageHandlers());
 
+  // Dev bridge: while a browser tab is driving this file, the plugin window
+  // stays open (only it can reach the Figma API) but stops rendering the app,
+  // so the graph is not paid for twice.
+  const bridgeStatus = useBridge();
+  const isHeadless = bridgeStatus.role === 'plugin' && bridgeStatus.connected && bridgeStatus.peerAttached;
+
   useEffect(() => {
     post({ type: 'ui-ready' });
     post({ type: 'get-history-state' });
@@ -101,6 +109,23 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [historyState.canRedo, historyState.canUndo]);
+
+  if (isHeadless) {
+    return (
+      <>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-base p-6 text-center">
+          <p className="text-sm font-medium text-text">Connected · browser has the wheel</p>
+          <p className="text-xs text-text/60">
+            Keep this window open — it is the only thing that can talk to Figma.
+          </p>
+          <TextButton variant="outline" size="sm" onClick={releaseBridgePeer}>
+            Use the plugin UI instead
+          </TextButton>
+        </div>
+        <ResizeHandles />
+      </>
+    );
+  }
 
   return (
     <>
