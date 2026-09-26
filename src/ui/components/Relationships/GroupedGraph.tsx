@@ -24,7 +24,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
-import { getCollectionGroupKey, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
+import { getVariableGroupName } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -60,9 +60,6 @@ import {
   IDLE_HANDLE_FILL_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   SHADER_GROUP_HEADER_FILL,
-  WRAPPER_HEADER_HEIGHT,
-  WRAPPER_PADDING,
-  WRAPPER_GAP,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
@@ -86,7 +83,10 @@ import {
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
   buildEmptyCollectionCards,
+  isCardHidden,
+  buildArrangeUnits,
 } from './GroupedGraph/utils';
+import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -104,20 +104,6 @@ const PROPERTY_COLUMN_GAP = 220;
 // bounds, and edges whose target handle can't be located are silently dropped
 // (the row's handle still shows, but no connecting line is drawn).
 const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
-
-// Shallowest (outermost) grouped ancestor of `path` — the top-level wrapper
-// that ultimately contains it, even when wrappers are nested inside one
-// another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
-// FIRST match (ascending depth) instead of the deepest one, since Arrange
-// treats a whole nested wrapper frame as a single movable unit.
-const outermostGroupedAncestor = (path: string, grouped: Set<string>): string | null => {
-  const parts = path.split('/');
-  for (let depth = 1; depth < parts.length; depth++) {
-    const prefix = parts.slice(0, depth).join('/');
-    if (grouped.has(prefix)) return prefix;
-  }
-  return null;
-};
 
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
@@ -879,6 +865,32 @@ function GroupedGraphInner() {
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
   }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
+  // Cards that provide a bound token to the current Figma selection. They are
+  // force-shown even when the filters would hide them (see isCardHidden), so
+  // the selection's connection is never drawn to nothing. Hoisted out of the
+  // layout effect because Arrange Grid needs the same set: a force-shown card
+  // is on screen, so it must get a grid slot.
+  const selectionProviderGroupKeys = useMemo(() => {
+    const keys = new Set<string>();
+    selectedLayers.forEach(layer => layer.entries.forEach(entry => {
+      if (entry.kind !== 'variable' || !entry.token) return;
+      const info = variableMap.get(entry.token.name);
+      if (info) keys.add(info.group);
+    }));
+    return keys;
+  }, [selectedLayers, variableMap]);
+
+  // The one definition of "is this card on screen right now", shared by the
+  // layout effect (which renders the answer as node.hidden) and Arrange Grid
+  // (which must skip hidden cards instead of reserving empty grid slots).
+  const cardVisibilityFilters = useMemo<CardVisibilityFilters>(() => ({
+    selectedCollections: localSelectedCollections,
+    selectedTypes,
+    selectedGroups,
+    variablesById,
+    selectionProviderGroupKeys,
+  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys]);
+
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
     const connected = new Map<string, ConnectionFlags>();
@@ -971,17 +983,14 @@ function GroupedGraphInner() {
     // dropped). A token with NO local card (e.g. a published library variable)
     // gets a synthetic "external" card so its connection is still drawn.
     const hexColorRe = /^#[0-9A-Fa-f]{6,8}$/;
-    const selectionProviderGroupKeys = new Set<string>();
     const externalTokenCardKey = new Map<string, string>();
     const externalTokensByCard = new Map<string, { title: string; collectionId: string; nodes: VariableNode[] }>();
     selectedLayers.forEach(layer => {
       layer.entries.forEach(entry => {
         if (entry.kind !== 'variable' || !entry.token) return;
-        const info = variableMap.get(entry.token.name);
-        if (info) {
-          selectionProviderGroupKeys.add(info.group);
-          return;
-        }
+        // A token with a local card is already counted in
+        // selectionProviderGroupKeys (hoisted above the effect).
+        if (variableMap.get(entry.token.name)) return;
         // No local match — bucket into a synthetic card by path prefix.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
@@ -1009,39 +1018,9 @@ function GroupedGraphInner() {
       });
     });
 
-    // Determine whether a card is hidden by the active filters.
-    const isCardHidden = (group: GroupData): boolean => {
-      if (!localSelectedCollections.has(group.collectionId)) return true;
-      // An empty collection's card has no variables to match against the type
-      // or group filters — the collection filter above is the only one that
-      // can meaningfully apply to it.
-      if (group.kind === 'collection') return false;
-
-      const hasMatchingType = group.variables.some(v => {
-        if (v.isVirtual) return true;
-        const sourceVar = variablesById.get(v.id);
-        return sourceVar && selectedTypes.has(sourceVar.resolvedType);
-      });
-      if (!hasMatchingType) return true;
-
-      let hasMatchingGroup = false;
-      if (group.kind === 'shader' || group.kind === 'shades') {
-        if (group.sourceGroupName) {
-          hasMatchingGroup = selectedGroups.has(
-            getCollectionGroupKey(group.collectionId, group.sourceGroupName)
-          );
-        }
-      } else {
-        hasMatchingGroup = group.variables.some(v => {
-          if (v.isVirtual) return false;
-          return isVariableVisibleForGroupFilters(
-            { collectionId: group.collectionId, name: v.name },
-            selectedGroups
-          );
-        });
-      }
-      return !hasMatchingGroup;
-    };
+    // Visibility comes from the shared predicate (GroupedGraph/utils) so that
+    // Arrange Grid applies exactly the same rule — see cardVisibilityFilters.
+    const cardHidden = (group: GroupData) => isCardHidden(group, cardVisibilityFilters);
 
     const buildCardNode = (
       group: GroupData,
@@ -1057,8 +1036,9 @@ function GroupedGraphInner() {
         type: 'groupNode',
         position,
         // Force-show cards that provide a value to the current selection,
-        // even when the active filters would otherwise hide them.
-        hidden: isCardHidden(group) && !selectionProviderGroupKeys.has(group.key),
+        // even when the active filters would otherwise hide them (folded into
+        // the shared predicate via cardVisibilityFilters).
+        hidden: cardHidden(group),
         ...(parentId ? { parentId, extent: 'parent' as const } : {}),
         data: {
           group,
@@ -1106,7 +1086,7 @@ function GroupedGraphInner() {
     // Standard cards, nested inside wrapper frames for expanded groups.
     const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
     const cardHiddenByKey = new Map<string, boolean>();
-    standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g) && !selectionProviderGroupKeys.has(g.key)));
+    standardCards.forEach(g => cardHiddenByKey.set(g.key, cardHidden(g)));
 
     placements.forEach(p => {
       if (p.kind === 'card') {
@@ -1284,7 +1264,7 @@ function GroupedGraphInner() {
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
-      localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode, selectedLayers,
+      cardVisibilityFilters, variablesById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
@@ -1432,74 +1412,33 @@ function GroupedGraphInner() {
       };
     });
 
-    // A wrapped card can't be arranged on its own — its coordinates are
-    // parent-relative, and the wrapper frame itself never moves otherwise.
-    // Fold each card into its outermost wrapper's unit key so the whole
-    // frame is arranged as one block; standalone cards are their own unit.
-    // Only 'standard' cards can ever be wrapped (buildWrapperLayout never
-    // nests managed source/shader/shades groups), so leave those alone even
-    // if their sourceGroupName happens to share a prefix with a grouped path.
-    const unitKeyForGroup = (group: GroupData): string => {
-      if (group.kind !== 'standard') return group.key;
-      const outermost = outermostGroupedAncestor(group.sourceGroupName || '', groupedPaths);
-      return outermost ? `wrapper:${outermost}` : group.key;
-    };
-
-    // One pseudo GroupData per top-level unit. For a wrapper unit, reuse its
-    // first member card and override key/title/position — only those plus
-    // the height override matter to the arrange algorithm.
-    const unitGroups = new Map<string, GroupData>();
-    const wrapperMemberHeightSum = new Map<string, number>();
-    currentGroups.forEach(group => {
-      const unitKey = unitKeyForGroup(group);
-      if (unitKey === group.key) {
-        unitGroups.set(unitKey, group);
-        return;
-      }
-      if (!unitGroups.has(unitKey)) {
-        const wrapperNode = currentNodes.find(n => n.id === unitKey);
-        unitGroups.set(unitKey, {
-          ...group,
-          key: unitKey,
-          title: unitKey.slice('wrapper:'.length),
-          x: wrapperNode?.position.x ?? group.x,
-          y: wrapperNode?.position.y ?? group.y,
-        });
-      }
-      wrapperMemberHeightSum.set(unitKey, (wrapperMemberHeightSum.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP);
+    // Fold cards into arrangeable units and split them by visibility. The
+    // helper applies the SAME predicate the layout effect renders as
+    // `node.hidden` (cardVisibilityFilters, selection-provider force-show
+    // included), so a card that isn't on screen never reserves a grid slot —
+    // which is what used to leave the large empty gaps.
+    const wrapperFrames = new Map<string, WrapperFrameGeometry>();
+    currentNodes.forEach(n => {
+      if (n.type !== 'groupWrapper') return;
+      wrapperFrames.set(n.id, { position: n.position, measuredHeight: n.measured?.height });
     });
-
-    // Wrapper units use the measured frame height when xyflow has it;
-    // otherwise fall back to summing member card heights + gaps, wrapped in
-    // the same chrome buildWrapperLayout adds (header + top/bottom padding).
-    const heightOverrides = new Map<string, number>();
-    unitGroups.forEach((group, unitKey) => {
-      if (!unitKey.startsWith('wrapper:')) return;
-      const wrapperNode = currentNodes.find(n => n.id === unitKey);
-      const measured = wrapperNode?.measured?.height;
-      if (typeof measured === 'number' && measured > 0) {
-        heightOverrides.set(unitKey, measured);
-      } else {
-        const memberSum = wrapperMemberHeightSum.get(unitKey) || 0;
-        heightOverrides.set(
-          unitKey,
-          memberSum > 0
-            ? memberSum - WRAPPER_GAP + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-            : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-        );
-      }
-    });
-
-    const arrangeUnits = Array.from(unitGroups.values());
+    const {
+      units: arrangeUnits,
+      hiddenUnits,
+      heightOverrides,
+      unitKeyByGroupKey,
+      hiddenByKey,
+    } = buildArrangeUnits(currentGroups, groupedPaths, cardVisibilityFilters, wrapperFrames);
 
     // Remap connections onto their unit keys; a connection that becomes a
     // self-loop within one unit (both ends now the same wrapper) is dropped.
     const remappedConnections = connectionData.reduce<ConnectionRecord[]>((acc, conn) => {
-      const fromGroup = currentGroups.find(g => g.key === conn.fromGroup);
-      const toGroup = currentGroups.find(g => g.key === conn.toGroup);
-      if (!fromGroup || !toGroup) return acc;
-      const fromUnit = unitKeyForGroup(fromGroup);
-      const toUnit = unitKeyForGroup(toGroup);
+      const fromUnit = unitKeyByGroupKey.get(conn.fromGroup);
+      const toUnit = unitKeyByGroupKey.get(conn.toGroup);
+      if (!fromUnit || !toUnit) return acc;
+      // An edge that isn't drawn must not shape the layout: the packing
+      // follows what the user can actually see.
+      if (hiddenByKey.get(conn.fromGroup) || hiddenByKey.get(conn.toGroup)) return acc;
       if (fromUnit === toUnit) return acc;
       acc.push({ ...conn, fromGroup: fromUnit, toGroup: toUnit });
       return acc;
@@ -1508,6 +1447,25 @@ function GroupedGraphInner() {
     const newPositions = arrangeGroupsByConnectedBlocks(
       arrangeUnits, remappedConnections, settings.gapX, settings.gapY, heightOverrides
     );
+
+    // Hidden units get no slot, but they must keep an entry in the saved
+    // record. Dropping it would re-seed them from their natural origin on the
+    // next layout pass and drop them straight on top of the arranged grid the
+    // moment the filter is lifted. Park them in a spare column just right of
+    // the arranged content, ordered by their pre-arrange position so the
+    // result is deterministic. Undo restores their real positions anyway (the
+    // snapshot below covers every top-level node, hidden ones included).
+    if (hiddenUnits.length > 0) {
+      hiddenUnits.sort(sortGroupsByPosition);
+      const parkX = newPositions.size > 0
+        ? Math.max(...Array.from(newPositions.values(), pos => pos.x)) + GROUP_WIDTH + settings.gapX
+        : 0;
+      let parkY = 0;
+      hiddenUnits.forEach(unit => {
+        newPositions.set(unit.key, { x: parkX, y: parkY });
+        parkY += (heightOverrides.get(unit.key) ?? getGroupHeight(unit)) + settings.gapY;
+      });
+    }
 
     // Snapshot current top-level positions for one-step undo before applying.
     const previousPositions: Record<string, { x: number; y: number }> = {};
@@ -1538,7 +1496,7 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, setNodes, variableType]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;

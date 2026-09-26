@@ -2,6 +2,7 @@
 
 import { VariableData, CollectionData, ShadeGroupData } from '../../../types';
 import { parseColorToRgb, rgbObjToHex } from '../../../utils/color';
+import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../../utils/groupFilters';
 import { getVariableValueForMode } from '../../../utils/modes';
 import {
   GroupData,
@@ -19,6 +20,9 @@ import {
   GROUP_WIDTH,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
+  WRAPPER_HEADER_HEIGHT,
+  WRAPPER_PADDING,
+  WRAPPER_GAP,
 } from './constants';
 
 // ── Utility functions ──────────────────────────────────────────────
@@ -475,6 +479,202 @@ function arrangeGroupsByConnectedBlocks(
   return positions;
 }
 
+// ── Arrange units ──────────────────────────────────────────────────
+
+// Shallowest (outermost) grouped ancestor of `path` — the top-level wrapper
+// that ultimately contains it, even when wrappers are nested inside one
+// another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
+// FIRST match (ascending depth) instead of the deepest one, since Arrange
+// treats a whole nested wrapper frame as a single movable unit.
+function outermostGroupedAncestor(path: string, grouped: Set<string>): string | null {
+  const parts = path.split('/');
+  for (let depth = 1; depth < parts.length; depth++) {
+    const prefix = parts.slice(0, depth).join('/');
+    if (grouped.has(prefix)) return prefix;
+  }
+  return null;
+}
+
+/** Live geometry of a wrapper frame node, keyed by `wrapper:<path>`. */
+export interface WrapperFrameGeometry {
+  position: { x: number; y: number };
+  measuredHeight?: number;
+}
+
+export interface ArrangeUnits {
+  /** Visible units, the only ones that get a grid slot. */
+  units: GroupData[];
+  /** Units with nothing visible in them — parked rather than arranged. */
+  hiddenUnits: GroupData[];
+  /** Vertical footprint override per wrapper unit (visible and hidden). */
+  heightOverrides: Map<string, number>;
+  /** Card key → the unit it was folded into. */
+  unitKeyByGroupKey: Map<string, string>;
+  /** Card key → hidden by the current filters. */
+  hiddenByKey: Map<string, boolean>;
+}
+
+/**
+ * Fold cards into the units Arrange Grid actually moves, splitting them by
+ * visibility.
+ *
+ * A wrapped card can't be arranged on its own — its coordinates are
+ * parent-relative and the wrapper frame itself never moves otherwise — so
+ * every card folds into its outermost wrapper's unit key and the whole frame
+ * is arranged as one block. Only 'standard' cards can ever be wrapped
+ * (buildWrapperLayout never nests managed source/shader/shades groups), so
+ * those are left alone even if their sourceGroupName happens to share a
+ * prefix with a grouped path.
+ *
+ * Visibility rules:
+ * - A card hidden by the filters gets no slot; its empty slot is exactly the
+ *   gap this split exists to remove.
+ * - A wrapper unit is hidden only when EVERY member is hidden. One visible
+ *   member means the frame is on screen and still needs a slot.
+ * - A wrapper's height counts ALL its members, hidden ones included:
+ *   buildWrapperLayout stacks members without consulting visibility, so a
+ *   hidden member's space inside the frame stays reserved and the frame drawn
+ *   on the canvas is that tall. Measuring only the visible members would
+ *   under-size the unit and overlap whatever is placed after it.
+ */
+function buildArrangeUnits(
+  groups: GroupData[],
+  groupedPaths: Set<string>,
+  filters: CardVisibilityFilters,
+  wrapperFrames: Map<string, WrapperFrameGeometry>
+): ArrangeUnits {
+  const unitKeyForGroup = (group: GroupData): string => {
+    if (group.kind !== 'standard') return group.key;
+    const outermost = outermostGroupedAncestor(group.sourceGroupName || '', groupedPaths);
+    return outermost ? `wrapper:${outermost}` : group.key;
+  };
+
+  const hiddenByKey = new Map<string, boolean>();
+  const unitKeyByGroupKey = new Map<string, string>();
+  // One pseudo GroupData per top-level unit. For a wrapper unit, reuse its
+  // first member card and override key/title/position — only those plus the
+  // height override matter to the arrange algorithm.
+  const unitGroups = new Map<string, GroupData>();
+  const unitHidden = new Map<string, boolean>();
+  const wrapperMemberHeightSum = new Map<string, number>();
+
+  groups.forEach(group => {
+    const unitKey = unitKeyForGroup(group);
+    const hidden = isCardHidden(group, filters);
+    hiddenByKey.set(group.key, hidden);
+    unitKeyByGroupKey.set(group.key, unitKey);
+    unitHidden.set(unitKey, (unitHidden.get(unitKey) ?? true) && hidden);
+
+    if (unitKey === group.key) {
+      unitGroups.set(unitKey, group);
+      return;
+    }
+    if (!unitGroups.has(unitKey)) {
+      const frame = wrapperFrames.get(unitKey);
+      unitGroups.set(unitKey, {
+        ...group,
+        key: unitKey,
+        title: unitKey.slice('wrapper:'.length),
+        x: frame?.position.x ?? group.x,
+        y: frame?.position.y ?? group.y,
+      });
+    }
+    wrapperMemberHeightSum.set(
+      unitKey,
+      (wrapperMemberHeightSum.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP
+    );
+  });
+
+  // Wrapper units use the measured frame height when xyflow has it; otherwise
+  // fall back to summing member card heights + gaps, wrapped in the same
+  // chrome buildWrapperLayout adds (header + top/bottom padding).
+  const heightOverrides = new Map<string, number>();
+  unitGroups.forEach((_group, unitKey) => {
+    if (!unitKey.startsWith('wrapper:')) return;
+    const measured = wrapperFrames.get(unitKey)?.measuredHeight;
+    if (typeof measured === 'number' && measured > 0) {
+      heightOverrides.set(unitKey, measured);
+      return;
+    }
+    const memberSum = wrapperMemberHeightSum.get(unitKey) || 0;
+    heightOverrides.set(
+      unitKey,
+      memberSum > 0
+        ? memberSum - WRAPPER_GAP + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+        : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
+    );
+  });
+
+  const units: GroupData[] = [];
+  const hiddenUnits: GroupData[] = [];
+  unitGroups.forEach((group, unitKey) => {
+    (unitHidden.get(unitKey) ? hiddenUnits : units).push(group);
+  });
+
+  return { units, hiddenUnits, heightOverrides, unitKeyByGroupKey, hiddenByKey };
+}
+
+// ── Card visibility ────────────────────────────────────────────────
+
+/**
+ * Everything the card-visibility rule needs, passed in explicitly so the rule
+ * itself stays a pure function outside React.
+ */
+interface CardVisibilityFilters {
+  selectedCollections: Set<string>;
+  selectedTypes: Set<string>;
+  selectedGroups: Set<string>;
+  variablesById: Map<string, VariableData>;
+  // Cards that provide a token to the current Figma selection are force-shown
+  // even when the filters above would hide them, so the selection's link is
+  // never drawn to nothing. Omit for "filters only".
+  selectionProviderGroupKeys?: Set<string>;
+}
+
+/**
+ * Whether a card is hidden on the canvas right now.
+ *
+ * Single source of truth, deliberately: the layout effect uses it to set
+ * `hidden` on the node, and Arrange Grid uses it to decide which cards get a
+ * grid slot. A second copy of this rule would drift, and arrange would go back
+ * to handing grid slots to invisible cards — which is exactly the empty-gap
+ * bug this replaced.
+ */
+function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean {
+  // Force-show wins over every filter below.
+  if (filters.selectionProviderGroupKeys?.has(group.key)) return false;
+  if (!filters.selectedCollections.has(group.collectionId)) return true;
+  // An empty collection's card has no variables to match against the type
+  // or group filters — the collection filter above is the only one that
+  // can meaningfully apply to it.
+  if (group.kind === 'collection') return false;
+
+  const hasMatchingType = group.variables.some(v => {
+    if (v.isVirtual) return true;
+    const sourceVar = filters.variablesById.get(v.id);
+    return sourceVar && filters.selectedTypes.has(sourceVar.resolvedType);
+  });
+  if (!hasMatchingType) return true;
+
+  let hasMatchingGroup = false;
+  if (group.kind === 'shader' || group.kind === 'shades') {
+    if (group.sourceGroupName) {
+      hasMatchingGroup = filters.selectedGroups.has(
+        getCollectionGroupKey(group.collectionId, group.sourceGroupName)
+      );
+    }
+  } else {
+    hasMatchingGroup = group.variables.some(v => {
+      if (v.isVirtual) return false;
+      return isVariableVisibleForGroupFilters(
+        { collectionId: group.collectionId, name: v.name },
+        filters.selectedGroups
+      );
+    });
+  }
+  return !hasMatchingGroup;
+}
+
 /**
  * Placeholder cards for collections that hold no variables at all.
  *
@@ -524,8 +724,13 @@ function getCollectionCardKey(collectionId: string): string {
   return `collection:${collectionId}`;
 }
 
+export type { CardVisibilityFilters };
+
 export {
   buildEmptyCollectionCards,
+  isCardHidden,
+  buildArrangeUnits,
+  outermostGroupedAncestor,
   getCollectionCardKey,
   getDefaultVariableValue,
   normalizePathSegment,
