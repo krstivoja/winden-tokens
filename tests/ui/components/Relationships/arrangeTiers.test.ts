@@ -9,13 +9,11 @@ import {
 } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type { CardVisibilityFilters } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import {
-  GRID_MAX_COLUMN_HEIGHT,
   GROUP_GAP_X,
   GROUP_GAP_Y,
   GROUP_WIDTH,
   SHADER_GROUP_HEADER_FILL,
   STANDARD_GROUP_HEADER_FILL,
-  TIER_GAP_MULTIPLIER,
   TIER_LABEL_NODE_PREFIX,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
 import type {
@@ -27,18 +25,11 @@ import type { VariableData } from '../../../../src/ui/types';
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
-// Sub-columns inside one tier step by COLUMN_STEP; crossing a tier boundary
-// costs the wider tier gap instead of gapX, i.e. COLUMN_STEP + TIER_EXTRA.
+// One tier is one column, so every tier boundary is the same uniform step.
 const COLUMN_STEP = GROUP_WIDTH + GROUP_GAP_X;
-const TIER_GAP = GROUP_GAP_X * TIER_GAP_MULTIPLIER;
-const TIER_EXTRA = TIER_GAP - GROUP_GAP_X;
 
-/**
- * Left edge of a tier: `colsBefore` sub-columns already laid down, spread
- * over `tiersBefore` earlier tier boundaries.
- */
-const laneX = (tiersBefore: number, colsBefore: number) =>
-  colsBefore * COLUMN_STEP + tiersBefore * TIER_EXTRA;
+/** Left edge of the tier with `tiersBefore` tiers to its left. */
+const laneX = (tiersBefore: number) => tiersBefore * COLUMN_STEP;
 
 const row = (id: string, name: string, extra: Partial<VariableNode> = {}): VariableNode => ({
   id,
@@ -143,7 +134,7 @@ const arrange = (
   groups: GroupData[],
   connections: ConnectionRecord[],
   visibleCollections: string[],
-  options: { maxColumnHeight?: number; dropHiddenEdgesFromDepth?: boolean } = {}
+  options: { dropHiddenEdgesFromDepth?: boolean } = {}
 ) => {
   const visibility = filtersFor(groups, visibleCollections);
   const { units, heightOverrides, unitKeyByGroupKey, hiddenByKey } = buildArrangeUnits(
@@ -171,7 +162,6 @@ const arrange = (
     // `dropHiddenEdgesFromDepth` reproduces the pre-fix behaviour, where the
     // tiers were read off the filtered graph.
     depthConnections: options.dropHiddenEdgesFromDepth ? visibleConnections : allConnections,
-    maxColumnHeight: options.maxColumnHeight,
   });
 };
 
@@ -196,8 +186,8 @@ describe('Arrange tiers are computed over the full connection graph', () => {
     // `root` is a genuine root, `surface` is one level in, `button` two —
     // exactly the tiers they hold with `_global` on screen.
     expect(positions.get('group:root')!.x).toBe(0);
-    expect(positions.get('group:surface')!.x).toBe(laneX(1, 1));
-    expect(positions.get('group:button')!.x).toBe(laneX(2, 2));
+    expect(positions.get('group:surface')!.x).toBe(laneX(1));
+    expect(positions.get('group:button')!.x).toBe(laneX(2));
   });
 
   it('collapsed the tiers before the fix: the filtered graph makes a consumer a root', () => {
@@ -209,7 +199,7 @@ describe('Arrange tiers are computed over the full connection graph', () => {
     // first column with `root`; the graph flattens into two columns.
     expect(positions.get('group:surface')!.x).toBe(0);
     expect(positions.get('group:root')!.x).toBe(0);
-    expect(positions.get('group:button')!.x).toBe(laneX(1, 1));
+    expect(positions.get('group:button')!.x).toBe(laneX(1));
   });
 
   it('is unchanged when nothing is hidden', () => {
@@ -217,8 +207,8 @@ describe('Arrange tiers are computed over the full connection graph', () => {
 
     expect(positions.get('group:prim')!.x).toBe(0);
     expect(positions.get('group:root')!.x).toBe(0);
-    expect(positions.get('group:surface')!.x).toBe(laneX(1, 1));
-    expect(positions.get('group:button')!.x).toBe(laneX(2, 2));
+    expect(positions.get('group:surface')!.x).toBe(laneX(1));
+    expect(positions.get('group:button')!.x).toBe(laneX(2));
   });
 });
 
@@ -236,7 +226,7 @@ describe('Empty lanes collapse', () => {
 
     // Depths are still 1 and 2, but the lanes renumber contiguously.
     expect(positions.get('group:surface')!.x).toBe(0);
-    expect(positions.get('group:button')!.x).toBe(laneX(1, 1));
+    expect(positions.get('group:button')!.x).toBe(laneX(1));
   });
 
   it('keeps the relative order of the lanes it renumbers', () => {
@@ -252,17 +242,17 @@ describe('Empty lanes collapse', () => {
     );
 
     expect(positions.get('group:c')!.x).toBe(0);
-    expect(positions.get('group:d')!.x).toBe(laneX(1, 1));
+    expect(positions.get('group:d')!.x).toBe(laneX(1));
   });
 });
 
-// ── Fault 2: over-tall columns wrap ────────────────────────────────
+// ── One tier is one column ─────────────────────────────────────────
 
-describe('Over-tall lanes wrap into sub-columns', () => {
+describe('A tier stacks in a single column', () => {
   const cardHeight = getGroupHeight(plain('a'));
   const stackStep = cardHeight + GROUP_GAP_Y;
 
-  it('stacks the whole tier in one column when the cap allows it', () => {
+  it('stacks every card of a tier in one column, however many there are', () => {
     const cards = ['a', 'b', 'c', 'd'].map(key => plain(key));
     const { positions } = arrange(cards, [], ['color']);
 
@@ -271,80 +261,47 @@ describe('Over-tall lanes wrap into sub-columns', () => {
     });
   });
 
-  it('splits a lane whose stack exceeds the cap, chunking its existing order', () => {
-    const cards = ['a', 'b', 'c', 'd'].map(key => plain(key));
-    // Room for two cards per column (2 * 84 + 40 = 208), not three.
-    const { positions } = arrange(cards, [], ['color'], { maxColumnHeight: 2 * cardHeight + GROUP_GAP_Y });
+  it('keeps a 29-card tier one column wide and its consumer one step right', () => {
+    // The 678-variable file: 29 literal-valued cards at depth 0 that used to
+    // wrap into four sub-columns, plus one card at depth 1.
+    const palette = Array.from({ length: 29 }, (_, i) =>
+      plain(`p${String(i).padStart(2, '0')}`));
+    const surface = plain('surface');
+    const { positions, tiers } = arrange(
+      [...palette, surface],
+      [link(palette[0], surface)],
+      ['color']
+    );
 
-    expect(positions.get('group:a')).toEqual({ x: 0, y: 0 });
-    expect(positions.get('group:b')).toEqual({ x: 0, y: stackStep });
-    expect(positions.get('group:c')).toEqual({ x: COLUMN_STEP, y: 0 });
-    expect(positions.get('group:d')).toEqual({ x: COLUMN_STEP, y: stackStep });
-  });
-
-  it('still gives a card taller than the cap a sub-column of its own', () => {
-    const tall = card('group:tall', 'color', 'color/tall', [
-      row('v-tall-1', 'color/tall/one'),
-      row('v-tall-2', 'color/tall/two'),
-      row('v-tall-3', 'color/tall/three'),
+    expect(new Set(palette.map(g => positions.get(g.key)!.x))).toEqual(new Set([0]));
+    expect(positions.get('group:surface')!.x).toBe(laneX(1));
+    expect(tiers).toEqual([
+      { tier: 1, x: 0, width: GROUP_WIDTH },
+      { tier: 2, x: COLUMN_STEP, width: GROUP_WIDTH },
     ]);
-    const small = plain('zz');
-    const { positions } = arrange([tall, small], [], ['color'], { maxColumnHeight: 10 });
-
-    expect(positions.get('group:tall')).toEqual({ x: 0, y: 0 });
-    expect(positions.get('group:zz')).toEqual({ x: COLUMN_STEP, y: 0 });
   });
 
-  it('shifts later tiers right by the extra columns a split tier consumes', () => {
+  it('steps a four-tier chain by one uniform column each time', () => {
     const a = plain('a');
     const b = plain('b');
     const c = plain('c');
     const d = plain('d');
-    const leaf = plain('leaf');
-    // a..d are roots; `leaf` sits one tier to their right.
-    const connections = [link(a, leaf)];
-    const groups = [a, b, c, d, leaf];
+    const { positions, tiers } = arrange(
+      [a, b, c, d],
+      [link(a, b), link(b, c), link(c, d)],
+      ['color']
+    );
 
-    const { positions: uncapped } = arrange(groups, connections, ['color']);
-    expect(uncapped.get('group:leaf')!.x).toBe(laneX(1, 1));
-
-    // Two cards per sub-column: lane 0 becomes two columns wide.
-    const { positions: capped } = arrange(groups, connections, ['color'], {
-      maxColumnHeight: 2 * cardHeight + GROUP_GAP_Y,
-    });
-    expect(capped.get('group:a')!.x).toBe(0);
-    // Same tier, so the sub-column break keeps the ordinary gap …
-    expect(capped.get('group:c')!.x).toBe(COLUMN_STEP);
-    // … and only the real tier boundary pays the wider one.
-    expect(capped.get('group:leaf')!.x).toBe(laneX(1, 2));
-  });
-
-  it('chunks the order the barycenter sweeps produced, not the title order', () => {
-    // Lane 0 keeps title order [a-src, b-src]. In lane 1 the titles sort the
-    // other way round from the connections, so only the sweeps can put `z-dep`
-    // (fed by the first source) ahead of `a-dep` (fed by the second).
-    const first = plain('a-src');
-    const second = plain('b-src');
-    const late = plain('z-dep');
-    const early = plain('a-dep');
-    const groups = [first, second, late, early];
-    const connections = [link(first, late), link(second, early)];
-
-    // One card per sub-column, so the chunking is directly readable as order.
-    const { positions } = arrange(groups, connections, ['color'], { maxColumnHeight: 10 });
-
-    expect(positions.get('group:a-src')!.x).toBe(0);
-    expect(positions.get('group:b-src')!.x).toBe(COLUMN_STEP);
-    // Lane 1 starts after lane 0's two sub-columns plus the tier gap, and
-    // follows the swept order: `z-dep` first even though its title sorts last.
-    expect(positions.get('group:z-dep')!.x).toBe(laneX(1, 2));
-    expect(positions.get('group:a-dep')!.x).toBe(laneX(1, 3));
+    // With the stock 260-wide card and gapX of 180.
+    expect([a, b, c, d].map(g => positions.get(g.key)!.x)).toEqual([0, 440, 880, 1320]);
+    expect(tiers.map(t => t.x)).toEqual([0, 440, 880, 1320]);
+    expect(tiers.every(t => t.width === GROUP_WIDTH)).toBe(true);
   });
 });
 
-// ── Managed chains are never broken up ─────────────────────────────
+// ── Managed chains occupy fixed lanes ──────────────────────────────
 
-describe('Managed chains survive wrapping', () => {
+describe('Managed chains hold one row across their fixed lanes', () => {
   const chain = (name: string): GroupData[] => [
     card(`source:${name}`, 'color', `color/${name}`, [row(`v-${name}`, `color/${name}`)], {
       kind: 'source',
@@ -361,9 +318,9 @@ describe('Managed chains survive wrapping', () => {
     }),
   ];
 
-  it('keeps every chain whole on one row however small the cap is', () => {
+  it('places each chain as one row across three consecutive lanes', () => {
     const groups = [...chain('red'), ...chain('green'), ...chain('blue')];
-    const { positions } = arrange(groups, [], ['color'], { maxColumnHeight: 1 });
+    const { positions } = arrange(groups, [], ['color']);
 
     const rowHeight = getGroupHeight(groups[0]) + GROUP_GAP_Y;
     ['red', 'green', 'blue'].forEach(name => {
@@ -374,120 +331,42 @@ describe('Managed chains survive wrapping', () => {
       expect(shader.y).toBe(source.y);
       expect(shades.y).toBe(source.y);
       expect(source.x).toBe(0);
-      expect(shader.x).toBe(laneX(1, 1));
-      expect(shades.x).toBe(laneX(2, 2));
+      expect(shader.x).toBe(laneX(1));
+      expect(shades.x).toBe(laneX(2));
     });
 
-    // The chains stack downwards in the SAME columns — a chain row is never
-    // pushed into a sub-column, even though the three rows together are far
-    // taller than the cap.
+    // The chains stack downwards in the same columns.
     expect(positions.get('source:red')!.y).toBe(0);
     expect(positions.get('source:green')!.y).toBe(rowHeight);
     expect(positions.get('source:blue')!.y).toBe(rowHeight * 2);
   });
-
-  it('wraps the standalone cards beside a chain without disturbing it', () => {
-    const groups = [...chain('red'), plain('p'), plain('q'), plain('r')];
-    const cardHeight = getGroupHeight(plain('p'));
-    const { positions } = arrange(groups, [], ['color'], {
-      maxColumnHeight: 2 * cardHeight + GROUP_GAP_Y,
-    });
-
-    // Lane 0 holds the chain row plus three standalone cards; the standalone
-    // stack wraps after two, so lane 0 is two columns wide and the chain's
-    // shader/shades lanes shift right by one.
-    expect(positions.get('source:red')).toEqual({ x: 0, y: 0 });
-    expect(positions.get('shader:red')!.y).toBe(0);
-    expect(positions.get('shades:red')!.y).toBe(0);
-    expect(positions.get('shader:red')!.x).toBe(laneX(1, 2));
-    expect(positions.get('shades:red')!.x).toBe(laneX(2, 3));
-
-    // Standalone cards start below the chain row, and the third wraps.
-    const belowChain = getGroupHeight(groups[0]) + GROUP_GAP_Y;
-    expect(positions.get('group:p')).toEqual({ x: 0, y: belowChain });
-    expect(positions.get('group:q')).toEqual({ x: 0, y: belowChain + cardHeight + GROUP_GAP_Y });
-    expect(positions.get('group:r')).toEqual({ x: COLUMN_STEP, y: belowChain });
-  });
 });
 
-// ── The new Grid Setting ───────────────────────────────────────────
+// ── Grid Settings migration ────────────────────────────────────────
 
-describe('normalizeGridLayoutSettings: max column height', () => {
-  it('defaults when the stored settings predate the option', () => {
-    expect(normalizeGridLayoutSettings({ gapX: 10, gapY: 20 })).toEqual({
-      gapX: 10,
-      gapY: 20,
-      maxColumnHeight: GRID_MAX_COLUMN_HEIGHT,
-    });
+describe('normalizeGridLayoutSettings drops the retired column cap', () => {
+  it('loads settings persisted while the cap existed, without the dead field', () => {
+    const stored = { gapX: 10, gapY: 20, maxColumnHeight: 2400 };
+    const settings = normalizeGridLayoutSettings(stored);
+
+    expect(settings).toEqual({ gapX: 10, gapY: 20 });
+    expect('maxColumnHeight' in settings).toBe(false);
   });
 
-  it('keeps a positive value and rejects anything else', () => {
-    expect(normalizeGridLayoutSettings({ maxColumnHeight: 900 }).maxColumnHeight).toBe(900);
-    expect(normalizeGridLayoutSettings({ maxColumnHeight: 0 }).maxColumnHeight).toBe(GRID_MAX_COLUMN_HEIGHT);
-    expect(normalizeGridLayoutSettings({ maxColumnHeight: -5 }).maxColumnHeight).toBe(GRID_MAX_COLUMN_HEIGHT);
-    expect(normalizeGridLayoutSettings({ maxColumnHeight: Number.NaN }).maxColumnHeight).toBe(GRID_MAX_COLUMN_HEIGHT);
-    expect(normalizeGridLayoutSettings(undefined).maxColumnHeight).toBe(GRID_MAX_COLUMN_HEIGHT);
+  it('still defaults the two gaps it does keep', () => {
+    expect(normalizeGridLayoutSettings(undefined)).toEqual({
+      gapX: GROUP_GAP_X,
+      gapY: GROUP_GAP_Y,
+    });
+    expect(normalizeGridLayoutSettings({ gapX: -1, gapY: 5 })).toEqual({
+      gapX: GROUP_GAP_X,
+      gapY: 5,
+    });
   });
 
   it('round-trips through the draft the Grid Settings inputs edit', () => {
     const settings = normalizeGridLayoutSettings({ gapX: 1, gapY: 2, maxColumnHeight: 3 });
-    expect(toGridLayoutDraft(settings)).toEqual({ gapX: '1', gapY: '2', maxColumnHeight: '3' });
-  });
-});
-
-// ── Fault 3: a wrapped tier looked exactly like several tiers ───────
-
-describe('A tier boundary is spaced differently from a sub-column break', () => {
-  const cardHeight = getGroupHeight(plain('a'));
-  /** A cap with room for exactly `n` stacked cards. */
-  const capFor = (n: number) => n * cardHeight + (n - 1) * GROUP_GAP_Y;
-
-  it('separates sub-columns of one tier by gapX and tiers by the wider gap', () => {
-    const roots = ['a', 'b', 'c', 'd'].map(key => plain(key));
-    const leaf = plain('leaf');
-    const { positions } = arrange([...roots, leaf], [link(roots[0], leaf)], ['color'], {
-      maxColumnHeight: capFor(2),
-    });
-
-    const [first, second] = [positions.get('group:a')!.x, positions.get('group:c')!.x];
-    expect(second - first).toBe(GROUP_WIDTH + GROUP_GAP_X);
-    // Crossing into tier 2 costs the tier gap instead, which is strictly
-    // wider — that difference is the whole point of the change.
-    expect(positions.get('group:leaf')!.x - second).toBe(GROUP_WIDTH + TIER_GAP);
-    expect(TIER_GAP).toBeGreaterThan(GROUP_GAP_X);
-  });
-
-  it('reproduces the 678-variable file: tier 1 wraps into four sub-columns', () => {
-    // 29 literal-valued cards at depth 0, eight per column → four
-    // sub-columns, and one card at depth 1 that references the first of them.
-    const palette = Array.from({ length: 29 }, (_, i) =>
-      plain(`p${String(i).padStart(2, '0')}`));
-    const surface = plain('surface');
-    const { positions, tiers } = arrange(
-      [...palette, surface],
-      [link(palette[0], surface)],
-      ['color'],
-      { maxColumnHeight: capFor(8) }
-    );
-
-    // The measured layout, unchanged: 0 / 440 / 880 / 1320 with the stock
-    // gapX of 180 and a 260-wide card.
-    const subColumnX = Array.from(
-      new Set(palette.map(g => positions.get(g.key)!.x))
-    ).sort((a, b) => a - b);
-    expect(subColumnX).toEqual([0, 440, 880, 1320]);
-
-    // Tier 2 used to begin at 1760 — one ordinary column step past the last
-    // sub-column, i.e. indistinguishable from a fifth palette column. It now
-    // begins at 2120, a visibly wider gap.
-    expect(positions.get('group:surface')!.x).toBe(2120);
-    expect(positions.get('group:surface')!.x).toBe(laneX(1, 4));
-
-    // Two tiers, and tier 1's caption spans all four of its sub-columns.
-    expect(tiers).toEqual([
-      { tier: 1, x: 0, width: 4 * GROUP_WIDTH + 3 * GROUP_GAP_X, columns: 4 },
-      { tier: 2, x: 2120, width: GROUP_WIDTH, columns: 1 },
-    ]);
+    expect(toGridLayoutDraft(settings)).toEqual({ gapX: '1', gapY: '2' });
   });
 });
 
@@ -507,8 +386,8 @@ describe('Tier captions', () => {
     );
 
     expect(tiers.map(t => t.tier)).toEqual([1, 2]);
-    expect(tiers.map(t => t.x)).toEqual([0, laneX(1, 1)]);
-    expect(tiers.every(t => t.columns === 1 && t.width === GROUP_WIDTH)).toBe(true);
+    expect(tiers.map(t => t.x)).toEqual([0, laneX(1)]);
+    expect(tiers.every(t => t.width === GROUP_WIDTH)).toBe(true);
   });
 
   it('emits nothing when there is nothing to arrange', () => {
@@ -547,8 +426,8 @@ describe('isTierLabelNodeId keeps captions out of the saved positions', () => {
     const canvasNodes = [
       { id: 'group:a', parentId: undefined, position: { x: 0, y: 0 } },
       { id: `${TIER_LABEL_NODE_PREFIX}1`, parentId: undefined, position: { x: 0, y: -40 } },
-      { id: 'group:leaf', parentId: undefined, position: { x: laneX(1, 1), y: 0 } },
-      { id: `${TIER_LABEL_NODE_PREFIX}2`, parentId: undefined, position: { x: laneX(1, 1), y: -40 } },
+      { id: 'group:leaf', parentId: undefined, position: { x: laneX(1), y: 0 } },
+      { id: `${TIER_LABEL_NODE_PREFIX}2`, parentId: undefined, position: { x: laneX(1), y: -40 } },
     ];
 
     const saved: Record<string, { x: number; y: number }> = {};

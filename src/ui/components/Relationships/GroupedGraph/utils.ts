@@ -19,9 +19,7 @@ import {
   GROUP_PADDING,
   GROUP_GAP_X,
   GROUP_GAP_Y,
-  GRID_MAX_COLUMN_HEIGHT,
   GROUP_WIDTH,
-  TIER_GAP_MULTIPLIER,
   TIER_LABEL_NODE_PREFIX,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
@@ -60,13 +58,12 @@ function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
   const candidate = (value && typeof value === 'object') ? value as Partial<GridLayoutSettings> : {};
   const gapX = typeof candidate.gapX === 'number' && candidate.gapX >= 0 ? candidate.gapX : GROUP_GAP_X;
   const gapY = typeof candidate.gapY === 'number' && candidate.gapY >= 0 ? candidate.gapY : GROUP_GAP_Y;
-  // A zero or negative cap would put every card in its own column, so it falls
-  // back to the default rather than being taken literally. Settings persisted
-  // before this option existed simply have no value here.
-  const maxColumnHeight = typeof candidate.maxColumnHeight === 'number' && candidate.maxColumnHeight > 0
-    ? candidate.maxColumnHeight
-    : GRID_MAX_COLUMN_HEIGHT;
-  return { gapX, gapY, maxColumnHeight };
+  // Settings persisted while the column cap existed also carry a
+  // `maxColumnHeight`. Rebuilding the object field by field rather than
+  // spreading `candidate` drops it: an old record loads as a valid
+  // {gapX, gapY} and the dead key never reaches state, the draft or storage
+  // (the next Apply writes the two-field shape back).
+  return { gapX, gapY };
 }
 
 /** Settings → the string-backed draft the Grid Settings inputs edit. */
@@ -74,7 +71,6 @@ function toGridLayoutDraft(settings: GridLayoutSettings): GridLayoutDraft {
   return {
     gapX: String(settings.gapX),
     gapY: String(settings.gapY),
-    maxColumnHeight: String(settings.maxColumnHeight),
   };
 }
 
@@ -245,10 +241,9 @@ function detectManagedNumberStepGroups(variables: VariableData[]): ManagedNumber
 }
 
 /**
- * Extra inputs to Arrange Grid, named rather than positional: the tail of this
- * function's arguments is three optional knobs of three different kinds, and
- * two of them (the two connection lists) would otherwise sit next to each
- * other with nothing but their position to tell them apart.
+ * Extra inputs to Arrange Grid, named rather than positional: the two
+ * connection lists would otherwise sit next to each other in the argument
+ * tail with nothing but their position to tell them apart.
  */
 interface ArrangeGridOptions {
   /** Vertical footprint override per unit, for wrapper frames. */
@@ -269,18 +264,10 @@ interface ArrangeGridOptions {
    * it always did.
    */
   depthConnections?: ConnectionRecord[];
-  /**
-   * Max stacked height of the cards in one column. A tier whose cards exceed it
-   * wraps into side-by-side sub-columns within the same tier; tiers to its
-   * right shift over by the extra columns it consumes. Measures the stacked
-   * cards only, not any managed-chain rows sitting above them. Defaults to
-   * unlimited.
-   */
-  maxColumnHeight?: number;
 }
 
 /** What Arrange Grid produces: where every unit goes, and where the tier
- *  captions that span those units go. */
+ *  caption above each column goes. */
 interface ArrangeGridResult {
   positions: Map<string, { x: number; y: number }>;
   /** One entry per non-empty tier, left to right. Empty when nothing was
@@ -296,11 +283,10 @@ function arrangeGroupsByConnectedBlocks(
   gapY: number,
   options: ArrangeGridOptions = {}
 ): ArrangeGridResult {
-  const { heightOverrides, depthConnections, maxColumnHeight } = options;
+  const { heightOverrides, depthConnections } = options;
+  // One lane == one tier == one column, so this is both the tier-to-tier step
+  // and the full caption pitch.
   const columnStep = GROUP_WIDTH + gapX;
-  const columnHeightLimit = typeof maxColumnHeight === 'number' && maxColumnHeight > 0
-    ? maxColumnHeight
-    : Number.POSITIVE_INFINITY;
   const positions = new Map<string, { x: number; y: number }>();
   const groupMap = new Map(groups.map(group => [group.key, group]));
   // Callers (e.g. Arrange treating a wrapper frame as one unit) can override
@@ -418,13 +404,11 @@ function arrangeGroupsByConnectedBlocks(
   });
 
   // ── Pass 1: vertical placement ───────────────────────────────────
-  // X is deferred to pass 3, because a tier's column index depends on how many
-  // sub-columns every tier to its left ends up consuming.
+  // X is deferred to pass 2, because a lane's column index depends on how many
+  // lanes to its left survive the empty-lane collapse.
 
   // Managed chains first — each chain is one horizontal row across its fixed
-  // lanes, so its cards share a Y. A chain is never broken up: it is placed
-  // whole, in the first sub-column of each lane it touches, and takes no part
-  // in the column-height wrapping below.
+  // lanes, so its cards share a Y.
   const chainPlacements: { key: string; lane: number; y: number }[] = [];
   let nextBlockY = 0;
   const reserveGeneratorLane = sortedChains.length > 0;
@@ -513,66 +497,21 @@ function arrangeGroupsByConnectedBlocks(
     });
   }
 
-  // ── Pass 2: wrap over-tall lanes into sub-columns ────────────────
-  // Deliberately AFTER the sweeps: the sweeps are what reduce edge crossings,
-  // and chunking the order they produced keeps that work. Splitting first and
-  // sweeping per sub-column would throw it away. A single card taller than the
-  // limit still gets a sub-column of its own rather than none.
-  const laneChunks = new Map<number, string[][]>();
-  sortedLanes.forEach(lane => {
-    const chunks: string[][] = [];
-    let current: string[] = [];
-    let currentHeight = 0;
-
-    (laneOrder.get(lane) || []).forEach(key => {
-      const group = groupMap.get(key);
-      if (!group) return;
-      const height = heightOf(group);
-      if (current.length === 0) {
-        current = [key];
-        currentHeight = height;
-        return;
-      }
-      const grown = currentHeight + gapY + height;
-      if (grown > columnHeightLimit) {
-        chunks.push(current);
-        current = [key];
-        currentHeight = height;
-        return;
-      }
-      current.push(key);
-      currentHeight = grown;
-    });
-
-    if (current.length > 0) chunks.push(current);
-    laneChunks.set(lane, chunks);
-  });
-
-  // ── Pass 3: lane → left edge ─────────────────────────────────────
+  // ── Pass 2: lane → left edge ─────────────────────────────────────
   // Lanes with nothing visible in them collapse: the remaining lanes renumber
   // contiguously in their original order, so hiding a whole tier leaves no
-  // horizontal void. A lane that wrapped consumes as many columns as it has
-  // sub-columns, pushing every later tier right by that much.
-  //
-  // Sub-columns within one lane are spaced by `gapX`; the step from one LANE
-  // to the next uses the wider `tierGap` (see TIER_GAP_MULTIPLIER). Without
-  // that difference a wrapped tier is pixel-for-pixel identical to several
-  // real tiers, which is exactly how a 29-card tier-1 palette came to read as
-  // four dependency levels.
+  // horizontal void. Every surviving lane is exactly one card wide, so the
+  // lanes step by the uniform `columnStep` and each caption is one card wide.
   const usedLanes = Array.from(new Set([...chainLanes, ...sortedLanes])).sort((a, b) => a - b);
-  const tierGap = gapX * TIER_GAP_MULTIPLIER;
   const laneStartX = new Map<number, number>();
   const tiers: TierPlacement[] = [];
-  let nextX = 0;
   usedLanes.forEach((lane, index) => {
-    const columns = Math.max(laneChunks.get(lane)?.length ?? 0, 1);
-    const width = columns * GROUP_WIDTH + (columns - 1) * gapX;
-    laneStartX.set(lane, nextX);
-    tiers.push({ tier: index + 1, x: nextX, width, columns });
-    nextX += width + tierGap;
+    const x = index * columnStep;
+    laneStartX.set(lane, x);
+    tiers.push({ tier: index + 1, x, width: GROUP_WIDTH });
   });
 
-  // ── Pass 4: emit positions ───────────────────────────────────────
+  // ── Pass 3: emit positions ───────────────────────────────────────
   chainPlacements.forEach(placement => {
     positions.set(placement.key, {
       x: laneStartX.get(placement.lane) ?? 0,
@@ -582,22 +521,16 @@ function arrangeGroupsByConnectedBlocks(
 
   sortedLanes.forEach(lane => {
     const startX = laneStartX.get(lane) ?? 0;
-    const startY = laneBottoms.get(lane) ?? 0;
-    let laneBottom = startY;
+    let nextY = laneBottoms.get(lane) ?? 0;
 
-    (laneChunks.get(lane) || []).forEach((chunk, subColumn) => {
-      const x = startX + subColumn * columnStep;
-      let nextColumnY = startY;
-      chunk.forEach(key => {
-        const group = groupMap.get(key);
-        if (!group) return;
-        positions.set(group.key, { x, y: nextColumnY });
-        nextColumnY += heightOf(group) + gapY;
-      });
-      laneBottom = Math.max(laneBottom, nextColumnY);
+    (laneOrder.get(lane) || []).forEach(key => {
+      const group = groupMap.get(key);
+      if (!group) return;
+      positions.set(group.key, { x: startX, y: nextY });
+      nextY += heightOf(group) + gapY;
     });
 
-    laneBottoms.set(lane, laneBottom);
+    laneBottoms.set(lane, nextY);
   });
 
   return { positions, tiers };

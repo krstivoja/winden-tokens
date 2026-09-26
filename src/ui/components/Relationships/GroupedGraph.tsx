@@ -117,16 +117,22 @@ const PROPERTY_COLUMN_GAP = 220;
 // (the row's handle still shows, but no connecting line is drawn).
 const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
 
-/** Tier captions read back out of client storage, which is untyped. */
+/** Tier captions read back out of client storage, which is untyped.
+ *  Captions persisted while tiers could wrap also carry a `columns` count;
+ *  rebuilding each entry from its three live fields drops it rather than
+ *  passing a dead key through to the node's `data`. Their `x`/`width` are
+ *  kept as stored, because they match the card positions stored alongside
+ *  them — the next Arrange rewrites both together. */
 const normalizeTierLabels = (value: unknown): TierPlacement[] => {
   if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is TierPlacement => (
-    !!entry && typeof entry === 'object'
-    && typeof (entry as TierPlacement).tier === 'number'
-    && typeof (entry as TierPlacement).x === 'number'
-    && typeof (entry as TierPlacement).width === 'number'
-    && typeof (entry as TierPlacement).columns === 'number'
-  ));
+  return value
+    .filter((entry): entry is TierPlacement => (
+      !!entry && typeof entry === 'object'
+      && typeof (entry as TierPlacement).tier === 'number'
+      && typeof (entry as TierPlacement).x === 'number'
+      && typeof (entry as TierPlacement).width === 'number'
+    ))
+    .map(({ tier, x, width }) => ({ tier, x, width }));
 };
 
 const edgeTypes: EdgeTypes = {
@@ -1531,16 +1537,14 @@ function GroupedGraphInner() {
       visibleConnections.push(remapped);
     });
 
-    // `tiers` describes the caption row: one entry per non-empty tier,
-    // spanning however many sub-columns that tier wrapped into. It is taken
-    // BEFORE the hidden units are parked below, so a parked column never gets
-    // a caption of its own.
+    // `tiers` describes the caption row: one entry per non-empty tier, each
+    // one column wide. It is taken BEFORE the hidden units are parked below,
+    // so a parked column never gets a caption of its own.
     const { positions: newPositions, tiers } = arrangeGroupsByConnectedBlocks(
       arrangeUnits, visibleConnections, settings.gapX, settings.gapY,
       {
         heightOverrides,
         depthConnections: allConnections,
-        maxColumnHeight: settings.maxColumnHeight,
       }
     );
 
@@ -1680,7 +1684,6 @@ function GroupedGraphInner() {
     const settings = normalizeGridLayoutSettings({
       gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
       gapY: Number.parseInt(gridLayoutDraft.gapY, 10),
-      maxColumnHeight: Number.parseInt(gridLayoutDraft.maxColumnHeight, 10),
     });
     setGridLayoutSettings(settings);
     setGridLayoutDraft(toGridLayoutDraft(settings));
@@ -1743,7 +1746,7 @@ function GroupedGraphInner() {
                   onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
                 />
               </div>
-              <div className="mb-3">
+              <div className="mb-4">
                 <label htmlFor="grid-gap-y" className="block text-[11px] mb-1 opacity-70">
                   Vertical gap
                 </label>
@@ -1753,18 +1756,6 @@ function GroupedGraphInner() {
                   min="0"
                   value={gridLayoutDraft.gapY}
                   onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="grid-max-column-height" className="block text-[11px] mb-1 opacity-70">
-                  Max column height
-                </label>
-                <Input
-                  id="grid-max-column-height"
-                  type="number"
-                  min="1"
-                  value={gridLayoutDraft.maxColumnHeight}
-                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, maxColumnHeight: e.target.value }))}
                 />
               </div>
               <div className="flex gap-2 justify-end">

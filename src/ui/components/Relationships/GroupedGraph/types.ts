@@ -83,35 +83,30 @@ export interface ConnectionFlags {
 export interface GridLayoutSettings {
   gapX: number;
   gapY: number;
-  /** Max stacked height of one Arrange column before the tier wraps. */
-  maxColumnHeight: number;
 }
 
 export interface GridLayoutDraft {
   gapX: string;
   gapY: string;
-  maxColumnHeight: string;
 }
 
 // ── Tier captions ──────────────────────────────────────────────────
 
 /**
- * One "Tier N" caption Arrange Grid emits, spanning every sub-column that
- * tier wrapped into. A plain object (not an interface) so it satisfies
- * xyflow's `Record<string, unknown>` node-data constraint directly, and the
- * very same object can be handed to the node as `data` — the layout effect
- * must not mint a fresh identity for it on every pass.
+ * One "Tier N" caption Arrange Grid emits. A tier is exactly one column wide,
+ * so a caption spans exactly one card. A plain object (not an interface) so it
+ * satisfies xyflow's `Record<string, unknown>` node-data constraint directly,
+ * and the very same object can be handed to the node as `data` — the layout
+ * effect must not mint a fresh identity for it on every pass.
  */
 export type TierPlacement = {
   /** 1-based, as displayed. Empty tiers collapse, so this is the tier's
    *  position among the tiers that actually hold something. */
   tier: number;
-  /** Left edge — the x of the tier's first sub-column. */
+  /** Left edge — the x of the tier's column. */
   x: number;
-  /** Width across all of the tier's sub-columns and the gaps between them. */
+  /** Caption width: one column, i.e. GROUP_WIDTH. */
   width: number;
-  /** How many sub-columns the tier wrapped into (1 when it did not wrap). */
-  columns: number;
 };
 
 export type TierLabelNodeData = TierPlacement;

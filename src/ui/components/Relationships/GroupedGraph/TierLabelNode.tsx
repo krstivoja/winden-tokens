@@ -1,5 +1,5 @@
 // TierLabelNode — the quiet "Tier N" caption Arrange Grid draws above each
-// dependency tier, spanning however many sub-columns that tier wrapped into.
+// dependency tier. A tier is one column, so the caption is one card wide.
 //
 // Deliberately inert: it is a wayfinding aid, not a card. The layout effect
 // mounts it with draggable/selectable/connectable/focusable/deletable all

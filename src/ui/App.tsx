@@ -1,6 +1,6 @@
 // Main App component
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
 import { useBridge, releaseBridgePeer, isInsideFigma, BRIDGE_ENABLED } from './hooks/useBridge';
@@ -17,6 +17,9 @@ import { BulkEditModal } from './components/Modals/BulkEditModal';
 import { ResizeHandles } from './components/ResizeHandles';
 
 export type ActiveTab = TabId;
+
+// Headless is a status line, not a screen: one row, no scroll, no resize grips.
+const HEADLESS_WINDOW = { width: 320, height: 52 };
 
 export function App() {
   const { setData, setSelection } = useAppContext();
@@ -86,6 +89,34 @@ export function App() {
     bridgeStatus.probed &&
     !bridgeStatus.peerAttached;
 
+  // Nothing is rendered in headless mode, so the window must not keep the
+  // size the full UI needed — shrink it to the strip and hand the old size
+  // back when the browser tab lets go.
+  const restoreWindowRef = useRef<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!BRIDGE_ENABLED || isBrowserClient) {
+      return;
+    }
+
+    if (isHeadless) {
+      if (!restoreWindowRef.current) {
+        restoreWindowRef.current = {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        };
+      }
+      post({ type: 'resize', ...HEADLESS_WINDOW });
+      return;
+    }
+
+    const previous = restoreWindowRef.current;
+    if (previous) {
+      restoreWindowRef.current = null;
+      post({ type: 'resize', ...previous });
+    }
+  }, [isHeadless, isBrowserClient]);
+
   useEffect(() => {
     post({ type: 'ui-ready' });
     post({ type: 'get-history-state' });
@@ -130,18 +161,21 @@ export function App() {
 
   if (isHeadless) {
     return (
-      <>
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-base p-6 text-center">
-          <p className="text-sm font-medium text-text">Connected · browser has the wheel</p>
-          <p className="text-xs text-text/60">
-            Keep this window open — it is the only thing that can talk to Figma.
-          </p>
-          <TextButton variant="outline" size="sm" onClick={releaseBridgePeer}>
-            Use the plugin UI instead
-          </TextButton>
-        </div>
-        <ResizeHandles />
-      </>
+      <div
+        className="flex h-full items-center gap-2 bg-base px-3"
+        title="Keep this window open — it is the only thing that can talk to Figma."
+      >
+        <span className="size-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
+        <span className="truncate text-xs text-text">Browser has the wheel</span>
+        <TextButton
+          variant="outline"
+          size="sm"
+          className="ml-auto shrink-0 px-2 py-1 text-xs"
+          onClick={releaseBridgePeer}
+        >
+          Take over
+        </TextButton>
+      </div>
     );
   }
 
