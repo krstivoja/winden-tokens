@@ -155,6 +155,28 @@ export type WrapperNodeData = {
   title: string;
   onLevelUp: (collectionId: string, path: string) => void;
   onUngroup: (collectionId: string, path: string) => void;
+  /**
+   * The card this container ABSORBED (part 4): the one whose own
+   * (collection, path) is this frame's. Its rows and header actions render as
+   * the container's own, which is why the card is no longer a node of its
+   * own. Null for a grouped path with no card — a header and no rows, same
+   * chrome, no special case.
+   */
+  card: GroupNodeData | null;
+  /**
+   * The absorbed card is filtered out while the container still has visible
+   * children. The rows are withheld, exactly as a hidden card NODE vanishes;
+   * the space buildWrapperLayout reserved for them stays, the same way a
+   * hidden member card's slot inside a frame does.
+   */
+  cardHidden?: boolean;
+  /**
+   * The container holds child cards (or nested containers) below its own
+   * rows. The last own row then keeps its bottom border — it is no longer the
+   * last thing in the box, and without the separator the rows and the
+   * children read as one undifferentiated stack.
+   */
+  hasChildren?: boolean;
 };
 
 // ── Edge Data Type ─────────────────────────────────────────────────

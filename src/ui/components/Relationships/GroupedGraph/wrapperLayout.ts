@@ -17,7 +17,7 @@ import {
   WRAPPER_GAP,
   WRAPPER_NODE_PREFIX,
 } from './constants';
-import { getGroupHeight, getWrapperKey, parseWrapperKey } from './utils';
+import { getCardRowsHeight, getGroupHeight, getWrapperKey, parseWrapperKey } from './utils';
 
 export interface WrapperPlacement {
   kind: 'wrapper';
@@ -30,6 +30,16 @@ export interface WrapperPlacement {
   position: { x: number; y: number };
   width: number;
   height: number;
+  /**
+   * The card this frame ABSORBED — the one whose own (collection, path) is
+   * this frame's. Its header, rows and header actions are the container's
+   * own, and it is NOT emitted as a card placement: a group is one thing, not
+   * a frame drawn around a card with the same name.
+   *
+   * Undefined for a grouped path no card sits at, which renders as a
+   * container with a header and no rows — same chrome, no special case.
+   */
+  group?: GroupData;
 }
 
 export interface CardPlacement {
@@ -142,6 +152,15 @@ export function buildWrapperLayout(
     });
   });
   cards.forEach(card => {
+    const ownKey = getWrapperKey(card.collectionId, card.sourceGroupName || '');
+    const container = units.get(`${WRAPPER_NODE_PREFIX}${ownKey}`);
+    if (container) {
+      // Absorbed: the frame at this card's own path IS this card. It gets no
+      // unit of its own, so it can never be both a frame and a card inside
+      // that frame with the same name and a second header.
+      container.group = card;
+      return;
+    }
     units.set(card.key, {
       kind: 'card', path: card.sourceGroupName || '', collectionId: card.collectionId,
       group: card, children: [], width: 0, height: 0, rel: { x: 0, y: 0 },
@@ -187,7 +206,11 @@ export function buildWrapperLayout(
       unit.height = unit.group ? getGroupHeight(unit.group) : 0;
       return;
     }
-    let y = WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING;
+    // The container's own body: the absorbed card's rows, directly under the
+    // header, exactly where a leaf card draws them. Zero when nothing was
+    // absorbed.
+    const ownRows = getCardRowsHeight(unit.group);
+    let y = WRAPPER_HEADER_HEIGHT + ownRows + WRAPPER_PADDING;
     let maxW = 0;
     let maxRight = 0;
     let maxBottom = 0;
@@ -205,9 +228,12 @@ export function buildWrapperLayout(
       maxBottom = Math.max(maxBottom, child.rel.y + child.height);
     });
     const minWidth = Math.max(maxW + WRAPPER_PADDING * 2, GROUP_WIDTH);
+    // A container with rows and no children is exactly a card's box — header
+    // plus rows, no trailing dead space; only the dashed outline tells the
+    // two apart. With nothing at all it keeps the empty frame's minimum.
     const minHeight = unit.children.length > 0
       ? y - WRAPPER_GAP + WRAPPER_PADDING
-      : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2;
+      : WRAPPER_HEADER_HEIGHT + (ownRows > 0 ? ownRows : WRAPPER_PADDING * 2);
     // Bounding box of all children (auto-stacked and manually placed) never
     // shrinks the wrapper below what the auto-stack alone would need.
     unit.width = Math.max(minWidth, maxRight + WRAPPER_PADDING);
@@ -220,11 +246,12 @@ export function buildWrapperLayout(
     if (unit.kind === 'card' && unit.group) {
       return { x: unit.group.initialX, y: unit.group.initialY };
     }
-    // Wrapper: min over descendant cards.
+    // Wrapper: min over every card it draws — its own absorbed one included,
+    // which for a lone grouped card is the ONLY card there is.
     let minX = Infinity;
     let minY = Infinity;
     const visit = (u: Unit) => {
-      if (u.kind === 'card' && u.group) {
+      if (u.group) {
         minX = Math.min(minX, u.group.initialX);
         minY = Math.min(minY, u.group.initialY);
       }
@@ -245,6 +272,7 @@ export function buildWrapperLayout(
         kind: 'wrapper', id, path: unit.path,
         collectionId: unit.collectionId, parentId, position,
         width: unit.width, height: unit.height,
+        ...(unit.group ? { group: unit.group } : {}),
       });
       unit.children.forEach(child => emit(child, id, child.rel));
     }

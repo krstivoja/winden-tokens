@@ -67,6 +67,8 @@ function renderWrapper(overrides: Partial<WrapperNodeData> = {}) {
     title: 'test',
     onLevelUp: noop,
     onUngroup: noop,
+    // Part 4: a container with no card of its own — a header and no rows.
+    card: null,
     ...overrides,
   };
   const props = { id: 'wrapper', data } as unknown as React.ComponentProps<typeof GroupWrapperComponent>;

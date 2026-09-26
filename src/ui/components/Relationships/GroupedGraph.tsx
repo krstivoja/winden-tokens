@@ -46,6 +46,8 @@ import {
   GridLayoutSettings,
   GridLayoutDraft,
   TierPlacement,
+  GroupNodeData,
+  WrapperNodeData,
 } from './GroupedGraph/types';
 import {
   GROUP_WIDTH,
@@ -98,6 +100,7 @@ import {
   buildWrapperPathOwners,
   migrateGroupedPaths,
   migrateGraphPositions,
+  isAbsorbedCard,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 
@@ -206,6 +209,19 @@ function GroupedGraphInner() {
   // around every card of THAT collection at or below that path; the empty
   // path is the collection's own frame.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
+  // Card key → the xyflow node that actually DRAWS that card. Identity for a
+  // leaf card; the container's `wrapper:<cid>::<path>` id for a card a
+  // container absorbed (part 4 — the card IS the container, so it is no
+  // longer a node of its own).
+  //
+  // Held in a ref, written by the layout effect: the callbacks below address
+  // a card by key and need the node id, and a state dep here would put every
+  // one of them back in the layout effect's deps and undo the drag-perf work.
+  const cardNodeIdRef = useRef<Map<string, string>>(new Map());
+  const nodeIdForCard = useCallback(
+    (cardKey: string) => cardNodeIdRef.current.get(cardKey) ?? cardKey,
+    []
+  );
   // Records read from client storage that still hold the pre-3a/3b bare-path
   // shape. Migrating them needs the collections/variables to work out which
   // collection owns a bare path, and storage answers long before the plugin
@@ -674,7 +690,8 @@ function GroupedGraphInner() {
       if (next) {
         requestAnimationFrame(() => {
           try {
-            reactFlowInstance.fitView({ nodes: [{ id: graphGroupKey }], duration: 400, padding: 0.5, maxZoom: 1 });
+            // An absorbed card is drawn by its container, so pan to that node.
+            reactFlowInstance.fitView({ nodes: [{ id: nodeIdForCard(graphGroupKey) }], duration: 400, padding: 0.5, maxZoom: 1 });
           } catch {
             // Node may not be rendered (filtered out) — highlight state still applies.
           }
@@ -682,7 +699,7 @@ function GroupedGraphInner() {
       }
       return next;
     });
-  }, [reactFlowInstance]);
+  }, [reactFlowInstance, nodeIdForCard]);
 
   // Sidebar → canvas for a whole collection. No highlight: `highlightTarget`
   // addresses one group key, and a collection is a set of cards.
@@ -691,13 +708,20 @@ function GroupedGraphInner() {
     // callback keeps one identity across layout passes (see the drag-perf work).
     const targets = reactFlowInstance
       .getNodes()
-      .filter(node => (
-        node.type === 'groupNode'
+      .filter(node => {
         // Filtered-out cards stay in the node list as `hidden`. Zooming to one
         // would park the canvas on empty space.
-        && !node.hidden
-        && (node.data as { group?: GroupData } | undefined)?.group?.collectionId === collectionId
-      ))
+        if (node.hidden) return false;
+        if (node.type === 'groupNode') {
+          return (node.data as { group?: GroupData } | undefined)?.group?.collectionId === collectionId;
+        }
+        // A container is a card too, and for a collection whose cards are all
+        // grouped it may be the only node that collection has.
+        if (node.type === 'groupWrapper') {
+          return (node.data as WrapperNodeData | undefined)?.collectionId === collectionId;
+        }
+        return false;
+      })
       .map(node => ({ id: node.id }));
 
     // Nothing visible to move to. Silent: the collection's own checkbox is in
@@ -1221,51 +1245,55 @@ function GroupedGraphInner() {
     // Arrange Grid applies exactly the same rule — see cardVisibilityFilters.
     const cardHidden = (group: GroupData) => isCardHidden(group, cardVisibilityFilters);
 
+    // One card's worth of node data. Shared, because a CONTAINER renders the
+    // card it absorbed from exactly this object — same header, same rows,
+    // same actions (part 4).
+    const buildCardData = (group: GroupData): GroupNodeData => {
+      const firstRealVar = group.variables.find(v => !v.isVirtual);
+      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
+      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
+      return {
+        group,
+        isColorType: groupIsColorType,
+        variableType: groupIsColorType ? 'COLOR' : 'FLOAT',
+        connectedVars,
+        isHighlighted: hasHighlight && highlightedGroups.has(group.key),
+        isDimmed: hasHighlight && !highlightedGroups.has(group.key),
+        highlightActive: hasHighlight,
+        highlightedVars,
+        highlightedVarSeed: highlightedVarName,
+        onHighlightPath: handleHighlightPath,
+        onHighlightVariable: handleHighlightVariable,
+        onGeneratorOpen: handleGeneratorOpen,
+        onShowColorMenu: handleShowColorMenu,
+        onAddVariable: handleAddVariableToGroup,
+        onRenameGroup: handleRenameGroup,
+        onDuplicateGroup: handleDuplicateGroup,
+        onEditAsText: handleEditGroupAsText,
+        onLevelUp: handleLevelUp,
+        onDeleteGroup: handleDeleteGraphGroup,
+        onRenameVariable: handleRenameGraphVariable,
+        onDeleteVariable: handleDeleteGraphVariable,
+        onDisconnect: handleDisconnect,
+      };
+    };
+
     const buildCardNode = (
       group: GroupData,
       position: { x: number; y: number },
       parentId: string | null
-    ): Node => {
-      const firstRealVar = group.variables.find(v => !v.isVirtual);
-      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
-      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
-      const groupVariableType = groupIsColorType ? 'COLOR' : 'FLOAT';
-      return {
-        id: group.key,
-        type: 'groupNode',
-        position,
-        // Force-show cards that provide a value to the current selection,
-        // even when the active filters would otherwise hide them (folded into
-        // the shared predicate via cardVisibilityFilters).
-        hidden: cardHidden(group),
-        ...(parentId ? { parentId, extent: 'parent' as const } : {}),
-        data: {
-          group,
-          isColorType: groupIsColorType,
-          variableType: groupVariableType,
-          connectedVars,
-          isHighlighted: hasHighlight && highlightedGroups.has(group.key),
-          isDimmed: hasHighlight && !highlightedGroups.has(group.key),
-          highlightActive: hasHighlight,
-          highlightedVars,
-          highlightedVarSeed: highlightedVarName,
-          onHighlightPath: handleHighlightPath,
-          onHighlightVariable: handleHighlightVariable,
-          onGeneratorOpen: handleGeneratorOpen,
-          onShowColorMenu: handleShowColorMenu,
-          onAddVariable: handleAddVariableToGroup,
-          onRenameGroup: handleRenameGroup,
-          onDuplicateGroup: handleDuplicateGroup,
-          onEditAsText: handleEditGroupAsText,
-          onLevelUp: handleLevelUp,
-          onDeleteGroup: handleDeleteGraphGroup,
-          onRenameVariable: handleRenameGraphVariable,
-          onDeleteVariable: handleDeleteGraphVariable,
-          onDisconnect: handleDisconnect,
-        },
-        dragHandle: '.group-header',
-      };
-    };
+    ): Node => ({
+      id: group.key,
+      type: 'groupNode',
+      position,
+      // Force-show cards that provide a value to the current selection,
+      // even when the active filters would otherwise hide them (folded into
+      // the shared predicate via cardVisibilityFilters).
+      hidden: cardHidden(group),
+      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
+      data: buildCardData(group),
+      dragHandle: '.group-header',
+    });
 
     // Collection root cards lay out alongside the standard cards
     // (buildWrapperLayout treats their empty path as a top-level root), so
@@ -1313,6 +1341,22 @@ function GroupedGraphInner() {
     const cardHiddenByKey = new Map<string, boolean>();
     standardCards.forEach(g => cardHiddenByKey.set(g.key, cardHidden(g)));
 
+    // Card key → the node that draws it. A card a container absorbed is no
+    // longer a node of its own, and every edge endpoint names a CARD key, so
+    // this is what keeps those edges attached to something that exists.
+    const cardNodeId = new Map<string, string>();
+    // Containers that actually hold something below their own rows — the
+    // separator between the two depends on it.
+    const containerChildCount = new Map<string, number>();
+    placements.forEach(p => {
+      if (p.kind === 'wrapper' && p.group) cardNodeId.set(p.group.key, p.id);
+      if (p.parentId) {
+        containerChildCount.set(p.parentId, (containerChildCount.get(p.parentId) || 0) + 1);
+      }
+    });
+    cardNodeIdRef.current = cardNodeId;
+    const edgeNodeId = (cardKey: string) => cardNodeId.get(cardKey) ?? cardKey;
+
     placements.forEach(p => {
       if (p.kind === 'card') {
         newNodes.push(buildCardNode(p.group, p.position, p.parentId));
@@ -1327,6 +1371,22 @@ function GroupedGraphInner() {
           const within = p.path === '' || path === p.path || path.startsWith(p.path + '/');
           return within && !cardHiddenByKey.get(g.key);
         });
+        const wrapperData: WrapperNodeData = {
+          path: p.path,
+          collectionId: p.collectionId,
+          // A collection's own frame is titled with the COLLECTION NAME —
+          // its path is empty and the raw id means nothing to the user. A
+          // path frame is titled with its path, which is also the absorbed
+          // card's own title.
+          title: p.path || collectionNameById.get(p.collectionId) || p.collectionId,
+          onLevelUp: handleLevelUp,
+          onUngroup: handleUngroup,
+          // The absorbed card: its header actions and rows ARE the
+          // container's. Null for a grouped path no card sits at.
+          card: p.group ? buildCardData(p.group) : null,
+          cardHidden: p.group ? (cardHiddenByKey.get(p.group.key) ?? false) : true,
+          hasChildren: (containerChildCount.get(p.id) || 0) > 0,
+        };
         newNodes.push({
           id: p.id,
           type: 'groupWrapper',
@@ -1335,15 +1395,7 @@ function GroupedGraphInner() {
           hidden: !hasVisibleChild,
           selectable: false,
           style: { width: p.width, height: p.height },
-          data: {
-            path: p.path,
-            collectionId: p.collectionId,
-            // A collection's own frame is titled with the COLLECTION NAME —
-            // its path is empty and the raw id means nothing to the user.
-            title: p.path || collectionNameById.get(p.collectionId) || p.collectionId,
-            onLevelUp: handleLevelUp,
-            onUngroup: handleUngroup,
-          },
+          data: wrapperData,
           dragHandle: '.group-header',
         });
       }
@@ -1422,10 +1474,23 @@ function GroupedGraphInner() {
       });
     }
 
-    // Create visibility map for groups (cards only; edges connect cards).
+    // Create visibility map for groups, keyed by CARD key — that is what a
+    // connection record names. A container contributes the card it absorbed:
+    // visible only when the container is on screen AND its own card is not
+    // filtered out (the container can outlive its own rows when its children
+    // are still visible).
     const groupVisibility = new Map<string, boolean>();
     newNodes.forEach(node => {
-      if (node.type === 'groupNode') groupVisibility.set(node.id, !node.hidden);
+      if (node.type === 'groupNode') {
+        groupVisibility.set(node.id, !node.hidden);
+        return;
+      }
+      if (node.type === 'groupWrapper') {
+        const wrapperData = node.data as WrapperNodeData;
+        if (wrapperData.card) {
+          groupVisibility.set(wrapperData.card.group.key, !node.hidden && !wrapperData.cardHidden);
+        }
+      }
     });
 
     // Hide edges if either source or target node is hidden
@@ -1438,8 +1503,10 @@ function GroupedGraphInner() {
 
         return {
           id: conn.id,
-          source: conn.fromGroup,
-          target: conn.toGroup,
+          // An absorbed card's rows live on its container node, so the edge
+          // has to name the container — the card key is not a node id any more.
+          source: edgeNodeId(conn.fromGroup),
+          target: edgeNodeId(conn.toGroup),
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
           type: 'customEdge',
@@ -1479,7 +1546,7 @@ function GroupedGraphInner() {
 
         newEdges.push({
           id: `prop-edge:${layer.layerIndex}:${index}`,
-          source: sourceGroupKey,
+          source: edgeNodeId(sourceGroupKey),
           target: selectionNodeId,
           sourceHandle: `${entry.token.name}::out`,
           targetHandle: getPropertyHandleId(layer.layerIndex, index, 'in'),
@@ -1519,6 +1586,16 @@ function GroupedGraphInner() {
         .map(v => `${v.name}|${v.connectionsDisabled ? 1 : 0}|${v.virtualType || ''}`)
         .join(',')}]`)
       .join(';');
+    // A container withholds its rows while its own card is filtered out. That
+    // adds and removes handles under a node id that STAYS MOUNTED — unlike a
+    // hidden card node, which xyflow removes wholesale — so the handle bounds
+    // would go stale without a re-measure. A leaf card's visibility is
+    // deliberately NOT in here: hiding it removes the node and its handles
+    // with it.
+    const containers = groupsData
+      .filter(g => isAbsorbedCard(g, groupedPaths))
+      .map(g => `${g.key}|${isCardHidden(g, cardVisibilityFilters) ? 0 : 1}`)
+      .join(',');
     const selection = selectedNode
       ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
         .map(layer => `${layer.layerIndex}:${layer.entries
@@ -1526,8 +1603,8 @@ function GroupedGraphInner() {
           .join(',')}`)
         .join(';')}]`
       : '';
-    return `${cards}#${selection}`;
-  }, [groupsData, selectedNode, selectedLayers]);
+    return `${cards}#${containers}#${selection}`;
+  }, [groupsData, selectedNode, selectedLayers, groupedPaths, cardVisibilityFilters]);
 
   const lastHandleSignatureRef = useRef<string | null>(null);
   const pendingMeasureNodesRef = useRef<Node[] | null>(null);
@@ -1646,7 +1723,10 @@ function GroupedGraphInner() {
     const settings = overrideSettings || gridLayoutSettings;
     const currentNodes = reactFlowInstance.getNodes();
     const currentGroups = groupsData.map(group => {
-      const rfNode = currentNodes.find(n => n.id === group.key);
+      // An absorbed card has no node of its own; seed it from the container
+      // that draws it.
+      const nodeId = nodeIdForCard(group.key);
+      const rfNode = currentNodes.find(n => n.id === nodeId);
       return {
         ...group,
         x: rfNode?.position.x ?? group.initialX,
@@ -1760,7 +1840,7 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels, nodeIdForCard]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;
@@ -1793,7 +1873,8 @@ function GroupedGraphInner() {
       if (entry.kind !== 'variable' || !entry.token) return;
       const info = variableMap.get(entry.token.name);
       if (info) {
-        wanted.add(info.group);
+        // The card may be drawn by the container that absorbed it.
+        wanted.add(nodeIdForCard(info.group));
       } else {
         // Mirror the synthetic external-card key built during node layout —
         // bare path, deliberately not collection-scoped like `group:` is.
@@ -1825,7 +1906,7 @@ function GroupedGraphInner() {
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
       { padding: 0.2, duration: 400 }
     );
-  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance]);
+  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance, nodeIdForCard]);
 
   // Auto-frame the selection (and its providers) whenever a NEW node is
   // selected in Figma — the selection card is laid out past every token card,

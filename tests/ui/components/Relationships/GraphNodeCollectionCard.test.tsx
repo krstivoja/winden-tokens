@@ -86,7 +86,7 @@ describe('GroupNodeComponent — collection root card', () => {
 
   it('shows a quiet empty state instead of reading as broken', () => {
     renderCard(emptyCollectionCard);
-    expect(screen.getByText('No variables yet')).toBeInTheDocument();
+    expect(screen.getByText('No variables at the collection root')).toBeInTheDocument();
   });
 
   it('omits group-only actions that cannot work without a group path', () => {
@@ -101,7 +101,7 @@ describe('GroupNodeComponent — collection root card', () => {
     renderCard(collectionCard([markoRow]), { onAddVariable });
 
     expect(screen.getByLabelText('Add variable to Marco')).toBeInTheDocument();
-    expect(screen.queryByText('No variables yet')).toBeNull();
+    expect(screen.queryByText('No variables at the collection root')).toBeNull();
   });
 
   it('gives its rows the ordinary row controls', () => {
@@ -131,6 +131,6 @@ describe('GroupNodeComponent — collection root card', () => {
     renderCard(standardCard([redRow]));
     expect(screen.getByLabelText('Add variable to brand')).toBeInTheDocument();
     expect(screen.getByLabelText('Open actions for brand')).toBeInTheDocument();
-    expect(screen.queryByText('No variables yet')).toBeNull();
+    expect(screen.queryByText('No variables at the collection root')).toBeNull();
   });
 });

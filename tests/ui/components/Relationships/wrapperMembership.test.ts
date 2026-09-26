@@ -57,6 +57,19 @@ const collectionCard = (id = 'c1'): GroupData => ({
 const parentOf = (placements: Placement[], id: string): string | null | undefined =>
   placements.find(p => p.id === id)?.parentId;
 
+// Part 4: the card at a frame's own path is ABSORBED — the frame renders its
+// header, rows and actions, and the card is not a placement of its own. This
+// is the successor to the part-2 assertion that the card was a CHILD of that
+// frame: same requirement (the card is drawn by that frame, not parked
+// thousands of pixels away), one node instead of two.
+const absorbedBy = (placements: Placement[], cardKey: string): string | null => {
+  const holder = placements.find(p => p.kind === 'wrapper' && p.group?.key === cardKey);
+  return holder ? holder.id : null;
+};
+
+const isEmitted = (placements: Placement[], id: string): boolean =>
+  placements.some(p => p.id === id);
+
 // ── The bug ────────────────────────────────────────────────────────
 
 // Every acyclicity assertion in this file runs through here: no placement is
@@ -77,28 +90,33 @@ const expectAcyclic = (placements: Placement[]) => {
 };
 
 describe('wrapper membership — a frame contains the card at its own path', () => {
-  it('puts the card whose own path is the grouped path inside that frame', () => {
-    // Live symptom: wrapper `test` held `group:test/test` but not `group:test`,
-    // which was parked 3,800px away and read as a missing card.
+  it('absorbs the card whose own path is the grouped path', () => {
+    // Live symptom before part 2: wrapper `test` held `group:test/test` but
+    // not `group:test`, which was parked 3,800px away and read as a missing
+    // card. Part 2 made it a child; part 4 makes it the frame ITSELF — a
+    // group is one thing, not a dashed frame around a card with the same
+    // name and a second header.
     const placements = buildWrapperLayout(
       [card('test'), card('test/test')],
       new Set(['c1::test']),
       {}
     );
 
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
+    // …and it is NOT also drawn as a card of its own.
+    expect(isEmitted(placements, 'group:test')).toBe(false);
     expect(parentOf(placements, 'group:test/test')).toBe('wrapper:c1::test');
     expect(parentOf(placements, 'wrapper:c1::test')).toBeNull();
   });
 
-  it('creates the frame even when the self-path card is the only member', () => {
-    // Otherwise attach() would look for a wrapper that was never built and
-    // the card would pop back out, while Arrange still folded it into the
-    // missing frame's unit key.
+  it('is a container with rows and no children when it is the only card', () => {
+    // The frame still exists — Arrange (outermostGroupedAncestor) folds the
+    // card into it either way, so the two walks have to agree.
     const placements = buildWrapperLayout([card('test')], new Set(['c1::test']), {});
 
-    expect(placements.some(p => p.id === 'wrapper:c1::test')).toBe(true);
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(isEmitted(placements, 'wrapper:c1::test')).toBe(true);
+    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(placements).toHaveLength(1);
   });
 
   it('never makes a frame its own parent, at any nesting depth', () => {
@@ -111,9 +129,12 @@ describe('wrapper membership — a frame contains the card at its own path', () 
     // Wrappers nest strictly: a/b under a, a at the top.
     expect(parentOf(placements, 'wrapper:c1::a/b')).toBe('wrapper:c1::a');
     expect(parentOf(placements, 'wrapper:c1::a')).toBeNull();
-    // Cards join the frame named after their own path.
-    expect(parentOf(placements, 'group:a')).toBe('wrapper:c1::a');
-    expect(parentOf(placements, 'group:a/b')).toBe('wrapper:c1::a/b');
+    // A card whose own path is framed IS that frame…
+    expect(absorbedBy(placements, 'group:a')).toBe('wrapper:c1::a');
+    expect(absorbedBy(placements, 'group:a/b')).toBe('wrapper:c1::a/b');
+    // …and one whose path is not framed stays a leaf card inside the deepest
+    // frame that contains it.
+    expect(absorbedBy(placements, 'group:a/b/c')).toBeNull();
     expect(parentOf(placements, 'group:a/b/c')).toBe('wrapper:c1::a/b');
     expectAcyclic(placements);
   });
@@ -156,7 +177,10 @@ describe('collection frames', () => {
       {}
     );
 
-    expect(parentOf(placements, 'collection:c1')).toBe('wrapper:c1::');
+    // The collection's ROOT card is the collection container: header = the
+    // collection, rows = its loose variables.
+    expect(absorbedBy(placements, 'collection:c1')).toBe('wrapper:c1::');
+    expect(isEmitted(placements, 'collection:c1')).toBe(false);
     expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::');
     expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::');
     expect(parentOf(placements, 'group:other')).toBe('wrapper:c1::');
@@ -174,9 +198,11 @@ describe('collection frames', () => {
     expect(parentOf(placements, 'wrapper:c1::test')).toBe('wrapper:c1::');
     expect(parentOf(placements, 'wrapper:c1::')).toBeNull();
     // The collection frame is the root: it never becomes its own parent even
-    // though depth 0 is a match for it too.
-    expect(parentOf(placements, 'collection:c1')).toBe('wrapper:c1::');
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    // though depth 0 is a match for it too. It absorbs the collection's root
+    // card instead.
+    expect(absorbedBy(placements, 'collection:c1')).toBe('wrapper:c1::');
+    // The `test` card IS the nested container, not a card inside it.
+    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
     expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::test');
     expect(parentOf(placements, 'group:other')).toBe('wrapper:c1::');
     expectAcyclic(placements);
@@ -191,9 +217,11 @@ describe('collection frames', () => {
       {}
     );
 
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
+    // c2's card is not framed at all, so it stays a leaf card at the top level.
+    expect(absorbedBy(placements, 'group:c2:test')).toBeNull();
     expect(parentOf(placements, 'group:c2:test')).toBeNull();
-    expect(placements.some(p => p.id === 'wrapper:c2::test')).toBe(false);
+    expect(isEmitted(placements, 'wrapper:c2::test')).toBe(false);
   });
 
   it('gives each collection its own frame for the same bare path', () => {
@@ -203,8 +231,8 @@ describe('collection frames', () => {
       {}
     );
 
-    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::test');
-    expect(parentOf(placements, 'group:c2:test')).toBe('wrapper:c2::test');
+    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
+    expect(absorbedBy(placements, 'group:c2:test')).toBe('wrapper:c2::test');
     expectAcyclic(placements);
   });
 

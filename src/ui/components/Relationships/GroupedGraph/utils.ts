@@ -51,9 +51,22 @@ function normalizePathSegment(value: string): string {
 
 function getGroupHeight(group: GroupData): number {
   // An empty collection placeholder has no rows but still reserves one row's
-  // worth of body, so its "No variables yet" line has somewhere to sit.
+  // worth of body, so its empty-root line has somewhere to sit.
   const rows = Math.max(group.variables.length, 1);
   return HEADER_HEIGHT + rows * ROW_HEIGHT + GROUP_PADDING * 2;
+}
+
+/**
+ * A card's ROWS without its header — the body a CONTAINER absorbs (part 4).
+ *
+ * Deliberately has no one-row floor, unlike getGroupHeight: a container with
+ * no rows of its own simply has no body. The empty-root placeholder a
+ * row-less collection CARD shows is noise inside a container that holds
+ * children, so the container never renders it and never reserves its space.
+ */
+function getCardRowsHeight(group: GroupData | null | undefined): number {
+  const count = group?.variables.length ?? 0;
+  return count === 0 ? 0 : count * ROW_HEIGHT + GROUP_PADDING * 2;
 }
 
 function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
@@ -596,6 +609,42 @@ function outermostGroupedAncestor(
   return null;
 }
 
+// ── Part 4: the card IS the container ──────────────────────────────
+
+/**
+ * Whether this card is ABSORBED by a container — i.e. a wrapper frame exists
+ * at the card's own (collection, path), so that frame draws the card's header,
+ * rows and header actions and the card is not emitted as a node of its own.
+ *
+ * A group is one thing, not two: before part 4 a grouped path produced a
+ * `groupWrapper` frame with its own dashed chrome and header AND a `groupNode`
+ * card with the same name and a second header inside it.
+ *
+ * A collection ROOT card's own path is the empty one, so its container is the
+ * collection's frame `<cid>::` — which is exactly why the empty path is part
+ * of the wrapper key space (3a).
+ */
+function isAbsorbedCard(group: GroupData, groupedPaths: Set<string>): boolean {
+  // Only the cards buildWrapperLayout lays out can ever be absorbed; managed
+  // source/shader/shades cards are never nested.
+  if (group.kind !== 'standard' && group.kind !== 'collection') return false;
+  return groupedPaths.has(getWrapperKey(group.collectionId, group.sourceGroupName || ''));
+}
+
+/**
+ * The xyflow node id that actually DRAWS this card: its own key, or the
+ * container node that absorbed it.
+ *
+ * Edges are built from connection records that name CARD keys, so every edge
+ * endpoint has to go through here or an absorbed card's edges would point at
+ * a node id that no longer exists and xyflow would silently drop them.
+ */
+function getCardNodeId(group: GroupData, groupedPaths: Set<string>): string {
+  return isAbsorbedCard(group, groupedPaths)
+    ? `${WRAPPER_NODE_PREFIX}${getWrapperKey(group.collectionId, group.sourceGroupName || '')}`
+    : group.key;
+}
+
 // ── 3a migration: bare wrapper paths → collection-scoped keys ──────
 
 /**
@@ -812,7 +861,11 @@ function buildArrangeUnits(
   // height override matter to the arrange algorithm.
   const unitGroups = new Map<string, GroupData>();
   const unitHidden = new Map<string, boolean>();
-  const wrapperMemberHeightSum = new Map<string, number>();
+  // Fallback footprint for a wrapper unit, split the way buildWrapperLayout
+  // stacks it: absorbed cards contribute only their ROWS to the container's
+  // own body, every other member is a card stacked below with a gap.
+  const wrapperStackHeight = new Map<string, number>();
+  const wrapperOwnRowsHeight = new Map<string, number>();
 
   groups.forEach(group => {
     const unitKey = unitKeyForGroup(group);
@@ -838,15 +891,30 @@ function buildArrangeUnits(
         y: frame?.position.y ?? group.y,
       });
     }
-    wrapperMemberHeightSum.set(
-      unitKey,
-      (wrapperMemberHeightSum.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP
-    );
+    if (isAbsorbedCard(group, groupedPaths)) {
+      wrapperOwnRowsHeight.set(
+        unitKey,
+        (wrapperOwnRowsHeight.get(unitKey) || 0) + getCardRowsHeight(group)
+      );
+    } else {
+      wrapperStackHeight.set(
+        unitKey,
+        (wrapperStackHeight.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP
+      );
+    }
   });
 
-  // Wrapper units use the measured frame height when xyflow has it; otherwise
-  // fall back to summing member card heights + gaps, wrapped in the same
-  // chrome buildWrapperLayout adds (header + top/bottom padding).
+  // Wrapper units use the measured frame height when xyflow has it — which it
+  // does from the first paint onwards, since buildWrapperLayout sets the
+  // frame's exact height as its node style. The sum below is only the
+  // first-pass estimate, before anything has been measured.
+  //
+  // It stays a flat sum over the unit's members rather than a second copy of
+  // buildWrapperLayout's recursion: a unit is the OUTERMOST frame, so a
+  // nested frame's own header and padding are not counted. That imprecision
+  // predates part 4 and is corrected by the very next measured pass; a real
+  // recursion here would mean importing buildWrapperLayout into utils.ts,
+  // which wrapperLayout.ts already imports from.
   const heightOverrides = new Map<string, number>();
   unitGroups.forEach((_group, unitKey) => {
     if (!unitKey.startsWith(WRAPPER_NODE_PREFIX)) return;
@@ -855,13 +923,16 @@ function buildArrangeUnits(
       heightOverrides.set(unitKey, measured);
       return;
     }
-    const memberSum = wrapperMemberHeightSum.get(unitKey) || 0;
-    heightOverrides.set(
-      unitKey,
-      memberSum > 0
-        ? memberSum - WRAPPER_GAP + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-        : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-    );
+    const stack = wrapperStackHeight.get(unitKey) || 0;
+    const ownRows = wrapperOwnRowsHeight.get(unitKey) || 0;
+    // Mirrors sizeUnit in wrapperLayout.ts: header, then the absorbed rows,
+    // then the stacked children inside the frame's padding. With no children
+    // the container is exactly a card's box; with nothing at all it keeps the
+    // empty frame's minimum.
+    const below = stack > 0
+      ? stack - WRAPPER_GAP + WRAPPER_PADDING * 2
+      : (ownRows > 0 ? 0 : WRAPPER_PADDING * 2);
+    heightOverrides.set(unitKey, WRAPPER_HEADER_HEIGHT + ownRows + below);
   });
 
   const units: GroupData[] = [];
@@ -1064,6 +1135,8 @@ export {
   isCardHidden,
   buildArrangeUnits,
   outermostGroupedAncestor,
+  isAbsorbedCard,
+  getCardNodeId,
   getWrapperKey,
   parseWrapperKey,
   buildWrapperPathOwners,
@@ -1074,6 +1147,7 @@ export {
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,
+  getCardRowsHeight,
   normalizeGridLayoutSettings,
   toGridLayoutDraft,
   sortGroupsByPosition,

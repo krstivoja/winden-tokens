@@ -267,7 +267,7 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
 
   return (
     <div
-      className="rf-group-box border border-text/40 rounded-sm bg-base h-fit! shadow-md p-0.5"
+      className="rf-group-box border border-text/40 rounded-sm bg-base h-fit! shadow-xs p-0.5"
       style={{ height, width: PROPERTY_CARD_WIDTH }}
     >
       <div

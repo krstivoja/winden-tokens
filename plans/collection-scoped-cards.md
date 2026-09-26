@@ -162,8 +162,41 @@ A card with children is drawn dashed; a leaf card solid. No separate frame chrom
 A container is identified per collection (`<cid>::<path>`) — that is what makes `marko`'s `test` distinct from another collection's `test`.
 A card is `group:<path>`, collection-blind. For the card to BE the container the two identities have to be the same string, so cards must carry their collection first.
 
-## Open
+## Identity: keep the `wrapper:` node id, absorb the card
 
-- A grouped path with no card of its own (`color/brand` grouped, variables only at `color/brand/500`) is a container with a header and no rows. Same chrome, dashed, no rows — no special case in the markup.
-- `getGroupHeight` stops being `rows × rowHeight` and becomes recursive over children. Arrange consumes it, so this is the part most likely to break the tier work.
-- Re-measure drag performance: dragging a container now moves its whole subtree. The numbers in the drag-perf work were taken with at most one level of nesting.
+The container node KEEPS its existing id, `wrapper:<cid>::<path>` (and the collection's is `wrapper:<cid>::`).
+The card whose path matches a container stops being emitted as its own node; its header, rows and header actions render as the container's own.
+
+The alternative — making the container BE the card node, `group:<cid>::<path>` — reads better on paper but forces a second `graph-positions` migration one commit after the last one, over the same keys, for no visible gain. A container's saved position is already stored under its `wrapper:` id and stays valid. The absorbed card's own stored position simply goes unused.
+
+So, per grouped path `p` in collection `c`:
+- `wrapper:<c>::<p>` renders as a CARD: header `p`, the absorbed card's rows, then its child cards. Dashed.
+- The collection's container `wrapper:<c>::` renders header = collection NAME, rows = the collection root card's loose variables. Dashed.
+- A leaf card keeps its own `group:<c>::<p>` node. Solid.
+- A grouped path with no card of its own is a container with a header and no rows. Same chrome, dashed — no special case in the markup.
+
+## Done
+
+- [x] `buildWrapperLayout` ABSORBS the card at a frame's own `(collection, path)`: it becomes `WrapperPlacement.group` instead of a child unit, and is no longer emitted as a `CardPlacement`. The collection's container absorbs the collection ROOT card (empty path).
+- [x] The container keeps its `wrapper:<cid>::<path>` node id, so no second `graph-positions` migration. `getCardNodeId`/`isAbsorbedCard` (`utils.ts`) resolve a card key to the node that draws it; every edge endpoint goes through it, or xyflow would silently drop edges pointing at an id that no longer exists.
+- [x] `GraphWrapperNode` is the CONTAINER renderer, not redundant chrome. The header row, the header actions and the variable rows moved out of `GraphNode` into `CardHeaderRow` / `CardHeaderActions` / `CardRows`, exported from `GraphNode.tsx` and used by both — one copy of each, not a second header.
+- [x] Level-up is offered ONCE, by the container (`CardHeaderActions showLevelUp={false}`). The card's own button and the frame's fired the identical `onLevelUp(collectionId, path)`.
+- [x] A container with rows and no children is exactly a card's box — header plus rows, no trailing dead space. Only the DASHED outline tells the two apart.
+- [x] The last own row keeps its bottom border when the container has children (`CardRows keepLastBorder`), so the rows and the children do not read as one stack. `CardRows` returns null when there is nothing to draw, so a row-less container contributes no strip and no stray line.
+- [x] "No variables yet" → "No variables at the collection root". Since part 1 every collection has a root card, so a collection with 116 grouped variables landed on the old wording too.
+- [x] Shadows: containers have none (the dashed outline is the cue and stacking shadows was the problem), leaf cards and `PropertyNode` are `shadow-xs`.
+- [x] `getGroupHeight` did NOT become recursive. Given the chosen identity, a `GroupData` is still one card's own box and has no children; the recursion is `sizeUnit` in `wrapperLayout.ts`, where it already was. Arrange and the tier work therefore see an unchanged `getGroupHeight`. What is new is `getCardRowsHeight` — the same body WITHOUT the one-row floor, because a container never draws the empty-root line.
+- [x] `wrapperMemberHeightSum` in `buildArrangeUnits` kept, split into `wrapperStackHeight` + `wrapperOwnRowsHeight` so an absorbed card counts as ROWS rather than a stacked card. It is only the first-pass estimate — from the first paint on, `measuredHeight` wins, and `buildWrapperLayout` sets the frame's exact height as its node style. Making it a true recursion would mean importing `buildWrapperLayout` into `utils.ts`, which `wrapperLayout.ts` already imports from.
+- [x] `handleSignature` gained a container term: a container withholds its rows while its own card is filtered out, which adds/removes handles under a node id that STAYS MOUNTED — unlike a hidden card node, which xyflow removes wholesale.
+- [x] `groupVisibility` is keyed by CARD key, with a container contributing the card it absorbed, so edge visibility still follows the filters.
+- [x] Tests: `tests/ui/components/Relationships/containerCard.test.tsx` (22 cases); `wrapperMembership.test.ts`'s seven "card is a child of its own frame" assertions rewritten to the absorbed shape, parent-before-child array order kept.
+
+## Verify
+
+- [x] `npm run build` clean, 0 `WebSocket` in `dist/index.html`; `npx vitest run` 277 passing (was 255); `npx tsc --noEmit` 251 — identical error set.
+- [ ] NOT verified in the browser or against Figma: the dev server is the user's (`npm run dev:bridge`, ports 5173/9337) and was off limits. Still to check there: a container's edges still draw to its own rows; dragging a container moves its whole subtree at an acceptable frame rate; a filtered-out container card's rows disappear and come back with their edges intact.
+
+## Open
+- Re-measure drag performance: dragging a container now moves its whole subtree. The numbers in the drag-perf work were taken with at most one level of nesting. Nothing in the memoization changed — per-node `data` is still rebuilt only by the layout effect, `savedPositions` is still read through its ref — but a container drag now moves N descendant nodes per frame instead of one.
+- Clicking a container's body does NOT toggle the highlight the way clicking a card does. Left out deliberately: a container's body is mostly the area its children sit in, and making all of it a highlight target would fight click-to-deselect. The header's "Highlight path" and the rows still work.
+- A container that absorbed NO card (a grouped path no variable sits directly under) offers no "+". Adding one there would create the card that is missing — worth deciding separately.
