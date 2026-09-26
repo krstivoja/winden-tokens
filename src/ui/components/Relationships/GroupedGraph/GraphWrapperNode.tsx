@@ -23,48 +23,54 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
   const isDimmed = !!card?.isDimmed;
 
   return (
+    // The dashed ring, and inside it an ordinary card box. A container is a
+    // card WITH an outline around it, not a card whose own border went
+    // dashed — so both strokes are drawn, with CONTAINER_OUTLINE_PADDING
+    // between them.
     <div
-      className={`rf-group-wrapper w-full h-full rounded-sm border border-dashed ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} bg-base shadow-xs p-0.5 transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
+      className={`rf-group-outline w-full h-full rounded-sm border border-dashed p-2 ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
     >
-      <CardHeaderRow
-        title={data.title}
-        headerFill={card?.group.headerFill ?? STANDARD_GROUP_HEADER_FILL}
-        className="rounded-t-sm"
-      >
-        {/* A collection's own frame (empty path) is the root — there is
-            nothing above it to level up into. Every other container levels up
-            into its parent path, or into the collection frame when its path is
-            top-level. This is the ONLY level-up the container offers: the
-            absorbed card's own would fire the identical call. */}
-        {data.path !== '' && (
+      <div className="rf-group-wrapper w-full h-full rounded-sm border border-text/40 bg-base shadow-xs p-0.5">
+        <CardHeaderRow
+          title={data.title}
+          headerFill={card?.group.headerFill ?? STANDARD_GROUP_HEADER_FILL}
+          className="rounded-t-sm"
+        >
+          {/* A collection's own frame (empty path) is the root — there is
+              nothing above it to level up into. Every other container levels up
+              into its parent path, or into the collection frame when its path is
+              top-level. This is the ONLY level-up the container offers: the
+              absorbed card's own would fire the identical call. */}
+          {data.path !== '' && (
+            <IconButton
+              icon={<Icon name="collapse-all" size={18} />}
+              size="sm"
+              variant="ghost"
+              aria-label={`Group ${data.title} with its siblings`}
+              title="Group with siblings (level up)"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); data.onLevelUp(data.collectionId, data.path); }}
+            />
+          )}
+          {card && <CardHeaderActions data={card} showLevelUp={false} />}
           <IconButton
-            icon={<Icon name="collapse-all" size={18} />}
+            icon={<Icon name="expand-all" size={18} />}
             size="sm"
             variant="ghost"
-            aria-label={`Group ${data.title} with its siblings`}
-            title="Group with siblings (level up)"
+            aria-label={`Ungroup ${data.title}`}
+            title="Ungroup"
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); data.onLevelUp(data.collectionId, data.path); }}
+            onClick={(e) => { e.stopPropagation(); data.onUngroup(data.collectionId, data.path); }}
           />
+        </CardHeaderRow>
+        {/* Rows only when the absorbed card is on screen. A container with no
+            card of its own is a header and nothing else — same chrome, no
+            special case. The empty-root line is withheld: true of a row-less
+            collection CARD, noise on a container that holds children. */}
+        {card && !data.cardHidden && (
+          <CardRows data={card} showEmptyState={false} keepLastBorder={!!data.hasChildren} />
         )}
-        {card && <CardHeaderActions data={card} showLevelUp={false} />}
-        <IconButton
-          icon={<Icon name="expand-all" size={18} />}
-          size="sm"
-          variant="ghost"
-          aria-label={`Ungroup ${data.title}`}
-          title="Ungroup"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); data.onUngroup(data.collectionId, data.path); }}
-        />
-      </CardHeaderRow>
-      {/* Rows only when the absorbed card is on screen. A container with no
-          card of its own is a header and nothing else — same chrome, no
-          special case. The empty-root line is withheld: true of a row-less
-          collection CARD, noise on a container that holds children. */}
-      {card && !data.cardHidden && (
-        <CardRows data={card} showEmptyState={false} keepLastBorder={!!data.hasChildren} />
-      )}
+      </div>
     </div>
   );
 }

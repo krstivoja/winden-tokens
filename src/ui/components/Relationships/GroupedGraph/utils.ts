@@ -27,7 +27,7 @@ import {
   STANDARD_GROUP_HEADER_FILL,
   WRAPPER_HEADER_HEIGHT,
   WRAPPER_PADDING,
-  CARD_BOX_PADDING,
+  CONTAINER_INSET,
   WRAPPER_GAP,
 } from './constants';
 
@@ -933,12 +933,12 @@ function buildArrangeUnits(
     const below = stack > 0
       ? stack - WRAPPER_GAP + WRAPPER_PADDING * 2
       : (ownRows > 0 ? 0 : WRAPPER_PADDING * 2);
-    // `CARD_BOX_PADDING * 2`: the container carries the card box's own inner
+    // `CONTAINER_INSET * 2`: the container carries the card box's own inner
     // gutter (`p-0.5`) top and bottom, exactly as sizeUnit does — otherwise
     // this estimate and the measured frame disagree by 4px on the first pass.
     heightOverrides.set(
       unitKey,
-      CARD_BOX_PADDING * 2 + WRAPPER_HEADER_HEIGHT + ownRows + below
+      CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + ownRows + below
     );
   });
 

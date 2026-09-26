@@ -36,6 +36,14 @@ export const WRAPPER_PADDING = 16;
 // children are separately-positioned nodes, so the same gutter has to be
 // added to the geometry or the two drift apart by 2px.
 export const CARD_BOX_PADDING = 2;
+// The gap between a container's dashed ring and the card box inside it. A
+// container is a normal card with a dashed outline drawn AROUND it, not a
+// card whose own border went dashed — so the ring needs room of its own.
+export const CONTAINER_OUTLINE_PADDING = 8;
+// Everything a container's content sits inside: the dashed ring's gap plus
+// the card box's own gutter. Child cards are separately-positioned nodes, so
+// this has to exist in the geometry, not only in the markup.
+export const CONTAINER_INSET = CONTAINER_OUTLINE_PADDING + CARD_BOX_PADDING;
 export const WRAPPER_GAP = 28;
 
 // ── Color Constants ────────────────────────────────────────────────
