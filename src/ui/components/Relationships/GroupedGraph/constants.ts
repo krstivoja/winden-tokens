@@ -19,6 +19,12 @@ export const TIER_LABEL_GAP_Y = 14;
 // snapshot) have one cheap predicate to test.
 export const TIER_LABEL_NODE_PREFIX = 'tier-label:';
 
+// Node-id namespace for a standard group card: `group:<collectionId>::<path>`.
+// Scoped by collection for the same reason a wrapper frame is — a bare group
+// path is not an identity, and two collections owning `color/brand` used to
+// merge into ONE card attributed to whichever collection was seen first.
+export const GROUP_NODE_PREFIX = 'group:';
+
 // ── Wrapper (expanded group frame) constants ───────────────────────
 // Node-id namespace for a wrapper frame: `wrapper:<collectionId>::<path>`.
 export const WRAPPER_NODE_PREFIX = 'wrapper:';

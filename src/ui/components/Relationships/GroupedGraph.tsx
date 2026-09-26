@@ -93,6 +93,8 @@ import {
   buildArrangeUnits,
   isTierLabelNodeId,
   getWrapperKey,
+  getGroupCardKey,
+  bucketUnmanagedVariables,
   buildWrapperPathOwners,
   migrateGroupedPaths,
   migrateGraphPositions,
@@ -204,7 +206,7 @@ function GroupedGraphInner() {
   // around every card of THAT collection at or below that path; the empty
   // path is the collection's own frame.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
-  // Records read from client storage that still hold the pre-3a bare-path
+  // Records read from client storage that still hold the pre-3a/3b bare-path
   // shape. Migrating them needs the collections/variables to work out which
   // collection owns a bare path, and storage answers long before the plugin
   // sends data — so the raw payload is parked here and the effect below
@@ -317,7 +319,8 @@ function GroupedGraphInner() {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
         // Parked, not applied: the record may still hold bare `wrapper:<path>`
-        // keys, and rewriting those needs the collections. The migration
+        // or `group:<name>` keys, and rewriting those needs the collections —
+        // they say which collection owns a bare path. The migration
         // effect below bumps savedPositionsRevision when it applies, which is
         // also what covers a response landing after the 100ms fallback has
         // already flipped positionsHydrated.
@@ -375,8 +378,10 @@ function GroupedGraphInner() {
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
 
-  // Apply the parked storage records, migrating the pre-3a bare-path shape to
-  // collection-scoped wrapper keys on the way in.
+  // Apply the parked storage records, migrating the pre-3a/3b bare-path shape
+  // to collection-scoped wrapper AND card keys on the way in. On the real
+  // file `graph-positions` is the layout of ~161 cards, so dropping it would
+  // mean re-arranging everything by hand.
   //
   // This is deliberately NOT done in the storage handlers: resolving which
   // collection owns a bare path needs the variables, and client storage
@@ -397,6 +402,10 @@ function GroupedGraphInner() {
     if (collections.length === 0) return;
 
     const owners = buildWrapperPathOwners(collections, variables);
+    // Cards need EXACT-path ownership, frames need at-or-below — see
+    // buildWrapperPathOwners. A collection whose only variable is
+    // `test/test2/leaf` is inside the frame `test` but has no CARD there.
+    const cardOwners = buildWrapperPathOwners(collections, variables, { exactPathOnly: true });
 
     if (pending.groupedPaths !== null) {
       const raw = pending.groupedPaths;
@@ -413,7 +422,7 @@ function GroupedGraphInner() {
 
     if (pending.positions !== null) {
       const raw = pending.positions;
-      const migrated = migrateGraphPositions(raw, owners);
+      const migrated = migrateGraphPositions(raw, owners, cardOwners);
       pending.positions = null;
       setSavedPositions(migrated);
       setSavedPositionsRevision(rev => rev + 1);
@@ -891,31 +900,18 @@ function GroupedGraphInner() {
     const unmanagedVars = typeVars.filter(
       v => !managedSourceIds.has(v.id) && !managedGeneratedIds.has(v.id)
     );
-    const unmanagedGroupsMap = new Map<string, { nodes: VariableNode[]; collectionId: string }>();
-    // Loose (slash-less) variables have no parent path and belong to their
-    // collection's root card, not to a synthetic group named after themselves
-    // — that fallback made variable `test` and the parent path of `test/test2`
-    // share one key and merge into one card.
-    const looseVariablesByCollection = new Map<string, VariableNode[]>();
-
-    unmanagedVars.forEach(variable => {
-      // Cards are leaf groups (one per parent path) — wrappers group cards
-      // visually without merging their variables.
-      const parts = variable.name.split('/');
-      // Use the actual variable's type instead of global isColorType
-      const varIsColorType = variable.resolvedType === 'COLOR';
-      const node = formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId);
-      if (parts.length === 1) {
-        const loose = looseVariablesByCollection.get(variable.collectionId) || [];
-        loose.push(node);
-        looseVariablesByCollection.set(variable.collectionId, loose);
-        return;
-      }
-      const groupName = parts.slice(0, -1).join('/');
-      const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      existing.nodes.push(node);
-      unmanagedGroupsMap.set(groupName, existing);
-    });
+    // Buckets are keyed `<collectionId>::<groupName>`, and loose (slash-less)
+    // variables come back separately for their collection's root card — see
+    // bucketUnmanagedVariables, which owns both rules.
+    const { groups: unmanagedGroupsMap, loose: looseVariablesByCollection } =
+      bucketUnmanagedVariables(unmanagedVars, variable => formatVariableNode(
+        variable,
+        varsByName,
+        // The actual variable's type, not the global isColorType.
+        variable.resolvedType === 'COLOR',
+        collections,
+        selectedModeId
+      ));
 
     const columnStep = GROUP_WIDTH + GROUP_GAP_X;
     const managedLaneBottoms = new Map<number, number>();
@@ -929,9 +925,13 @@ function GroupedGraphInner() {
     // Place unmanaged groups: primitives at column 0, semantic groups further right
     // First pass: create all groups and track which reference which
     const unmanagedEntries: Array<{ groupName: string; groupVariables: VariableNode[]; collectionId: string; hasReferences: boolean }> = [];
-    Array.from(unmanagedGroupsMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([groupName, { nodes: groupVariables, collectionId }]) => {
+    // Sorted by group NAME (collection id only as a tie-break), so the
+    // initial stacking order of a single-collection file is exactly what it
+    // was before the bucket key gained a collection — the raw ids sort
+    // meaninglessly.
+    Array.from(unmanagedGroupsMap.values())
+      .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.collectionId.localeCompare(b.collectionId))
+      .forEach(({ groupName, nodes: groupVariables, collectionId }) => {
         const hasReferences = groupVariables.some(v => v.isReference);
         unmanagedEntries.push({ groupName, groupVariables, collectionId, hasReferences });
       });
@@ -939,7 +939,7 @@ function GroupedGraphInner() {
     // Primitives (no references) go at column 0, stacked below managed source groups
     let primitiveY = managedLaneBottoms.get(0) || 0;
     unmanagedEntries.filter(e => !e.hasReferences).forEach(entry => {
-      const groupKey = `group:${entry.groupName}`;
+      const groupKey = getGroupCardKey(entry.collectionId, entry.groupName);
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: primitiveY,
@@ -975,7 +975,7 @@ function GroupedGraphInner() {
     const semanticGroups: GroupData[] = [];
     let semanticY = 0;
     unmanagedEntries.filter(e => e.hasReferences).forEach(entry => {
-      const groupKey = `group:${entry.groupName}`;
+      const groupKey = getGroupCardKey(entry.collectionId, entry.groupName);
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: semanticY,
@@ -1182,7 +1182,15 @@ function GroupedGraphInner() {
         // `test/test2` share one key). Left as is deliberately: the fix for
         // local cards was to host loose variables on their collection's root
         // card, and a published library token has no local collection card to
-        // host it. Mirrored at handleFocusSelection — keep the two in step.
+        // host it.
+        //
+        // The key is NOT collection-scoped either, for the same reason: the
+        // only id available is the PUBLISHING library's, which no local
+        // collection, ownership map or wrapper frame can resolve, and tokens
+        // with none at all would all collapse onto the literal `'external'`
+        // anyway. So `ext-group:` stays a bare path — and, since nothing
+        // rewrites it, its saved position survives untouched.
+        // Mirrored at handleFocusSelection — keep the two in step.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         const cardKey = `ext-group:${groupName}`;
@@ -1787,7 +1795,8 @@ function GroupedGraphInner() {
       if (info) {
         wanted.add(info.group);
       } else {
-        // Mirror the synthetic external-card key built during node layout.
+        // Mirror the synthetic external-card key built during node layout —
+        // bare path, deliberately not collection-scoped like `group:` is.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         wanted.add(`ext-group:${groupName}`);

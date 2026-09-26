@@ -91,20 +91,28 @@ Two collections owning `color/brand` therefore merge into ONE card attributed to
 
 **Decision (chosen): the collection becomes the real root.**
 
-- Card keys become `group:<collectionId>::<groupName>`, reusing the `::` convention already used by `getCollectionGroupKey` for filters. Collection ids contain `:` but never `::`, so the parse is unambiguous.
-- Wrapper paths likewise: `wrapper:<collectionId>::<path>`, with the empty path meaning the collection itself — which is what `handleLevelUp` produces for a top-level card, giving the `marko` frame.
-- `unmanagedGroupsMap` is keyed by `<collectionId>::<groupName>`, fixing the merge at source.
-- `SidebarFilter.tsx:98` builds the same shape; `collectionId` is already in scope there.
-- Untouched: `source:`/`shader:`/`shades:`/`steps:`/`selection:` are keyed by variable or node id and are already unique. `collection:` already embeds the id.
+- [x] Card keys become `group:<collectionId>::<groupName>` (`getGroupCardKey`, `GROUP_NODE_PREFIX`), reusing the `::` convention already used by `getCollectionGroupKey` for filters. Collection ids contain `:` but never `::`, so the parse is unambiguous.
+- [x] Wrapper paths likewise: `wrapper:<collectionId>::<path>` — landed in 3a.
+- [x] `unmanagedGroupsMap` is keyed by `<collectionId>::<groupName>`, fixing the merge at source. The bucketing loop moved out of the layout effect into `bucketUnmanagedVariables` (`utils.ts`), a pure rule that takes the caller's row formatter as a callback — the merge was the whole bug and had no test harness while it sat inline.
+- [x] `SidebarFilter.tsx:98` calls `getGroupCardKey` instead of building the string by hand, so the sidebar row and the card it highlights cannot drift. `highlightedGroupKey` is whole-string equality against a card key, so it keeps matching.
+- [x] Untouched: `source:`/`shader:`/`shades:`/`steps:`/`selection:` are keyed by variable or node id and are already unique. `collection:` already embeds the id.
+- [x] `ext-group:` **left unscoped**, both construction sites. The only id available is the PUBLISHING library's, which no local collection, ownership map or wrapper frame can resolve, and a token with none at all falls back to the literal `'external'`. Scoping it would also make every saved `ext-group:` position unmigratable — nothing local can resolve the owner — so it stays a bare path and its position survives untouched. Same reasoning as part 1's decision to leave the slash-less fallback there alone.
+- [x] Card initial stacking order is unchanged for a single-collection file: the entries are still sorted by group NAME, with the collection id only as a tie-break. Sorting by the composite key would have ordered cards by raw Figma id.
+
+### Consequence, NOT fixed here (reported, not silently widened)
+
+`varMap` (`GroupedGraph.tsx`) is keyed by variable NAME alone, globally. Two collections holding the identical full variable name now land in two different cards, but `varMap` keeps only the last one — so a reference edge to that name can attach to the wrong collection's card. Before 3b both rows lived in one merged card, so the group key was at least right. Fixing it means resolving references by the alias target's collection, not by name, which is a separate change (`varsByName` is collection-blind throughout).
 
 ### Migration
 
 `graph-positions` (`Record<string,{x,y}>`) holds every card key plus `rel:<key>` for dragged nested cards — on the real file, the layout of 161 cards. `graph-grouped-paths` holds bare paths.
 
-- [ ] Migrate on load: for each old `group:<name>` / `wrapper:<path>` key, resolve the collection that owns that group name. Exactly one owner → rewrite. Several → keep the first-seen (that is the card that existed before) and drop the rest, which are new cards and will be arranged.
-- [ ] `rel:` entries rewrite their inner key by the same rule.
-- [ ] Idempotent with no version flag: a `group:` key with no `::` is old by construction.
-- [ ] Unresolvable keys are dropped, not kept — a stale absolute position is worse than an arranged one.
+- [x] Migrate on load, in the SAME `pendingStorageRef` effect 3a added (gated on `collections.length > 0`), not a second pass: `migrateGraphPositions` now handles the `group:` prefix alongside `wrapper:`. Exactly one owner → rewrite. Several → first owner (collection order) keeps the position, the rest are dropped as genuinely new cards.
+- [x] `rel:` entries rewrite their inner key by the same rule — the `rel:` prefix is stripped and re-applied around whichever prefix matched.
+- [x] Idempotent with no version flag: a `group:` key with no `::` is old by construction, and an already-scoped key passes through and wins over a migrated one landing on it.
+- [x] Unresolvable keys are dropped, not kept.
+- [x] **Ownership is EXACT-path for cards**, at-or-below for frames. `buildWrapperPathOwners` gained an `{ exactPathOnly }` option rather than a second map: a collection whose only variable is `test/test2/leaf` sits INSIDE the frame `test` but has no CARD at `test`, so it must not be handed the old `group:test` position. Without this the ambiguous case would hand the layout to a card that does not exist and arrange the one that does — the 3a fixture (`c1` at `test/test2`, `c2` at `test`) is exactly that case.
+- [x] `graph-grouped-paths` needs nothing here: it holds wrapper paths only, migrated in 3a.
 
 ### Blast radius (measured, not estimated)
 
@@ -126,5 +134,36 @@ Two collections owning `color/brand` therefore merge into ONE card attributed to
 - [x] Part 3a: `npm run build` clean (0 `WebSocket` in `dist/index.html`), `npx vitest run` 243 passing (was 217), `tsc` 251 — identical error set, nothing in a touched file.
 - [x] Verified live in the browser against the mock dataset, which carries the same shape: the slash-less variable `red` now renders as a row of the `colors` collection card (`collection:VariableCollectionId:5:2`), no `group:red` card exists, the header keeps its "+" and the row keeps its delete. `red` used to be a card of its own.
 - [ ] NOT verified against the real Figma file — the plugin disconnected mid-session, so the browser tab had no data. Still to check there: the `marko` card holds `test`; the `test` card holds only `test/test2`; the `test` frame holds both `test` and `test/test`; the five other collections each gain a row-less root card.
+- [x] Part 3b: `npm run build` clean (0 `WebSocket` in `dist/index.html`), `npx vitest run` 255 passing (was 243), `tsc` 251 — identical error set (the two `SidebarFilter.tsx` errors are the pre-existing ones at HEAD lines 517/691, shifted by the added import).
 - [ ] After 3: reload with an existing `graph-positions` and confirm the layout survives rather than resetting.
+- [ ] NOT verified against Figma for 3b — no plugin connection this session. Still to check there: two collections that both own `color/brand` render as TWO cards, each attributed to its own collection; clicking either group name in the sidebar highlights the card of THAT collection; and a reload with a pre-3b `graph-positions` keeps ~161 cards where they were instead of re-arranging.
 - [ ] NOT verified against Figma for 3a — no plugin connection this session. Still to check there: a top-level card like `test` now shows the level-up button and grouping it draws a frame titled with the COLLECTION name holding every card of that collection; the frame itself offers ungroup but no level-up; two collections that both use path `test` get two separate frames; and a reload with a pre-3a `graph-grouped-paths`/`graph-positions` keeps the frames and their positions.
+
+---
+
+# 4. Nested cards: the card IS the container
+
+Agreed shape (from the reference mock, which is our own UI nested by hand):
+
+```
+marko                      ← container: header, its own rows, then its children. DASHED outline.
+  test  {color/border/low}     ← the collection's loose variable, a row of the container
+  test/test                    ← leaf card, solid outline
+  test                         ← container (has children): DASHED
+    test2 {color/on-surface/3} ← its own row
+    test/test                  ← leaf card, solid
+```
+
+One object, not two. Today a group is a card (`group:test`) AND a frame (`wrapper:<cid>::test`) that are really the same thing; this merges them.
+A card with children is drawn dashed; a leaf card solid. No separate frame chrome and no second header.
+
+## Why 3b is a prerequisite
+
+A container is identified per collection (`<cid>::<path>`) — that is what makes `marko`'s `test` distinct from another collection's `test`.
+A card is `group:<path>`, collection-blind. For the card to BE the container the two identities have to be the same string, so cards must carry their collection first.
+
+## Open
+
+- A grouped path with no card of its own (`color/brand` grouped, variables only at `color/brand/500`) is a container with a header and no rows. Same chrome, dashed, no rows — no special case in the markup.
+- `getGroupHeight` stops being `rows × rowHeight` and becomes recursive over children. Arrange consumes it, so this is the part most likely to break the tier work.
+- Re-measure drag performance: dragging a container now moves its whole subtree. The numbers in the drag-perf work were taken with at most one level of nesting.

@@ -10,6 +10,8 @@ import {
   buildWrapperPathOwners,
   migrateGroupedPaths,
   migrateGraphPositions,
+  getGroupCardKey,
+  bucketUnmanagedVariables,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type { CardVisibilityFilters } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import { STANDARD_GROUP_HEADER_FILL } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
@@ -280,6 +282,7 @@ describe('3a migration — bare wrapper paths become collection-scoped', () => {
     { collectionId: 'c1', name: 'loose' },
   ];
   const owners = buildWrapperPathOwners(collections, variables);
+  const cardOwners = buildWrapperPathOwners(collections, variables, { exactPathOnly: true });
 
   it('lists owners in collection order, and only real ones', () => {
     expect(owners.get('test')).toEqual(['c1', 'c2']);
@@ -315,7 +318,7 @@ describe('3a migration — bare wrapper paths become collection-scoped', () => {
       'wrapper:test': { x: 1, y: 2 },
       'wrapper:only2': { x: 3, y: 4 },
       'rel:wrapper:test/test2': { x: 5, y: 6 },
-    }, owners);
+    }, owners, cardOwners);
 
     // One position, not two: two frames on one coordinate is worse than one
     // arranged frame.
@@ -326,33 +329,176 @@ describe('3a migration — bare wrapper paths become collection-scoped', () => {
     });
   });
 
-  it('leaves card keys alone — those are part 3b', () => {
+  it('leaves the already-scoped and the unscopable key spaces alone', () => {
     const stored = {
-      'group:test': { x: 1, y: 1 },
-      'rel:group:test/test2': { x: 2, y: 2 },
+      // `collection:` already embeds the id; the rest are keyed by variable
+      // or node id; `ext-group:` is a published library token with no local
+      // collection to scope to.
       'collection:c1': { x: 3, y: 3 },
       'source:v1': { x: 4, y: 4 },
+      'shader:v1': { x: 5, y: 5 },
+      'shades:v1': { x: 6, y: 6 },
+      'steps:v1': { x: 7, y: 7 },
+      'selection:42:7': { x: 8, y: 8 },
+      'ext-group:test': { x: 9, y: 9 },
+      'tier-label:0': { x: 10, y: 10 },
     };
-    expect(migrateGraphPositions(stored, owners)).toEqual(stored);
+    expect(migrateGraphPositions(stored, owners, cardOwners)).toEqual(stored);
   });
 
   it('drops an unresolvable wrapper position rather than keeping it stale', () => {
-    expect(migrateGraphPositions({ 'wrapper:gone': { x: 1, y: 2 } }, owners)).toEqual({});
+    expect(migrateGraphPositions({ 'wrapper:gone': { x: 1, y: 2 } }, owners, cardOwners)).toEqual({});
   });
 
   it('is idempotent for positions too, and never loses an already-scoped key', () => {
-    const once = migrateGraphPositions({ 'wrapper:test': { x: 1, y: 2 } }, owners);
-    expect(migrateGraphPositions(once, owners)).toEqual(once);
+    const once = migrateGraphPositions({ 'wrapper:test': { x: 1, y: 2 } }, owners, cardOwners);
+    expect(migrateGraphPositions(once, owners, cardOwners)).toEqual(once);
     // A half-migrated record: the scoped entry wins over the bare one.
     expect(migrateGraphPositions({
       'wrapper:c1::test': { x: 9, y: 9 },
       'wrapper:test': { x: 1, y: 2 },
-    }, owners)).toEqual({ 'wrapper:c1::test': { x: 9, y: 9 } });
+    }, owners, cardOwners)).toEqual({ 'wrapper:c1::test': { x: 9, y: 9 } });
   });
 
   it('tolerates a junk record', () => {
-    expect(migrateGraphPositions(null, owners)).toEqual({});
-    expect(migrateGraphPositions([], owners)).toEqual({});
+    expect(migrateGraphPositions(null, owners, cardOwners)).toEqual({});
+    expect(migrateGraphPositions([], owners, cardOwners)).toEqual({});
+  });
+});
+
+// ── 3b: card identity carries a collection ─────────────────────────
+
+describe('3b — card keys are collection-scoped', () => {
+  const collections = [{ id: 'c1' }, { id: 'c2' }];
+  const variables = [
+    // Both collections own the group `color/brand` — the merge this fixes.
+    { collectionId: 'c1', name: 'color/brand/500' },
+    { collectionId: 'c2', name: 'color/brand/700' },
+    // c1 is INSIDE the frame `test` but has no CARD there; c2 has the card.
+    { collectionId: 'c1', name: 'test/test2/leaf' },
+    { collectionId: 'c2', name: 'test/leaf' },
+    // Loose: lives on its collection's root card, owns no group path.
+    { collectionId: 'c1', name: 'loose' },
+  ];
+  const owners = buildWrapperPathOwners(collections, variables);
+  const cardOwners = buildWrapperPathOwners(collections, variables, { exactPathOnly: true });
+
+  it('builds `group:<collectionId>::<groupName>`, splitting on the FIRST `::`', () => {
+    expect(getGroupCardKey('c1', 'color/brand')).toBe('group:c1::color/brand');
+    // Real Figma ids carry single colons; only `::` separates the halves.
+    const key = getGroupCardKey('VariableCollectionId:5:2', 'color/brand');
+    expect(key).toBe('group:VariableCollectionId:5:2::color/brand');
+    expect(parseWrapperKey(key.slice('group:'.length))).toEqual({
+      collectionId: 'VariableCollectionId:5:2',
+      path: 'color/brand',
+    });
+  });
+
+  it('separates two collections that own the same group name', () => {
+    expect(getGroupCardKey('c1', 'color/brand')).not.toBe(getGroupCardKey('c2', 'color/brand'));
+  });
+
+  it('owns a card only at the EXACT path, unlike a frame', () => {
+    // A frame named `test` contains c1's `test/test2` card…
+    expect(owners.get('test')).toEqual(['c1', 'c2']);
+    // …but c1 has no CARD at `test`, so it must not inherit its position.
+    expect(cardOwners.get('test')).toEqual(['c2']);
+    expect(cardOwners.get('test/test2')).toEqual(['c1']);
+    expect(cardOwners.get('color/brand')).toEqual(['c1', 'c2']);
+    // `color` is a frame path only: no variable sits directly under it.
+    expect(cardOwners.get('color')).toBeUndefined();
+    expect(cardOwners.get('loose')).toBeUndefined();
+  });
+
+  it('rewrites saved card positions, including the nested-drag `rel:` form', () => {
+    expect(migrateGraphPositions({
+      'group:test': { x: 1, y: 2 },
+      'rel:group:test/test2': { x: 3, y: 4 },
+    }, owners, cardOwners)).toEqual({
+      'group:c2::test': { x: 1, y: 2 },
+      'rel:group:c1::test/test2': { x: 3, y: 4 },
+    });
+  });
+
+  it('gives an ambiguous card to the FIRST owner and drops the rest', () => {
+    // The one old card was attributed to one collection; the other is a
+    // genuinely new card and Arrange will place it.
+    expect(migrateGraphPositions({ 'group:color/brand': { x: 5, y: 6 } }, owners, cardOwners))
+      .toEqual({ 'group:c1::color/brand': { x: 5, y: 6 } });
+  });
+
+  it('drops a card key no collection owns rather than keeping it stale', () => {
+    expect(migrateGraphPositions({
+      'group:gone': { x: 1, y: 1 },
+      // A frame path with no card of its own resolves to nothing either.
+      'group:color': { x: 2, y: 2 },
+    }, owners, cardOwners)).toEqual({});
+  });
+
+  it('is idempotent with no version flag, and a scoped key wins', () => {
+    const once = migrateGraphPositions({ 'group:test': { x: 1, y: 2 } }, owners, cardOwners);
+    expect(migrateGraphPositions(once, owners, cardOwners)).toEqual(once);
+    expect(migrateGraphPositions({
+      'group:c2::test': { x: 9, y: 9 },
+      'group:test': { x: 1, y: 2 },
+    }, owners, cardOwners)).toEqual({ 'group:c2::test': { x: 9, y: 9 } });
+  });
+
+  it('never mistakes `ext-group:` for `group:`', () => {
+    const stored = { 'ext-group:test': { x: 1, y: 2 }, 'rel:ext-group:test': { x: 3, y: 4 } };
+    expect(migrateGraphPositions(stored, owners, cardOwners)).toEqual(stored);
+  });
+});
+
+describe('3b — two collections owning one group name get two cards', () => {
+  // The rows carry their variable id so a bucket can be identified without
+  // caring how a row is formatted.
+  const toNode = (v: { collectionId: string; name: string }) => row(`${v.collectionId}:${v.name}`, v.name);
+
+  it('never merges same-named groups from different collections', () => {
+    const { groups } = bucketUnmanagedVariables([
+      { collectionId: 'c1', name: 'color/brand/500' },
+      { collectionId: 'c2', name: 'color/brand/700' },
+    ], toNode);
+
+    // One bucket each, attributed to its OWN collection — the old bucket took
+    // whichever collection arrived first and swallowed both rows.
+    expect(Array.from(groups.keys()).sort()).toEqual(['c1::color/brand', 'c2::color/brand']);
+    expect(groups.get('c1::color/brand')).toMatchObject({ collectionId: 'c1', groupName: 'color/brand' });
+    expect(groups.get('c2::color/brand')).toMatchObject({ collectionId: 'c2', groupName: 'color/brand' });
+    expect(groups.get('c1::color/brand')!.nodes.map(n => n.name)).toEqual(['color/brand/500']);
+    expect(groups.get('c2::color/brand')!.nodes.map(n => n.name)).toEqual(['color/brand/700']);
+  });
+
+  it('still merges the same group name within ONE collection', () => {
+    const { groups } = bucketUnmanagedVariables([
+      { collectionId: 'c1', name: 'color/brand/500' },
+      { collectionId: 'c1', name: 'color/brand/700' },
+    ], toNode);
+    expect(Array.from(groups.keys())).toEqual(['c1::color/brand']);
+    expect(groups.get('c1::color/brand')!.nodes).toHaveLength(2);
+  });
+
+  it('routes loose variables to their own collection, never to a group', () => {
+    const { groups, loose } = bucketUnmanagedVariables([
+      { collectionId: 'c1', name: 'test' },
+      { collectionId: 'c2', name: 'test' },
+      { collectionId: 'c1', name: 'test/test2' },
+    ], toNode);
+
+    // `test` the variable and `test` the group path no longer collide, and
+    // the two collections' loose `test` stay apart.
+    expect(loose.get('c1')!.map(n => n.name)).toEqual(['test']);
+    expect(loose.get('c2')!.map(n => n.name)).toEqual(['test']);
+    expect(Array.from(groups.keys())).toEqual(['c1::test']);
+  });
+
+  it('keeps the bucket key and the card key in the same shape', () => {
+    const { groups } = bucketUnmanagedVariables(
+      [{ collectionId: 'c1', name: 'color/brand/500' }], toNode
+    );
+    const [bucketKey, bucket] = Array.from(groups.entries())[0];
+    expect(getGroupCardKey(bucket.collectionId, bucket.groupName)).toBe(`group:${bucketKey}`);
   });
 });
 

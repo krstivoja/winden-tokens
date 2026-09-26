@@ -22,6 +22,7 @@ import {
   GROUP_WIDTH,
   TIER_LABEL_NODE_PREFIX,
   WRAPPER_NODE_PREFIX,
+  GROUP_NODE_PREFIX,
   GENERATED_CONNECTION_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   WRAPPER_HEADER_HEIGHT,
@@ -601,14 +602,25 @@ function outermostGroupedAncestor(
  * Bare group path → the collections that own it, in the order `collections`
  * was given.
  *
- * A collection owns path `p` when one of its variables sits at that group
- * path or below it — which is exactly when the old, collection-blind frame
- * named `p` really did draw a card from that collection. Loose (slash-less)
- * variables contribute nothing: they have no group path.
+ * Two senses of "own", because the two key spaces being migrated mean
+ * different things by a bare path:
+ *
+ * - Default (a WRAPPER frame, 3a): a collection owns path `p` when one of its
+ *   variables sits at that group path **or below it** — exactly when the old,
+ *   collection-blind frame named `p` really did draw a card from that
+ *   collection.
+ * - `exactPathOnly` (a CARD, 3b): only the variable's own parent path counts.
+ *   A card is one leaf group, so a collection whose only variable is
+ *   `test/test2/leaf` has a card at `test/test2` and NONE at `test` — it must
+ *   not be offered the position of the old `group:test` card.
+ *
+ * Loose (slash-less) variables contribute nothing in either sense: they have
+ * no group path, and since part 1 they live on their collection's root card.
  */
 function buildWrapperPathOwners(
   collections: Array<Pick<CollectionData, 'id'>>,
-  variables: Array<Pick<VariableData, 'collectionId' | 'name'>>
+  variables: Array<Pick<VariableData, 'collectionId' | 'name'>>,
+  options: { exactPathOnly?: boolean } = {}
 ): Map<string, string[]> {
   const order = new Map(collections.map((collection, index) => [collection.id, index]));
   const byPath = new Map<string, Set<string>>();
@@ -618,7 +630,11 @@ function buildWrapperPathOwners(
     const parts = variable.name.split('/');
     // `parts.length - 1`: the last segment is the variable's own name, not a
     // group path. A slash-less variable therefore contributes nothing.
-    for (let depth = 1; depth <= parts.length - 1; depth++) {
+    const maxDepth = parts.length - 1;
+    // `Math.max(…, 1)` keeps a loose variable (maxDepth 0) out: depth 0 is the
+    // EMPTY path, which is the collection root, not a group.
+    const minDepth = options.exactPathOnly ? Math.max(maxDepth, 1) : 1;
+    for (let depth = minDepth; depth <= maxDepth; depth++) {
       const prefix = parts.slice(0, depth).join('/');
       let owners = byPath.get(prefix);
       if (!owners) {
@@ -664,17 +680,27 @@ function migrateGroupedPaths(stored: unknown, owners: Map<string, string[]>): st
 }
 
 /**
- * Rewrite the persisted `graph-positions` record's wrapper keys
- * (`wrapper:<path>` and the nested-drag `rel:wrapper:<path>`) the same way.
+ * Rewrite the persisted `graph-positions` record's bare-path keys the same
+ * way: wrapper frames (`wrapper:<path>`, 3a) and group CARDS
+ * (`group:<name>`, 3b), each also in its dragged-nested `rel:` form.
  *
- * Unlike the grouped paths, a position cannot be duplicated: two frames at
- * one coordinate is worse than one arranged frame. An ambiguous path keeps
- * its FIRST owner (collection order) and the rest are dropped. Card keys and
- * everything else pass through untouched — those are part 3b.
+ * Unlike the grouped paths, a position cannot be duplicated: two frames (or
+ * two cards) on one coordinate is worse than one arranged one. An ambiguous
+ * path keeps its FIRST owner (collection order) — that is the single card the
+ * old collection-blind key really addressed — and the rest are dropped, which
+ * is honest: they are genuinely new cards and Arrange will place them.
+ *
+ * `cardOwners` is the EXACT-path ownership map (see `buildWrapperPathOwners`)
+ * because a card is one leaf group, while `owners` is the at-or-below map a
+ * frame needs. Everything else — `collection:` (already carries the id),
+ * `source:`/`shader:`/`shades:`/`steps:`/`selection:` (keyed by variable or
+ * node id) and `ext-group:` (a published library token has no local
+ * collection to scope to) — passes through untouched.
  */
 function migrateGraphPositions(
   stored: unknown,
-  owners: Map<string, string[]>
+  owners: Map<string, string[]>,
+  cardOwners: Map<string, string[]>
 ): Record<string, { x: number; y: number }> {
   if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
   const source = stored as Record<string, { x: number; y: number }>;
@@ -684,20 +710,27 @@ function migrateGraphPositions(
   Object.entries(source).forEach(([key, value]) => {
     const relPrefix = key.startsWith('rel:') ? 'rel:' : '';
     const inner = key.slice(relPrefix.length);
-    if (!inner.startsWith(WRAPPER_NODE_PREFIX)) {
+    // `ext-group:` does NOT match `group:` — it is a different prefix, and
+    // deliberately left unscoped.
+    const prefix = inner.startsWith(WRAPPER_NODE_PREFIX)
+      ? WRAPPER_NODE_PREFIX
+      : inner.startsWith(GROUP_NODE_PREFIX) ? GROUP_NODE_PREFIX : null;
+    if (!prefix) {
       out[key] = value;
       return;
     }
-    const path = inner.slice(WRAPPER_NODE_PREFIX.length);
+    const path = inner.slice(prefix.length);
     if (path.includes('::')) {
-      // Already collection-scoped — idempotence.
+      // Already collection-scoped — idempotence, with no version flag: a key
+      // without `::` is old by construction.
       out[key] = value;
       return;
     }
-    const first = (owners.get(path) || [])[0];
+    const lookup = prefix === WRAPPER_NODE_PREFIX ? owners : cardOwners;
+    const first = (lookup.get(path) || [])[0];
     if (!first) return; // unresolvable: dropped, not kept
     migrated.push([
-      `${relPrefix}${WRAPPER_NODE_PREFIX}${getWrapperKey(first, path)}`,
+      `${relPrefix}${prefix}${getWrapperKey(first, path)}`,
       value,
     ]);
   });
@@ -904,6 +937,60 @@ function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean
   return !hasMatchingGroup;
 }
 
+/** One card's worth of unmanaged variables: the rows, and who owns them. */
+interface UnmanagedGroupBucket {
+  nodes: VariableNode[];
+  collectionId: string;
+  groupName: string;
+}
+
+/**
+ * Bucket the unmanaged variables into the cards they will become.
+ *
+ * Keyed `<collectionId>::<groupName>` — the collection is part of the
+ * identity, not decoration. Keyed by group name alone, two collections that
+ * both own `color/brand` fell into ONE bucket whose `collectionId` was
+ * whichever variable happened to arrive first, so they rendered as a single
+ * card attributed to the wrong collection half the time. The merge happens
+ * HERE, before any card key is built, which is why re-keying the card alone
+ * could never have separated them.
+ *
+ * Loose (slash-less) variables are returned separately: they have no parent
+ * path and belong to their collection's root card (part 1), not to a
+ * synthetic group named after themselves.
+ *
+ * `toNode` is the caller's row formatter — kept as a callback so this stays a
+ * pure grouping rule with no opinion about how a row is rendered.
+ */
+function bucketUnmanagedVariables<T extends Pick<VariableData, 'collectionId' | 'name'>>(
+  variables: T[],
+  toNode: (variable: T) => VariableNode
+): { groups: Map<string, UnmanagedGroupBucket>; loose: Map<string, VariableNode[]> } {
+  const groups = new Map<string, UnmanagedGroupBucket>();
+  const loose = new Map<string, VariableNode[]>();
+
+  variables.forEach(variable => {
+    // Cards are leaf groups (one per parent path) — wrappers group cards
+    // visually without merging their variables.
+    const parts = variable.name.split('/');
+    const node = toNode(variable);
+    if (parts.length === 1) {
+      const existing = loose.get(variable.collectionId) || [];
+      existing.push(node);
+      loose.set(variable.collectionId, existing);
+      return;
+    }
+    const groupName = parts.slice(0, -1).join('/');
+    const bucketKey = getWrapperKey(variable.collectionId, groupName);
+    const existing = groups.get(bucketKey)
+      || { nodes: [], collectionId: variable.collectionId, groupName };
+    existing.nodes.push(node);
+    groups.set(bucketKey, existing);
+  });
+
+  return { groups, loose };
+}
+
 /**
  * The root card of every variable collection — one per collection, always.
  *
@@ -953,10 +1040,27 @@ function getCollectionCardKey(collectionId: string): string {
   return `collection:${collectionId}`;
 }
 
-export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult };
+/**
+ * A standard group card's key: `group:<collectionId>::<groupName>`.
+ *
+ * The group name alone is not an identity. Two collections that both own
+ * `color/brand` used to produce ONE card, attributed to whichever collection
+ * the first matching variable happened to belong to. Same `::` convention as
+ * `getWrapperKey` and `getCollectionGroupKey`: collection ids contain `:` but
+ * never `::`, so the FIRST `::` always separates the two halves.
+ *
+ * Mirrored by SidebarFilter, which addresses a card by key to highlight it —
+ * both call this, so the two can no longer drift.
+ */
+function getGroupCardKey(collectionId: string, groupName: string): string {
+  return `${GROUP_NODE_PREFIX}${getWrapperKey(collectionId, groupName)}`;
+}
+
+export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult, UnmanagedGroupBucket };
 
 export {
   buildCollectionCards,
+  bucketUnmanagedVariables,
   isCardHidden,
   buildArrangeUnits,
   outermostGroupedAncestor,
@@ -966,6 +1070,7 @@ export {
   migrateGroupedPaths,
   migrateGraphPositions,
   getCollectionCardKey,
+  getGroupCardKey,
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,

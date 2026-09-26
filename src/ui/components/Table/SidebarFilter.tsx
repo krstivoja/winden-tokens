@@ -7,6 +7,7 @@ import { TypeIcon, PlusIcon } from '../Icons';
 import { TextButton, IconTextButton } from '../common/Button';
 import { useModalContext } from '../Modals/ModalContext';
 import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
+import { getGroupCardKey } from '../Relationships/GroupedGraph/utils';
 import { resolveModeIdForCollection } from '../../utils/modes';
 import { VariableData } from '../../types';
 import { Search } from '../common/Search';
@@ -94,8 +95,10 @@ function GroupNodeRow({
   const nodeKey = `${collectionId}::${node.path}`;
   const hasChildren = node.children.length > 0;
   const isCollapsed = forceExpanded ? false : collapsedGroups.has(nodeKey);
-  // Graph cards are keyed `group:<groupName>` (see GroupedGraph) — no collectionId scoping there.
-  const graphGroupKey = `group:${node.path}`;
+  // Graph cards are keyed `group:<collectionId>::<groupName>`. Built through
+  // the same helper the graph uses, so this sidebar row and the card it
+  // highlights can never drift apart.
+  const graphGroupKey = getGroupCardKey(collectionId, node.path);
   const isHighlighted = node.isGroup && highlightedGroupKey === graphGroupKey;
 
   const count = variables.filter(
