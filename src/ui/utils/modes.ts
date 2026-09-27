@@ -1,4 +1,5 @@
 import { CollectionData, VariableData } from '../types';
+import { parseColorToRgb, rgbObjToHex } from './color';
 
 function getModeNameById(
   collections: CollectionData[],
@@ -75,4 +76,20 @@ export function resolveAliasValue(
     value = getVariableValueForMode(collections, refVar, preferredModeId);
   }
   return value;
+}
+
+// Color a COLOR variable value displays as: follows aliases to a hex color,
+// falls back to neutral gray for an alias that never reaches a color, and
+// passes any other non-color value through unchanged.
+export function resolveDisplayColor(
+  collections: CollectionData[],
+  variables: VariableData[],
+  value: string,
+  preferredModeId?: string | null
+): string {
+  const isReference = /^\{(.+)\}$/.test(value);
+  const resolved = resolveAliasValue(collections, variables, value, preferredModeId);
+  const resolvedRgb = parseColorToRgb(resolved);
+  if (resolvedRgb) return rgbObjToHex(resolvedRgb);
+  return isReference ? '#888888' : resolved;
 }

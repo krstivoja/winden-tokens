@@ -536,24 +536,29 @@ Dependency graph in `src/ui/components/Relationships/`
 ### ColorMenu
 **File:** `Table/ColorMenu.tsx`
 
-**Purpose:** Color picker popup
+**Purpose:** Absolutely positioned dropdown menu offering ways to set a color, not a color editor itself
 
 **Features:**
-- RGB sliders
-- Hex input
-- Alpha channel
+- "Pick Color" action with a `ShadesIcon`
+- "Reference Color" action with the color type icon
+- Optional "Clear" item, shown only when a current color is set, with a swatch of that color
+- Can render a caller-supplied `options` list (label/icon/onClick) instead of the built-in actions
+- Used by `ColorValueMenu`; `ContrastPicker` renders its own equivalent buttons rather than using this component
 
 ---
 
 ### ColorValueMenu
 **File:** `Table/ColorValueMenu.tsx`
 
-**Purpose:** Enhanced color picker
+**Purpose:** Wraps `ColorMenu` to edit a color variable's value for the current mode
 
 **Features:**
-- Palette selection
-- Recent colors
-- Favorites
+- "Pick Color" opens `ColorPickerModal` seeded with the variable's resolved color
+- An alias like `{accent/50}` is resolved to the color it points to before seeding the picker
+- An alias that resolves to no color opens the picker at neutral gray `#888888`
+- Apply writes the picked color as the variable's value for the current mode
+- "Reference Color" opens the color reference modal and writes the result as a `{name}` alias
+- Used only from the Relationships graph (`GroupedGraph.tsx`), for a graph node's color
 
 ---
 
@@ -664,13 +669,17 @@ Dependency graph in `src/ui/components/Relationships/`
 ### ColorPickerModal
 **File:** `Modals/ColorPickerModal.tsx`
 
-**Purpose:** Full-featured color picker
+**Purpose:** react-aria `ColorPicker` modal for picking a single color
 
 **Features:**
-- RGB/HSL sliders
-- Hex input
-- Alpha channel
-- History
+- Saturation/brightness `ColorArea` plus a hue `ColorSlider`
+- HEX/RGB/HSL segmented tabs that switch between numeric `ColorField` inputs
+- Cancel/Apply footer; Apply returns the color as a 6-digit hex string via `onConfirm`
+- Resets to `initialColor` every time it opens, so a cancelled edit never carries over
+- An unparseable `initialColor` falls back to `#000000` instead of crashing
+- No alpha channel, no color history
+- Opened via `useModalContext().openColorPicker({ initialColor, onConfirm })`
+- Callers: `ValueCell`, `ColorValueMenu`, the contrast color pickers in `TableRow`/`GroupHeader`, and the base color picker in `ShadesModal`
 
 ---
 
