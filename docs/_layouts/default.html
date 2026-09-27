@@ -1,48 +1,391 @@
 <!DOCTYPE html>
+{%- assign site_origin = 'https://windentokens.com' -%}
+{%- if page.title and page.url != '/' -%}
+  {%- assign page_title = page.title | append: ' · ' | append: site.title -%}
+{%- else -%}
+  {%- assign page_title = page.title | default: site.title -%}
+{%- endif -%}
+{%- assign page_description = page.description -%}
+{%- unless page_description -%}
+  {%- assign excerpt_text = page.excerpt | strip_html | normalize_whitespace | strip -%}
+  {%- assign excerpt_words = excerpt_text | number_of_words -%}
+  {%- if excerpt_words >= 6 -%}
+    {%- assign page_description = excerpt_text | truncate: 160 -%}
+  {%- elsif page.excerpt -%}
+    {%- assign page_description = page.content | strip_html | normalize_whitespace | remove_first: excerpt_text | strip | truncate: 160 -%}
+  {%- endif -%}
+{%- endunless -%}
+{%- assign page_description = page_description | default: site.description -%}
+{%- assign og_image = site_origin | append: '/assets/screens/og.png' %}
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ page.title | default: site.title }}</title>
-    <meta name="description" content="{{ page.description | default: site.description }}" />
+    <title>{{ page_title | escape }}</title>
+    <meta name="description" content="{{ page_description | escape }}" />
+    <link rel="canonical" href="{{ site_origin }}{{ page.url }}" />
+    <link rel="icon" type="image/png" href="{{ '/assets/icon.png' | relative_url }}" />
     <!-- Open Graph / Social Media -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="{{ page.title | default: site.title }}" />
-    <meta property="og:description" content="{{ page.description | default: site.description }}" />
-    <meta property="og:image" content="https://krstivoja.github.io/winden-tokens/assets/features/overview.png" />
-    <meta property="og:url" content="https://krstivoja.github.io/winden-tokens{{ page.url }}" />
+    <meta property="og:type" content="{% if page.layout == 'post' %}article{% else %}website{% endif %}" />
+    <meta property="og:site_name" content="{{ site.title }}" />
+    <meta property="og:title" content="{{ page_title | escape }}" />
+    <meta property="og:description" content="{{ page_description | escape }}" />
+    <meta property="og:image" content="{{ og_image }}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Winden Tokens, a Figma plugin for design tokens" />
+    <meta property="og:url" content="{{ site_origin }}{{ page.url }}" />
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="{{ page.title | default: site.title }}" />
-    <meta name="twitter:description" content="{{ page.description | default: site.description }}" />
-    <meta name="twitter:image" content="https://krstivoja.github.io/winden-tokens/assets/features/overview.png" />
+    <meta name="twitter:title" content="{{ page_title | escape }}" />
+    <meta name="twitter:description" content="{{ page_description | escape }}" />
+    <meta name="twitter:image" content="{{ og_image }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          colors: {
+            transparent: 'transparent',
+            current: 'currentColor',
+            inherit: 'inherit',
+            canvas: 'rgb(var(--canvas) / <alpha-value>)',
+            panel: {
+              DEFAULT: 'rgb(var(--panel) / <alpha-value>)',
+              strong: 'rgb(var(--panel-strong) / <alpha-value>)',
+            },
+            line: 'rgb(var(--line) / <alpha-value>)',
+            ink: {
+              DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+              muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+              faint: 'rgb(var(--ink-faint) / <alpha-value>)',
+            },
+            dot: 'rgb(var(--dot) / <alpha-value>)',
+            select: 'rgb(var(--select) / <alpha-value>)',
+            component: 'rgb(var(--component) / <alpha-value>)',
+            cursor: {
+              you: 'rgb(var(--cursor-you) / <alpha-value>)',
+              claude: 'rgb(var(--cursor-claude) / <alpha-value>)',
+              green: 'rgb(var(--cursor-green) / <alpha-value>)',
+              mint: 'rgb(var(--cursor-mint) / <alpha-value>)',
+              'mint-edge': 'rgb(var(--cursor-mint-edge) / <alpha-value>)',
+              sky: 'rgb(var(--cursor-sky) / <alpha-value>)',
+              'sky-edge': 'rgb(var(--cursor-sky-edge) / <alpha-value>)',
+            },
+            tint: {
+              sky: 'rgb(var(--tint-sky) / <alpha-value>)',
+              lime: 'rgb(var(--tint-lime) / <alpha-value>)',
+              lilac: 'rgb(var(--tint-lilac) / <alpha-value>)',
+              peach: 'rgb(var(--tint-peach) / <alpha-value>)',
+            },
+            'on-sky': {
+              muted: 'rgb(var(--on-sky-muted) / <alpha-value>)',
+              line: 'rgb(var(--on-sky-line) / <alpha-value>)',
+            },
+            'on-lime': {
+              muted: 'rgb(var(--on-lime-muted) / <alpha-value>)',
+              line: 'rgb(var(--on-lime-line) / <alpha-value>)',
+            },
+            'on-lilac': {
+              muted: 'rgb(var(--on-lilac-muted) / <alpha-value>)',
+              line: 'rgb(var(--on-lilac-line) / <alpha-value>)',
+            },
+            'on-peach': {
+              muted: 'rgb(var(--on-peach-muted) / <alpha-value>)',
+              line: 'rgb(var(--on-peach-line) / <alpha-value>)',
+            },
+            success: {
+              DEFAULT: 'rgb(var(--success) / <alpha-value>)',
+              tint: 'rgb(var(--success-tint) / <alpha-value>)',
+            },
+            ramp: {
+              10: 'rgb(var(--ramp-10) / <alpha-value>)',
+              20: 'rgb(var(--ramp-20) / <alpha-value>)',
+              30: 'rgb(var(--ramp-30) / <alpha-value>)',
+              40: 'rgb(var(--ramp-40) / <alpha-value>)',
+              50: 'rgb(var(--ramp-50) / <alpha-value>)',
+              60: 'rgb(var(--ramp-60) / <alpha-value>)',
+              70: 'rgb(var(--ramp-70) / <alpha-value>)',
+              80: 'rgb(var(--ramp-80) / <alpha-value>)',
+              90: 'rgb(var(--ramp-90) / <alpha-value>)',
+              100: 'rgb(var(--ramp-100) / <alpha-value>)',
+            },
+            shadow: 'rgb(var(--shadow) / <alpha-value>)',
+          },
+          boxShadow: {
+            none: 'none',
+            float: '0 1px 2px rgb(var(--shadow) / 0.05), 0 8px 24px -12px rgb(var(--shadow) / 0.16)',
+            window: '0 1px 2px rgb(var(--shadow) / 0.06), 0 24px 48px -16px rgb(var(--shadow) / 0.22)',
+          },
+          extend: {
+            fontFamily: {
+              sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            },
+            borderColor: { DEFAULT: 'rgb(var(--line))' },
+            ringColor: { DEFAULT: 'rgb(var(--line))' },
+            backgroundImage: {
+              'grid-dots': 'radial-gradient(circle, rgb(var(--dot)) 1px, transparent 1.25px)',
+              'grid-dots-inverse': 'radial-gradient(circle, rgb(var(--canvas) / 0.14) 1px, transparent 1.25px)',
+            },
+            backgroundSize: { dots: '20px 20px' },
+            keyframes: {
+              drift: {
+                '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
+                '50%': { transform: 'translate3d(var(--drift-x, 6px), var(--drift-y, -8px), 0)' },
+              },
+              'pop-in': {
+                '0%': { opacity: '0', scale: '0.9' },
+                '100%': { opacity: '1', scale: '1' },
+              },
+              bob: {
+                '0%, 100%': { translate: '0 0' },
+                '50%': { translate: '0 var(--bob, -7px)' },
+              },
+            },
+            animation: {
+              drift: 'drift 7s ease-in-out infinite',
+              'drift-slow': 'drift 10s ease-in-out infinite',
+              float: 'pop-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both, bob 8s ease-in-out infinite',
+            },
+          },
+        },
+      };
+    </script>
     <style>
+      :root {
+        --canvas: 255 255 255;
+        --panel: 242 245 249;
+        --panel-strong: 230 235 242;
+        --line: 226 231 238;
+        --ink: 10 13 20;
+        --ink-muted: 94 106 125;
+        --ink-faint: 148 158 175;
+        --dot: 203 211 222;
+        --select: 13 153 255;
+        --component: 151 71 255;
+        --cursor-you: var(--select);
+        --cursor-claude: 217 119 87;
+        --cursor-green: 20 174 92;
+        --cursor-mint: 110 231 167;
+        --cursor-mint-edge: 22 163 90;
+        --cursor-sky: 125 200 255;
+        --cursor-sky-edge: 14 134 214;
+        --tint-sky: 211 245 250;
+        --tint-lime: 232 250 210;
+        --tint-lilac: 239 231 255;
+        --tint-peach: 255 235 221;
+        --on-sky-muted: 46 112 122;
+        --on-sky-line: 181 227 234;
+        --on-lime-muted: 84 116 44;
+        --on-lime-line: 210 233 181;
+        --on-lilac-muted: 116 79 188;
+        --on-lilac-line: 214 201 239;
+        --on-peach-muted: 144 92 55;
+        --on-peach-line: 237 211 193;
+        --success: 11 122 62;
+        --success-tint: 224 247 233;
+        /* Brand blue ramp from the real file (content colors for the hero floaters) */
+        --ramp-10: 235 247 255;
+        --ramp-20: 213 235 255;
+        --ramp-30: 173 214 255;
+        --ramp-40: 107 174 255;
+        --ramp-50: 59 141 255;
+        --ramp-60: 0 89 255;
+        --ramp-70: 0 71 204;
+        --ramp-80: 0 54 153;
+        --ramp-90: 0 27 77;
+        --ramp-100: 0 15 44;
+        --shadow: 23 37 84;
+        color-scheme: light;
+      }
+
+      html {
+        scroll-padding-top: 96px;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        html { scroll-behavior: smooth; }
+      }
+
       body {
-        font-family: "Inter", system-ui, sans-serif;
+        background-color: rgb(var(--canvas));
+        color: rgb(var(--ink));
+        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
       }
 
-      h1, h2, h3, h4, h5, h6 {
-        font-family: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
-        font-weight: 600;
+      ::selection { background-color: rgb(var(--select) / 0.18); }
+
+      :focus-visible {
+        outline: 2px solid rgb(var(--select));
+        outline-offset: 2px;
       }
 
-      .prose { max-width: 65ch; }
-      .prose p { margin: 1em 0; }
-      .prose ul { margin: 1em 0; padding-left: 1.5em; }
-      .prose li { margin: 0.5em 0; }
+      summary { list-style: none; }
+      summary::-webkit-details-marker { display: none; }
+
+      /* Live multiplayer cursor: mouse and trackpad only, switched on by the script at the end of <body> */
+      html.live-cursor, html.live-cursor * { cursor: none !important; }
+      html.live-cursor :is(input, textarea, select, [contenteditable]:not([contenteditable="false"]), [contenteditable]:not([contenteditable="false"]) *) { cursor: auto !important; }
+      html.live-cursor [data-live-cursor-hide] { display: none !important; }
+      .live-cursor-el { position: fixed; top: 0; left: 0; z-index: 2147483647; pointer-events: none; will-change: transform; }
+      .live-cursor-el[data-color="mint"] { --lc-fill: var(--cursor-mint); --lc-edge: var(--cursor-mint-edge); }
+      .live-cursor-el[data-color="sky"] { --lc-fill: var(--cursor-sky); --lc-edge: var(--cursor-sky-edge); }
+      .live-cursor-el svg { position: absolute; left: -5px; top: -3.5px; width: 24px; height: 24px; overflow: visible; transform-origin: 5px 3.5px; filter: drop-shadow(0 1px 2px rgb(var(--shadow) / 0.3)); }
+      .live-cursor-el path { fill: rgb(var(--lc-fill)); stroke: rgb(var(--lc-edge)); stroke-width: 1.25px; stroke-linejoin: round; }
+      .live-cursor-el span { position: absolute; left: 11px; top: 16.5px; white-space: nowrap; border-radius: 9999px; padding: 4px 10px; font-size: 12px; line-height: 16px; font-weight: 600; color: rgb(var(--ink)); background-color: rgb(var(--lc-fill)); box-shadow: inset 0 0 0 1px rgb(var(--lc-edge) / 0.3), 0 1px 2px rgb(var(--shadow) / 0.05), 0 8px 24px -12px rgb(var(--shadow) / 0.16); }
+      .live-cursor-el[data-hover] svg { transform: scale(1.08); }
+      @media (prefers-reduced-motion: no-preference) {
+        .live-cursor-el svg { transition: transform 120ms ease-out; }
+      }
+
+      /* Post body (the Typography plugin is not loaded on the CDN build) */
+      .prose { max-width: 68ch; font-size: 17px; line-height: 1.75; color: rgb(var(--ink) / 0.84); overflow-wrap: break-word; }
+      .prose > :first-child { margin-top: 0; }
+      .prose > :last-child { margin-bottom: 0; }
+      .prose h2 { margin: 2.2em 0 0.7em; font-size: 1.625rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; color: rgb(var(--ink)); }
+      .prose h3 { margin: 1.9em 0 0.6em; font-size: 1.25rem; line-height: 1.3; font-weight: 600; letter-spacing: -0.015em; color: rgb(var(--ink)); }
+      .prose h4 { margin: 1.6em 0 0.5em; font-size: 1.0625rem; line-height: 1.4; font-weight: 600; color: rgb(var(--ink)); }
+      .prose p { margin: 1.15em 0; }
+      .prose a { color: rgb(var(--ink)); font-weight: 500; text-decoration: underline; text-decoration-color: rgb(var(--ink) / 0.25); text-decoration-thickness: 1px; text-underline-offset: 3px; transition: text-decoration-color 150ms; }
+      .prose a:hover { text-decoration-color: rgb(var(--ink)); }
+      .prose strong { color: rgb(var(--ink)); font-weight: 600; }
+      .prose ul, .prose ol { margin: 1.15em 0; padding-left: 1.4em; }
+      .prose ul { list-style: disc; }
+      .prose ol { list-style: decimal; }
+      .prose li { margin: 0.45em 0; padding-left: 0.3em; }
+      .prose ul > li::marker { color: rgb(var(--ink-faint)); }
+      .prose ol > li::marker { color: rgb(var(--ink-muted)); font-weight: 500; }
+      .prose li > ul, .prose li > ol { margin: 0.45em 0; }
+      .prose code { font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; color: rgb(var(--ink)); background-color: rgb(var(--panel)); border-radius: 6px; padding: 0.15em 0.4em; }
+      .prose pre { margin: 1.6em 0; padding: 1.1em 1.3em; overflow-x: auto; border-radius: 16px; background-color: rgb(var(--ink)); color: rgb(var(--canvas) / 0.88); font-size: 0.875rem; line-height: 1.7; }
+      .prose pre { scrollbar-color: rgb(var(--canvas) / 0.25) transparent; }
+      .prose table { scrollbar-color: rgb(var(--ink-faint)) transparent; }
+      .prose pre code { background: none; padding: 0; border-radius: 0; color: inherit; font-size: inherit; }
+      .prose img { margin: 2em 0; max-width: 100%; height: auto; border-radius: 16px; border: 1px solid rgb(var(--line)); }
+      .prose blockquote { margin: 1.6em 0; padding-left: 1.1em; border-left: 3px solid rgb(var(--line)); color: rgb(var(--ink-muted)); }
+      .prose hr { margin: 2.6em 0; border: 0; border-top: 1px solid rgb(var(--line)); }
+      .prose table { display: block; width: 100%; overflow-x: auto; margin: 1.6em 0; border-collapse: collapse; font-size: 0.9375rem; line-height: 1.5; }
+      .prose th { padding: 0.65em 1em 0.65em 0; text-align: left; font-weight: 600; color: rgb(var(--ink)); border-bottom: 1px solid rgb(var(--line)); }
+      .prose td { padding: 0.65em 1em 0.65em 0; vertical-align: top; border-bottom: 1px solid rgb(var(--line)); }
     </style>
   </head>
-  <body class="bg-white antialiased">
+  <body class="bg-canvas font-sans text-ink antialiased">
     {% include header.html %}
 
-    <main>
+    <main id="main" tabindex="-1" class="focus:outline-none">
       {{ content }}
     </main>
 
     {% include footer.html %}
+
+    <script>
+      // Live multiplayer cursor. Only for a fine pointer that can hover; touch keeps the native behavior.
+      (function () {
+        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+        if (window.matchMedia('(forced-colors: active)').matches) return;
+
+        var names = ['Padding Panda', 'Kerning Koala', 'Hex Hedgehog', 'Swatch Squirrel', 'Alias Alpaca', 'Gradient Gecko', 'Layer Llama', 'Pixel Penguin', 'Nudge Narwhal', 'Radius Raccoon', 'Opacity Otter', 'Baseline Badger', 'Vector Vole', 'Token Toucan', 'Spacing Sloth', 'Grid Gorilla'];
+        var nativeTargets = 'input, textarea, select, iframe, [contenteditable]:not([contenteditable="false"])';
+        var hoverTargets = 'a[href], button, summary, label, [role="button"]';
+        var el = null;
+        var x = 0;
+        var y = 0;
+        var target = null;
+        var inside = false;
+        var frame = 0;
+
+        function pick(list) {
+          return list[Math.floor(Math.random() * list.length)];
+        }
+
+        // A new name on every load, never the one shown on the previous load
+        function pickName() {
+          var last = null;
+          try { last = window.sessionStorage.getItem('wt-cursor-last-name'); } catch (error) {}
+          var name = pick(names.filter(function (candidate) { return candidate !== last; }));
+          try { window.sessionStorage.setItem('wt-cursor-last-name', name); } catch (error) {}
+          return name;
+        }
+
+        function build() {
+          el = document.createElement('div');
+          el.className = 'live-cursor-el';
+          el.setAttribute('aria-hidden', 'true');
+          el.setAttribute('data-color', pick(['mint', 'sky']));
+          el.hidden = true;
+          el.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 3.5 18.5 11.3 12.3 13 9.4 19Z" /></svg><span></span>';
+          el.lastChild.textContent = pickName();
+          document.body.appendChild(el);
+          document.documentElement.classList.add('live-cursor');
+        }
+
+        function closest(node, selector) {
+          return node && node.closest ? node.closest(selector) : null;
+        }
+
+        function render() {
+          frame = 0;
+          if (!el) return;
+          var hidden = !inside || !!closest(target, nativeTargets);
+          if (el.hidden !== hidden) el.hidden = hidden;
+          if (hidden) return;
+          el.style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0)';
+          el.toggleAttribute('data-hover', !!closest(target, hoverTargets));
+        }
+
+        function schedule() {
+          if (!frame) frame = window.requestAnimationFrame(render);
+        }
+
+        document.addEventListener('pointermove', function (event) {
+          if (event.pointerType !== 'mouse') return;
+          if (!el) build();
+          x = event.clientX;
+          y = event.clientY;
+          target = event.target;
+          inside = true;
+          schedule();
+        }, { passive: true });
+
+        document.addEventListener('pointerover', function (event) {
+          if (event.pointerType === 'mouse' && closest(event.target, 'iframe')) {
+            inside = false;
+            schedule();
+          }
+        });
+
+        document.addEventListener('mouseout', function (event) {
+          var next = event.relatedTarget;
+          if (!next || next.nodeName === 'IFRAME') {
+            inside = false;
+            schedule();
+          }
+        });
+
+        document.addEventListener('pointerdown', function (event) {
+          if (event.pointerType !== 'mouse') {
+            inside = false;
+            schedule();
+          }
+        });
+
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) {
+            inside = false;
+            schedule();
+          }
+        });
+
+        window.addEventListener('scroll', function () {
+          if (!inside) return;
+          target = document.elementFromPoint(x, y);
+          schedule();
+        }, { passive: true });
+      })();
+    </script>
   </body>
 </html>

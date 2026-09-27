@@ -1,21 +1,57 @@
-<header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
-  <div class="mx-auto max-w-7xl px-6 lg:px-8">
-    <div class="flex h-16 items-center justify-between">
-      <div class="flex items-center gap-3">
-        <a href="{{ '/' | relative_url }}" class="flex items-center gap-3">
-          <img src="{{ '/assets/icon.png' | relative_url }}" alt="Winden Tokens" class="h-9 w-9 rounded-lg" />
-          <div class="text-lg font-bold text-slate-900">Winden Tokens</div>
-        </a>
+{%- assign home_url = '/' | relative_url -%}
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-canvas">Skip to content</a>
+
+<header class="sticky top-3 z-50 px-4 sm:px-6">
+  <nav aria-label="Main" class="mx-auto flex h-14 max-w-[1120px] items-center gap-1.5 rounded-full bg-panel/80 px-2 ring-1 ring-inset ring-ink/[0.04] backdrop-blur-xl">
+    <a href="{{ home_url }}" class="flex min-w-0 shrink items-center gap-2.5 rounded-full py-1 pl-1 pr-2 sm:pr-3">
+      <img src="{{ '/assets/icon.png' | relative_url }}" alt="" width="32" height="32" class="h-8 w-8 shrink-0 rounded-full" />
+      <span class="truncate text-[15px] font-semibold tracking-[-0.01em]">Winden Tokens</span>
+    </a>
+
+    <ul class="ml-auto hidden items-center gap-0.5 md:flex">
+      <li><a href="{{ home_url }}#features" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Features</a></li>
+      <li><a href="{{ home_url }}#graph" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Graph</a></li>
+      <li><a href="{{ home_url }}#claude" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Claude</a></li>
+      <li><a href="{{ '/blog' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong aria-[current=page]:bg-panel-strong">Blog</a></li>
+      <li><a href="https://github.com/krstivoja/winden-tokens" target="_blank" rel="noopener" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">GitHub</a></li>
+    </ul>
+
+    <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" rel="noopener" class="ml-auto inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-canvas transition-colors hover:bg-ink/85 md:ml-1.5">
+      <img src="{{ '/assets/figma-logo.svg' | relative_url }}" alt="" width="11" height="16" class="hidden h-4 w-auto sm:block" />
+      <span class="sm:hidden">Get plugin</span><span class="hidden sm:inline">Get the plugin</span>
+    </a>
+
+    <details class="group relative shrink-0 md:hidden" data-nav-menu>
+      <summary aria-label="Menu" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-panel-strong">
+        <svg class="h-6 w-6 group-open:hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="1.25" /></svg>
+        <svg class="hidden h-6 w-6 group-open:block" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16.224 7.08201C16.3202 7.01897 16.4353 6.99099 16.5497 7.00275C16.6642 7.01451 16.7711 7.06531 16.8525 7.14661C16.9339 7.2279 16.9849 7.33475 16.9968 7.44918C17.0087 7.56362 16.9809 7.67867 16.918 7.77501L16.853 7.85301L12.707 12L16.853 16.146L16.918 16.224C16.9828 16.3202 17.0121 16.4359 17.0009 16.5514C16.9898 16.6668 16.9388 16.7748 16.8568 16.8568C16.7748 16.9388 16.6668 16.9898 16.5514 17.0009C16.4359 17.0121 16.3202 16.9828 16.224 16.918L16.146 16.853L12 12.706L7.853 16.853C7.80688 16.9008 7.7517 16.9389 7.6907 16.9651C7.6297 16.9913 7.56409 17.0051 7.4977 17.0056C7.43131 17.0062 7.36547 16.9936 7.30402 16.9684C7.24257 16.9433 7.18675 16.9062 7.1398 16.8592C7.09285 16.8123 7.05573 16.7564 7.03059 16.695C7.00545 16.6335 6.9928 16.5677 6.99337 16.5013C6.99395 16.4349 7.00774 16.3693 7.03395 16.3083C7.06015 16.2473 7.09824 16.1921 7.146 16.146L11.293 11.999L7.146 7.85301L7.082 7.77501C7.01952 7.67875 6.99198 7.56395 7.00399 7.44982C7.01601 7.33569 7.06683 7.22914 7.14798 7.148C7.22913 7.06685 7.33568 7.01602 7.44981 7.00401C7.56394 6.992 7.67874 7.01953 7.775 7.08201L7.853 7.14601L12 11.293L16.146 7.14601L16.224 7.08201Z" fill="currentColor" /></svg>
+      </summary>
+      <div class="absolute right-0 top-[calc(100%+14px)] w-60 rounded-[20px] bg-canvas p-2 shadow-window ring-1 ring-line">
+        <ul class="flex flex-col">
+          <li><a href="{{ home_url }}#features" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Features</a></li>
+          <li><a href="{{ home_url }}#graph" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Graph</a></li>
+          <li><a href="{{ home_url }}#claude" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Claude</a></li>
+          <li><a href="{{ '/blog' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel aria-[current=page]:bg-panel">Blog</a></li>
+          <li><a href="https://github.com/krstivoja/winden-tokens" target="_blank" rel="noopener" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">GitHub</a></li>
+        </ul>
       </div>
-      <nav class="hidden items-center gap-8 md:flex">
-        <a href="{{ '/' | relative_url }}#features" class="text-sm font-medium text-slate-700 hover:text-slate-900 transition">Features</a>
-        <a href="{{ '/blog' | relative_url }}" class="text-sm font-medium text-slate-700 hover:text-slate-900 transition">Blog</a>
-        <a href="https://github.com/krstivoja/winden-tokens" target="_blank" class="text-sm font-medium text-slate-700 hover:text-slate-900 transition">GitHub</a>
-        <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition">
-          <img src="{{ '/assets/figma-logo.svg' | relative_url }}" alt="Figma" class="h-4 w-4" />
-          Get Free Plugin
-        </a>
-      </nav>
-    </div>
-  </div>
+    </details>
+  </nav>
 </header>
+
+<script>
+  document.querySelectorAll('[data-nav-menu]').forEach(function (menu) {
+    menu.addEventListener('click', function (event) {
+      if (event.target.closest('a')) menu.removeAttribute('open');
+    });
+    document.addEventListener('click', function (event) {
+      if (menu.open && !menu.contains(event.target)) menu.removeAttribute('open');
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && menu.open) {
+        menu.removeAttribute('open');
+        menu.querySelector('summary').focus();
+      }
+    });
+  });
+</script>

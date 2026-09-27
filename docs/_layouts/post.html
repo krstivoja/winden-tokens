@@ -2,39 +2,44 @@
 layout: default
 ---
 
-<article class="max-w-4xl mx-auto px-6 py-16">
-  <header class="mb-8 border-b border-slate-200 pb-8">
-    <div class="flex items-center gap-4 mb-4">
-      <time class="text-sm text-slate-500">{{ page.date | date: "%B %d, %Y" }}</time>
+<article class="mx-auto max-w-[760px] px-4 pb-8 pt-12 sm:px-6 sm:pt-16">
+  <a href="{{ '/blog' | relative_url }}" class="group inline-flex items-center gap-1.5 rounded-full text-sm font-medium text-ink-muted transition-colors hover:text-ink">
+    <svg class="h-4 w-4 transition-transform group-hover:-translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+    All updates
+  </a>
+
+  <header class="mt-8 border-b border-line pb-8 sm:mt-10 sm:pb-10">
+    <div class="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+      <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %d, %Y" }}</time>
       {% if page.version %}
-      <span class="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded">
+      <span class="rounded-[8px] bg-panel px-2 py-0.5 font-mono text-xs font-medium text-ink">
         v{{ page.version }}
       </span>
       {% endif %}
     </div>
-    <h1 class="text-4xl font-bold text-slate-900">{{ page.title }}</h1>
+    <h1 class="mt-4 text-balance text-[clamp(32px,5vw,52px)] font-semibold leading-[1.06] tracking-[-0.03em]">{{ page.title }}</h1>
   </header>
 
   {% if page.youtube %}
-  <!-- YouTube Video Player (Lazy Load) -->
+  <!-- YouTube video player (lazy load) -->
   {% assign youtube_id = page.youtube | remove: 'https://youtu.be/' | remove: 'https://www.youtube.com/watch?v=' | remove: 'https://youtube.com/watch?v=' | split: '&' | first | split: '?' | first %}
-  <div class="mb-12">
-    <div class="youtube-lazy-load aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-lg relative cursor-pointer group" data-youtube-id="{{ youtube_id }}">
+  <div class="mt-10">
+    <div class="youtube-lazy-load group relative aspect-video w-full cursor-pointer overflow-hidden rounded-[20px] bg-panel ring-1 ring-ink/[0.06]" data-youtube-id="{{ youtube_id }}">
       <!-- Thumbnail -->
       <img
         src="https://img.youtube.com/vi/{{ youtube_id }}/maxresdefault.jpg"
-        alt="{{ page.title }}"
-        class="absolute inset-0 w-full h-full object-cover"
+        alt="{{ page.title | escape }}"
+        width="1280"
+        height="720"
+        class="absolute inset-0 h-full w-full object-cover"
         loading="lazy"
       />
-      <!-- Play Button Overlay -->
-      <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
-        <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
-          <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </div>
-      </div>
+      <!-- Play button -->
+      <button type="button" aria-label="Play video: {{ page.title | escape }}" class="absolute inset-0 flex items-center justify-center bg-ink/10 transition-colors group-hover:bg-ink/20">
+        <span class="flex h-16 w-16 items-center justify-center rounded-full bg-canvas/95 text-ink shadow-window transition-transform motion-safe:group-hover:scale-105">
+          <svg class="ml-1 h-7 w-7" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        </span>
+      </button>
     </div>
   </div>
 
@@ -46,24 +51,26 @@ layout: default
         const iframe = document.createElement('iframe');
         iframe.setAttribute('class', 'absolute inset-0 w-full h-full');
         iframe.setAttribute('src', 'https://www.youtube.com/embed/' + youtubeId + '?autoplay=1');
-        iframe.setAttribute('title', '{{ page.title }}');
+        iframe.setAttribute('title', {{ page.title | jsonify }});
         iframe.setAttribute('frameborder', '0');
         iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
         iframe.setAttribute('allowfullscreen', '');
         this.innerHTML = '';
         this.appendChild(iframe);
-      });
+        iframe.focus();
+      }, { once: true });
     });
   </script>
   {% endif %}
 
-  <div class="prose prose-slate prose-lg max-w-none prose-headings:text-slate-900 prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-8 prose-h2:mb-4 prose-p:text-slate-600 prose-strong:text-slate-900 prose-strong:font-semibold prose-a:text-slate-900 prose-a:no-underline hover:prose-a:underline prose-code:text-slate-900 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-900 prose-pre:text-slate-100">
+  <div class="prose mt-10 sm:mt-12">
     {{ content }}
   </div>
 
-  <footer class="mt-16 pt-8 border-t border-slate-200">
-    <a href="{{ '/blog' | relative_url }}" class="inline-flex items-center text-slate-900 hover:text-slate-900 font-medium">
-      ← Back to all updates
+  <footer class="mt-16 border-t border-line pt-8">
+    <a href="{{ '/blog' | relative_url }}" class="group inline-flex items-center gap-1.5 rounded-full text-sm font-medium">
+      <svg class="h-4 w-4 transition-transform group-hover:-translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+      Back to all updates
     </a>
   </footer>
 </article>
