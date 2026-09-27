@@ -1,657 +1,942 @@
 ---
-layout: none
+layout: default
+title: "Winden Tokens — Design tokens, made manageable"
+description: "Free, open-source Figma plugin for design tokens. Edit variables like a spreadsheet, see how they connect, generate palettes, and let Claude manage them."
 ---
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Winden Tokens - Professional Design Token Management for Figma</title>
-    <meta
-      name="description"
-      content="Free Figma plugin for managing design tokens at scale. Generate color palettes, number scales, visual graphs, WCAG contrast checking, and bulk editing."
-    />
-    <!-- Open Graph / Social Media -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Winden Tokens - Professional Design Token Management for Figma" />
-    <meta property="og:description" content="Free Figma plugin for managing design tokens at scale. Generate color palettes, number scales, visual graphs, WCAG contrast checking, and bulk editing." />
-    <meta property="og:image" content="https://krstivoja.github.io/winden-tokens/assets/features/overview.png" />
-    <meta property="og:url" content="https://krstivoja.github.io/winden-tokens/" />
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Winden Tokens - Professional Design Token Management for Figma" />
-    <meta name="twitter:description" content="Free Figma plugin for managing design tokens at scale. Generate color palettes, number scales, visual graphs, WCAG contrast checking, and bulk editing." />
-    <meta name="twitter:image" content="https://krstivoja.github.io/winden-tokens/assets/features/overview.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700;800;900&display=swap"
-      rel="stylesheet"
-    />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      body {
-        font-family: "Inter", system-ui, sans-serif;
-      }
+{%- assign figma_url = 'https://www.figma.com/community/plugin/1597659998667042080' -%}
+{%- assign screens = '/assets/screens/' | relative_url -%}
+{%- capture icon_arrow -%}<svg class="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>{%- endcapture -%}
+{%- capture icon_external -%}<svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" /></svg>{%- endcapture -%}
+{%- capture icon_check -%}<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>{%- endcapture -%}
+{%- capture icon_minus -%}<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" d="M6 12h12" /></svg>{%- endcapture -%}
+{%- capture icon_folder -%}<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.9219 6.5L11.0674 6.64648L12.3496 7.92871H17.8574C18.3687 7.92878 18.8591 8.13168 19.2207 8.49316C19.5824 8.85484 19.7861 9.34593 19.7861 9.85742V15.5713C19.7861 16.0828 19.5824 16.5739 19.2207 16.9355C18.8591 17.297 18.3687 17.4999 17.8574 17.5H6.42871C5.91722 17.5 5.42613 17.2972 5.06445 16.9355C4.70278 16.5739 4.5 16.0828 4.5 15.5713V8.42871C4.5 7.91722 4.70278 7.42613 5.06445 7.06445C5.42613 6.70278 5.91722 6.5 6.42871 6.5H10.9219Z" stroke="currentColor" /></svg>{%- endcapture -%}
+{%- capture icon_copy -%}<svg class="h-6 w-6 group-data-[copied]:hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12.9167 9.25H7.41667C6.91041 9.25 6.5 9.66041 6.5 10.1667V16.5833C6.5 17.0896 6.91041 17.5 7.41667 17.5H12.9167C13.4229 17.5 13.8333 17.0896 13.8333 16.5833V10.1667C13.8333 9.66041 13.4229 9.25 12.9167 9.25Z" stroke="currentColor" /><path d="M9.25 9.25V7.41667C9.25 7.17355 9.34658 6.94039 9.51849 6.76849C9.69039 6.59658 9.92355 6.5 10.1667 6.5H16.5833C16.8264 6.5 17.0596 6.59658 17.2315 6.76849C17.4034 6.94039 17.5 7.17355 17.5 7.41667V13.8333C17.5 14.0764 17.4034 14.3096 17.2315 14.4815C17.0596 14.6534 16.8264 14.75 16.5833 14.75H14.75" stroke="currentColor" /></svg><svg class="hidden h-4 w-4 group-data-[copied]:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>{%- endcapture -%}
+{%- capture icon_play -%}<svg class="ml-0.5 h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>{%- endcapture -%}
+{%- capture icon_close -%}<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16.224 7.08201C16.3202 7.01897 16.4353 6.99099 16.5497 7.00275C16.6642 7.01451 16.7711 7.06531 16.8525 7.14661C16.9339 7.2279 16.9849 7.33475 16.9968 7.44918C17.0087 7.56362 16.9809 7.67867 16.918 7.77501L16.853 7.85301L12.707 12L16.853 16.146L16.918 16.224C16.9828 16.3202 17.0121 16.4359 17.0009 16.5514C16.9898 16.6668 16.9388 16.7748 16.8568 16.8568C16.7748 16.9388 16.6668 16.9898 16.5514 17.0009C16.4359 17.0121 16.3202 16.9828 16.224 16.918L16.146 16.853L12 12.706L7.853 16.853C7.80688 16.9008 7.7517 16.9389 7.6907 16.9651C7.6297 16.9913 7.56409 17.0051 7.4977 17.0056C7.43131 17.0062 7.36547 16.9936 7.30402 16.9684C7.24257 16.9433 7.18675 16.9062 7.1398 16.8592C7.09285 16.8123 7.05573 16.7564 7.03059 16.695C7.00545 16.6335 6.9928 16.5677 6.99337 16.5013C6.99395 16.4349 7.00774 16.3693 7.03395 16.3083C7.06015 16.2473 7.09824 16.1921 7.146 16.146L11.293 11.999L7.146 7.85301L7.082 7.77501C7.01952 7.67875 6.99198 7.56395 7.00399 7.44982C7.01601 7.33569 7.06683 7.22914 7.14798 7.148C7.22913 7.06685 7.33568 7.01602 7.44981 7.00401C7.56394 6.992 7.67874 7.01953 7.775 7.08201L7.853 7.14601L12 11.293L16.146 7.14601L16.224 7.08201Z" fill="currentColor" /></svg>{%- endcapture -%}
+{%- capture icon_relationships -%}<svg class="h-full w-full" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.33333 10.1667C9.34586 10.1667 10.1667 9.34586 10.1667 8.33333C10.1667 7.32081 9.34586 6.5 8.33333 6.5C7.32081 6.5 6.5 7.32081 6.5 8.33333C6.5 9.34586 7.32081 10.1667 8.33333 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M15.6667 10.1667C16.6792 10.1667 17.5 9.34586 17.5 8.33333C17.5 7.32081 16.6792 6.5 15.6667 6.5C14.6542 6.5 13.8333 7.32081 13.8333 8.33333C13.8333 9.34586 14.6542 10.1667 15.6667 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M12 17.5C13.0125 17.5 13.8333 16.6792 13.8333 15.6667C13.8333 14.6542 13.0125 13.8333 12 13.8333C10.9875 13.8333 10.1667 14.6542 10.1667 15.6667C10.1667 16.6792 10.9875 17.5 12 17.5Z" stroke="currentColor" stroke-width="1.2" /><path d="M9.70834 9.70834L11.0833 13.8333M14.2917 9.70834L12.9167 13.8333M10.1667 8.33334H13.8333" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></svg>{%- endcapture -%}
+{%- capture icon_float -%}<svg class="h-full w-full" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 6C16.5304 6 17.0391 6.21071 17.4142 6.58579C17.7893 6.96086 18 7.46957 18 8V16C18 16.5304 17.7893 17.0391 17.4142 17.4142C17.0391 17.7893 16.5304 18 16 18H8C7.46957 18 6.96086 17.7893 6.58579 17.4142C6.21071 17.0391 6 16.5304 6 16V8C6 7.46957 6.21071 6.96086 6.58579 6.58579C6.96086 6.21071 7.46957 6 8 6H16ZM8 7C7.73478 7 7.48043 7.10536 7.29289 7.29289C7.10536 7.48043 7 7.73478 7 8V16C7 16.2652 7.10536 16.5196 7.29289 16.7071C7.48043 16.8946 7.73478 17 8 17H16C16.2652 17 16.5196 16.8946 16.7071 16.7071C16.8946 16.5196 17 16.2652 17 16V8C17 7.73478 16.8946 7.48043 16.7071 7.29289C16.5196 7.10536 16.2652 7 16 7H8ZM11.05 9.002C11.1819 9.01514 11.3033 9.08015 11.3873 9.18273C11.4713 9.28531 11.5111 9.41706 11.498 9.549L11.453 10.001H12.948L13.003 9.451C13.0183 9.32096 13.0841 9.20213 13.1861 9.12004C13.2881 9.03795 13.4183 8.99916 13.5486 9.01199C13.6789 9.02483 13.799 9.08827 13.883 9.18868C13.967 9.28909 14.0083 9.41847 13.998 9.549L13.953 10.001H14.5C14.6326 10.001 14.7598 10.0537 14.8536 10.1474C14.9473 10.2412 15 10.3684 15 10.501C15 10.6336 14.9473 10.7608 14.8536 10.8546C14.7598 10.9483 14.6326 11.001 14.5 11.001H13.852L13.653 13.001H14.5C14.6326 13.001 14.7598 13.0537 14.8536 13.1474C14.9473 13.2412 15 13.3684 15 13.501C15 13.6336 14.9473 13.7608 14.8536 13.8546C14.7598 13.9483 14.6326 14.001 14.5 14.001H13.552L13.498 14.549C13.4772 14.6744 13.4095 14.7873 13.3086 14.8647C13.2077 14.942 13.0812 14.9781 12.9546 14.9657C12.8281 14.9532 12.711 14.8931 12.6272 14.7975C12.5433 14.702 12.4989 14.5781 12.503 14.451L12.547 14.001H11.052L10.998 14.549C10.9772 14.6744 10.9095 14.7873 10.8086 14.8647C10.7077 14.942 10.5812 14.9781 10.4546 14.9657C10.3281 14.9532 10.211 14.8931 10.1272 14.7975C10.0433 14.702 9.99892 14.5781 10.003 14.451L10.047 14.001H9.5C9.36739 14.001 9.24021 13.9483 9.14645 13.8546C9.05268 13.7608 9 13.6336 9 13.501C9 13.3684 9.05268 13.2412 9.14645 13.1474C9.24021 13.0537 9.36739 13.001 9.5 13.001H10.147L10.347 11.001H9.5C9.36739 11.001 9.24021 10.9483 9.14645 10.8546C9.05268 10.7608 9 10.6336 9 10.501C9 10.3684 9.05268 10.2412 9.14645 10.1474C9.24021 10.0537 9.36739 10.001 9.5 10.001H10.448L10.503 9.451C10.5159 9.31907 10.5807 9.19766 10.683 9.11347C10.7854 9.02927 10.9171 8.98918 11.049 9.002M11.351 11.001L11.152 13.001H12.646L12.846 11.001H11.351Z" fill="currentColor" /></svg>{%- endcapture -%}
+{%- capture window_bar -%}<div class="flex h-9 items-center justify-between border-b border-line px-3.5"><span class="text-xs font-semibold">Winden Tokens</span><span class="text-ink-muted">{{ icon_close }}</span></div>{%- endcapture -%}
 
-      h1, h2, h3, h4, h5, h6 {
-        font-family: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
-        font-weight: 600;
-      }
-
-      .grid-pattern {
-        background-image:
-          linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
-        background-size: 60px 60px;
-      }
-
-      .grid-pattern-strong {
-        background-image:
-          linear-gradient(rgba(99, 102, 241, 0.15) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
-        background-size: 80px 80px;
-      }
-
-      .grid-pattern-dark {
-        background-image:
-          linear-gradient(rgba(99, 102, 241, 0.2) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(99, 102, 241, 0.2) 1px, transparent 1px);
-        background-size: 80px 80px;
-      }
-    </style>
-  </head>
-  <body class="bg-white antialiased">
-    {% include header.html %}
-
-    <!-- Hero -->
-    <section class="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white py-24">
-      <div class="grid-pattern absolute inset-0"></div>
-      <div class="relative mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="text-center">
-          <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-100 px-4 py-1.5 text-sm font-medium text-slate-800 uppercase">
-            Free & Open Source
-          </div>
-
-          <h1 class="text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
-            Design tokens
-            <span class="bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">made manageable</span>
-          </h1>
-
-          <p class="mt-6 text-xl leading-relaxed text-slate-600">
-            The only Figma plugin with spreadsheet editing, automated palette generation, visual relationship graphs, and WCAG contrast checking—all in one place.
-          </p>
-
-          <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-slate-900/30 hover:bg-slate-800 hover:shadow-slate-900/40 transition">
-              <img src="./assets/figma-logo.svg" alt="Figma" class="h-5 w-5" />
-              Install Free Plugin
-            </a>
-            <a href="https://paypal.me/newinstockholm" target="_blank" class="inline-flex items-center gap-2 rounded-lg border-2 border-slate-300 bg-white px-8 py-4 text-base font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition">
-              ☕ Buy me a coffee
-            </a>
-          </div>
-
-          <div class="mt-16 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
-            <img src="./assets/features/overview.png" alt="Winden Tokens interface" class="w-full rounded-lg" />
+<!-- Hero -->
+<section class="overflow-x-clip pt-12 sm:pt-16 lg:pt-20">
+  <div class="relative mx-auto max-w-[1200px] px-4 text-center sm:px-6">
+    <!-- Floating canvas objects -->
+    <div class="pointer-events-none absolute inset-0 hidden text-left md:block" aria-hidden="true">
+      <!-- Color token -->
+      <div class="absolute left-6 top-[-14px] hidden lg:block xl:left-[calc(50%-580px)] motion-safe:animate-float" style="animation-delay: 150ms, -1s; animation-duration: 700ms, 8s; --bob: -7px;">
+        <div class="flex -rotate-[3deg] items-center gap-2.5 whitespace-nowrap rounded-[12px] border border-line bg-canvas py-2 pl-2 pr-3 font-mono text-[12.5px] shadow-float">
+          <span class="h-6 w-6 shrink-0 rounded-[6px] bg-ramp-60"></span>color/brand blue/60<span class="text-ink-muted">#0059FF</span>
+        </div>
+      </div>
+      <!-- Shade ramp -->
+      <div class="absolute left-4 top-[50px] lg:left-6 lg:top-[96px] xl:left-[calc(50%-596px)] xl:top-[128px] motion-safe:animate-float" style="animation-delay: 350ms, -3s; animation-duration: 700ms, 9s; --bob: -6px;">
+        <div class="rotate-[3deg] rounded-full border border-line bg-canvas p-1 shadow-float">
+          <div class="flex overflow-hidden rounded-full">
+            <span class="h-5 w-3.5 bg-ramp-10 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-20 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-30 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-40 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-50 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-60 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-70 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-80 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-90 xl:h-6 xl:w-[18px]"></span>
+            <span class="h-5 w-3.5 bg-ramp-100 xl:h-6 xl:w-[18px]"></span>
           </div>
         </div>
       </div>
-    </section>
-
-    <!-- USPs -->
-    <section class="border-y border-slate-200 bg-white py-16">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="grid gap-8 md:grid-cols-3">
-          <div class="text-center">
-            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-            </div>
-            <h3 class="mt-4 text-lg font-semibold text-slate-900">10x Faster Workflows</h3>
-            <p class="mt-2 text-sm text-slate-600">Generate 50-950 shade palettes and entire spacing scales in seconds, not hours</p>
+      <!-- Contrast -->
+      <div class="absolute hidden xl:left-[calc(50%-470px)] xl:top-[372px] xl:block motion-safe:animate-float" style="animation-delay: 650ms, -2s; animation-duration: 700ms, 10s; --bob: -8px;">
+        <div class="flex -rotate-[3deg] items-center gap-2 whitespace-nowrap rounded-[12px] border border-line bg-canvas p-1.5 font-mono text-[12.5px] shadow-float">
+          <span class="h-6 w-6 shrink-0 rounded-[6px] bg-ramp-70"></span>7.57:1<span class="rounded-[6px] bg-success-tint px-1.5 py-0.5 font-sans text-[11px] font-semibold text-success">✓ AAA</span>
+        </div>
+      </div>
+      <!-- Reference -->
+      <div class="absolute right-6 top-[-14px] hidden lg:block xl:left-[calc(50%+300px)] xl:right-auto motion-safe:animate-float" style="animation-delay: 250ms, -4s; animation-duration: 700ms, 9s; --bob: -7px;">
+        <div class="flex rotate-[3deg] items-center gap-2 whitespace-nowrap rounded-[12px] border border-line bg-canvas py-2 pl-2 pr-3 font-mono text-[12.5px] shadow-float">
+          <span class="h-5 w-5 shrink-0 text-select">{{ icon_relationships }}</span>{color/white}<span class="text-ink-faint">→</span>color/surface/1
+        </div>
+      </div>
+      <!-- Number token -->
+      <div class="absolute right-4 top-[44px] lg:hidden xl:left-[calc(50%+340px)] xl:right-auto xl:top-[70px] xl:block motion-safe:animate-float" style="animation-delay: 450ms, -6s; animation-duration: 700ms, 8s; --bob: 7px;">
+        <div class="flex -rotate-[3deg] items-center gap-1.5 whitespace-nowrap rounded-[12px] border border-line bg-canvas py-1.5 pl-1 pr-3 font-mono text-[12.5px] shadow-float">
+          <span class="h-6 w-6 shrink-0 text-ink-muted">{{ icon_float }}</span>spacing/md<span class="text-ink-faint">·</span><span class="text-ink-muted">16</span>
+        </div>
+      </div>
+      <!-- Graph fragment -->
+      <div class="absolute right-4 top-[330px] hidden lg:block xl:left-[calc(50%+396px)] xl:right-auto xl:top-[150px] motion-safe:animate-float" style="animation-delay: 550ms, -2.5s; animation-duration: 700ms, 10s; --bob: -6px;">
+        <div class="relative h-[110px] w-[228px] rotate-[2deg]">
+          <svg class="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 228 110" fill="none"><path class="stroke-select" stroke-width="1.5" d="M88 40C104 40 100 95 116 95" /></svg>
+          <div class="absolute left-0 top-0 w-[88px] rounded-[10px] border border-line bg-canvas shadow-float">
+            <div class="border-b border-line px-2 py-1 text-[10px] font-semibold leading-4">color</div>
+            <div class="flex items-center gap-1.5 px-2 py-1.5 font-mono text-[10px] leading-4"><span class="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-canvas ring-1 ring-inset ring-ink/20"></span>white</div>
+            <span class="absolute -right-1 top-9 h-2 w-2 rounded-full bg-select ring-2 ring-canvas"></span>
           </div>
-          <div class="text-center">
-            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <h3 class="mt-4 text-lg font-semibold text-slate-900">Built-in Accessibility</h3>
-            <p class="mt-2 text-sm text-slate-600">WCAG 2.1 contrast checking with AA/AAA badges for every color pair</p>
-          </div>
-          <div class="text-center">
-            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
-            </div>
-            <h3 class="mt-4 text-lg font-semibold text-slate-900">Visual Relationship Graphs</h3>
-            <p class="mt-2 text-sm text-slate-600">Interactive node graphs show token dependencies and aliases at a glance</p>
+          <div class="absolute bottom-0 right-0 w-[112px] rounded-[10px] border border-line bg-canvas shadow-float">
+            <div class="border-b border-line px-2 py-1 text-[10px] font-semibold leading-4">color/surface/1</div>
+            <div class="flex items-center gap-1.5 px-2 py-1.5 font-mono text-[10px] leading-4"><span class="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-canvas ring-1 ring-inset ring-ink/20"></span>enabled</div>
+            <span class="absolute -left-1 top-9 h-2 w-2 rounded-full bg-select ring-2 ring-canvas"></span>
           </div>
         </div>
       </div>
-    </section>
+      <!-- Tool call, with the "Claude" cursor -->
+      <div class="absolute right-4 top-[50px] hidden lg:block xl:left-[calc(50%+372px)] xl:right-auto xl:top-[296px] motion-safe:animate-float" style="animation-delay: 700ms, -7s; animation-duration: 700ms, 9s; --bob: -7px;">
+        <div class="flex -rotate-[2deg] items-center gap-2 whitespace-nowrap rounded-[12px] border border-line bg-canvas py-2 pl-2 pr-3 font-mono text-[12px] shadow-float">
+          <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success-tint text-success">{{ icon_check }}</span>set_variable_value
+        </div>
+        <div class="absolute left-3 top-[calc(100%+2px)]">
+          <svg class="h-6 w-6" viewBox="0 0 24 24"><path class="fill-cursor-claude stroke-canvas" stroke-width="1.5" stroke-linejoin="round" d="M5 3.5 18.5 11.3 12.3 13 9.4 19Z" /></svg>
+          <span class="-mt-1 ml-4 inline-block rounded-full bg-cursor-claude px-2.5 py-1 text-xs font-semibold text-canvas shadow-float">Claude</span>
+        </div>
+      </div>
+      <!-- Cmd+K keycap -->
+      <div class="absolute left-4 top-[-10px] lg:hidden xl:left-[calc(50%+560px)] xl:top-[60px] xl:block motion-safe:animate-float" style="animation-delay: 400ms, -1.5s; animation-duration: 700ms, 7s; --bob: -6px;">
+        <div class="flex h-11 min-w-[44px] rotate-[6deg] items-center justify-center rounded-[12px] border border-b-[3px] border-line bg-canvas px-2.5 text-[15px] font-semibold shadow-float">⌘K</div>
+      </div>
+      <!-- Mode toggle -->
+      <div class="absolute right-4 top-[-6px] lg:hidden xl:left-[calc(50%+250px)] xl:right-auto xl:top-[404px] xl:block motion-safe:animate-float" style="animation-delay: 800ms, -4.5s; animation-duration: 700ms, 8s; --bob: 6px;">
+        <div class="flex -rotate-[3deg] items-center gap-0.5 whitespace-nowrap rounded-full border border-line bg-canvas p-1 text-[12px] font-medium shadow-float">
+          <span class="rounded-full bg-select px-3 py-1 text-canvas">Light</span><span class="px-3 py-1 text-ink-muted">Dark</span>
+        </div>
+      </div>
+    </div>
 
-    <!-- Features -->
-    <section id="features" class="grid-pattern-dark relative bg-black py-24">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="mx-auto max-w-2xl text-center">
-          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-400">Features</h2>
-          <p class="mt-2 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            Six specialized views
-          </p>
-          <p class="mt-4 text-lg text-slate-300">
-            Everything you need to manage design tokens at scale
-          </p>
+    <a href="#claude" class="group inline-flex max-w-full items-center gap-2 rounded-full bg-panel py-1 pl-1 pr-3 text-sm font-medium ring-1 ring-inset ring-ink/[0.04] transition-colors hover:bg-panel-strong">
+      <span class="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-canvas">New</span>
+      <span class="truncate">Claude can now manage your tokens</span>
+      {{ icon_arrow }}
+    </a>
+
+    <h1 class="mx-auto mt-7 text-[clamp(34px,10.6vw,48px)] font-semibold leading-[1.02] tracking-[-0.035em] sm:text-[clamp(48px,7vw,88px)]">
+      Design tokens,<br /> made manageable.
+    </h1>
+
+    <p class="mx-auto mt-6 max-w-[640px] text-balance text-lg leading-relaxed text-ink-muted sm:text-xl">
+      Edit Figma variables like a spreadsheet, see how they connect on a graph, and generate palettes and scales. Now you can open it full-size in a browser tab, or let Claude manage it for you.
+    </p>
+
+    <div class="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+      <a href="{{ figma_url }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-ink px-6 text-[15px] font-medium text-canvas transition-colors hover:bg-ink/85">
+        <img src="{{ '/assets/figma-logo.svg' | relative_url }}" alt="" width="12" height="18" class="h-[18px] w-auto" />
+        Install free plugin
+      </a>
+      <a href="#features" class="group inline-flex h-12 items-center justify-center gap-2 rounded-full bg-canvas px-6 text-[15px] font-medium ring-1 ring-inset ring-line transition-colors hover:bg-panel">
+        Explore features
+        {{ icon_arrow }}
+      </a>
+    </div>
+
+    <p class="mt-5 text-[13px] text-ink-muted">
+      Free <span class="px-1 text-ink-faint" aria-hidden="true">·</span> Open source (MIT) <span class="px-1 text-ink-faint" aria-hidden="true">·</span> Figma Community plugin
+    </p>
+  </div>
+
+  <div class="mx-auto mt-12 max-w-[1200px] px-4 sm:mt-14 sm:px-6">
+    <div class="relative overflow-hidden rounded-[24px] bg-panel bg-grid-dots bg-dots px-4 pb-10 pt-8 sm:rounded-[32px] sm:px-12 sm:pb-20 sm:pt-14 lg:px-24 lg:pb-24 lg:pt-16">
+      <div class="relative w-[150%] sm:mx-auto sm:w-auto sm:max-w-[960px]">
+        <div class="overflow-hidden rounded-xl bg-canvas shadow-window ring-1 ring-ink/[0.08]">
+          {{ window_bar }}
+          <img src="{{ screens }}table.webp" width="2880" height="1800" alt="The Winden Tokens plugin window in Figma, showing the table view with variables grouped by path" fetchpriority="high" class="aspect-[16/10] w-full bg-panel object-cover object-left-top" />
         </div>
 
-        <div class="mt-16 grid gap-8 lg:grid-cols-3">
-          <!-- Feature 1 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Table View</h3>
-            <p class="mt-2 text-slate-600">Spreadsheet-style editing with inline controls, collection switching, and instant search</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Edit 100s of variables faster than native UI
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Move variables between collections via dropdown
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Auto-groups by slash-separated paths
+        <!-- Figma selection -->
+        <div class="pointer-events-none absolute -inset-[3px] hidden border-[1.5px] border-select md:block" aria-hidden="true">
+          <span class="absolute -left-[5px] -top-[5px] h-2 w-2 border-[1.5px] border-select bg-canvas"></span>
+          <span class="absolute -right-[5px] -top-[5px] h-2 w-2 border-[1.5px] border-select bg-canvas"></span>
+          <span class="absolute -bottom-[5px] -left-[5px] h-2 w-2 border-[1.5px] border-select bg-canvas"></span>
+          <span class="absolute -bottom-[5px] -right-[5px] h-2 w-2 border-[1.5px] border-select bg-canvas"></span>
+          <span class="absolute left-1/2 top-[calc(100%+10px)] -translate-x-1/2 whitespace-nowrap rounded-[4px] bg-select px-1.5 py-0.5 text-[11px] font-semibold text-canvas">681 variables</span>
+        </div>
+
+        <!-- Multiplayer cursors -->
+        <div class="pointer-events-none absolute left-[29%] top-[47%] hidden md:block lg:hidden" aria-hidden="true">
+          <div class="motion-safe:animate-drift" style="--drift-x: 10px; --drift-y: -6px;">
+            <svg class="h-6 w-6" viewBox="0 0 24 24"><path class="fill-cursor-claude stroke-canvas" stroke-width="1.5" stroke-linejoin="round" d="M5 3.5 18.5 11.3 12.3 13 9.4 19Z" /></svg>
+            <span class="-mt-1 ml-4 inline-block rounded-full bg-cursor-claude px-2.5 py-1 text-xs font-semibold text-canvas shadow-float">Claude</span>
+          </div>
+        </div>
+        <div class="pointer-events-none absolute left-[82.5%] top-[67%] hidden md:block lg:hidden" aria-hidden="true" data-live-cursor-hide>
+          <div class="motion-safe:animate-drift-slow" style="--drift-x: -8px; --drift-y: 8px; animation-delay: -3s;">
+            <svg class="h-6 w-6" viewBox="0 0 24 24"><path class="fill-cursor-you stroke-canvas" stroke-width="1.5" stroke-linejoin="round" d="M5 3.5 18.5 11.3 12.3 13 9.4 19Z" /></svg>
+            <span class="-mt-1 ml-4 inline-block rounded-full bg-cursor-you px-2.5 py-1 text-xs font-semibold text-canvas shadow-float">You</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Real-file numbers -->
+<section class="relative overflow-hidden py-24 sm:py-32">
+  <div class="relative mx-auto max-w-[1200px] px-4 sm:px-6">
+    <h2 class="text-center text-sm font-medium text-ink-muted">Tested on a real design system</h2>
+    <ul class="mt-5 text-center text-[clamp(40px,6.4vw,80px)] font-semibold leading-[1.06] tracking-[-0.04em]">
+      <li>681 <span class="text-ink-muted">variables.</span></li>
+      <li>513 <span class="text-ink-muted">references.</span></li>
+      <li>6 <span class="text-ink-muted">collections.</span></li>
+      <li>One <span class="text-ink-muted">graph.</span></li>
+    </ul>
+    <ul class="mx-auto mt-10 flex max-w-[920px] flex-wrap justify-center gap-2" aria-label="Collections in the file">
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}_global <span class="text-ink-muted">116</span></li>
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}color <span class="text-ink-muted">118</span></li>
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}typography <span class="text-ink-muted">51</span></li>
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}components <span class="text-ink-muted">342</span></li>
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}dimensions <span class="text-ink-muted">51</span></li>
+      <li class="inline-flex items-center gap-1.5 rounded-[8px] bg-panel py-1.5 pl-2 pr-2.5 font-mono text-[13px]">{{ icon_folder }}marko <span class="text-ink-muted">3</span></li>
+    </ul>
+
+    <!-- Floating token chips -->
+    <div class="pointer-events-none absolute inset-0 hidden md:block" aria-hidden="true">
+      <div class="absolute left-[3%] top-[6%] motion-safe:animate-drift" style="--drift-x: 4px; --drift-y: -8px;">
+        <div class="flex -rotate-6 items-center gap-2 rounded-[8px] bg-canvas py-1.5 pl-1.5 pr-2.5 font-mono text-[13px] shadow-float ring-1 ring-ink/[0.06]">
+          <span class="h-5 w-5 rounded-[5px] bg-component"></span>color/brand/500
+        </div>
+      </div>
+      <div class="absolute left-[15%] top-[40%] hidden motion-safe:animate-drift-slow lg:block" style="--drift-x: -6px; --drift-y: 6px; animation-delay: -4s;">
+        <div class="flex h-14 w-14 rotate-[8deg] items-center justify-center rounded-2xl bg-canvas shadow-float ring-1 ring-ink/[0.06]">
+          <svg class="h-9 w-9" viewBox="0 0 24 24" fill="none"><path d="M7.64687 7.16532C8.88398 6.04924 10.5024 5.45085 12.1681 5.4937C13.8337 5.53655 15.4192 6.21739 16.5973 7.39561L16.8573 7.67232C17.9891 8.94539 18.576 10.6119 18.4916 12.3133L18.4646 12.6661C18.3207 14.0543 17.0569 14.7768 15.9389 14.7768H13.3928L13.299 14.786C13.1942 14.8075 13.0999 14.8644 13.0322 14.9473C12.9645 15.0303 12.9276 15.134 12.9276 15.241V15.7053C12.9276 16.4667 12.6138 17.1938 12.0733 17.6804C11.5162 18.1837 10.7102 18.4232 9.87263 18.1335C9.06401 17.8534 8.31867 17.4163 7.67937 16.8475L7.40358 16.5875C6.79994 15.9839 6.32109 15.2673 5.9944 14.4786C5.66771 13.69 5.49956 12.8447 5.49956 11.9911C5.49956 11.1374 5.66771 10.2921 5.9944 9.50349C6.32109 8.71484 6.79994 7.99826 7.40358 7.39468L7.64687 7.16532ZM15.9389 8.0521C14.8941 7.00734 13.4771 6.42041 11.9995 6.42041C10.522 6.42041 9.1049 7.00734 8.06008 8.0521L7.86322 8.26103C7.24694 8.94412 6.80942 9.7692 6.58971 10.6626C6.37 11.556 6.37496 12.4899 6.60412 13.3809C6.83329 14.2719 7.27954 15.0923 7.90302 15.7688C8.52651 16.4453 9.30782 16.9569 10.1772 17.2579C11.0853 17.5708 11.8932 16.8335 11.9907 15.8957L12 15.7053V15.242C12 14.8726 12.1467 14.5183 12.4079 14.2571C12.6691 13.9959 13.0234 13.8491 13.3928 13.8491H15.9399L16.0866 13.8436C16.7672 13.7906 17.3782 13.3672 17.5194 12.7144L17.5416 12.5705C17.6222 11.8002 17.5412 11.0217 17.3039 10.2844C17.0667 9.54724 16.6783 8.86759 16.1637 8.28888L15.9389 8.0521ZM8.75 11.992C8.99627 11.992 9.23245 12.0898 9.40659 12.264C9.58073 12.4381 9.67856 12.6743 9.67856 12.9206C9.67856 13.1668 9.58073 13.403 9.40659 13.5772C9.23245 13.7513 8.99627 13.8491 8.75 13.8491C8.50373 13.8491 8.26755 13.7513 8.09341 13.5772C7.91927 13.403 7.82144 13.1668 7.82144 12.9206C7.82144 12.6743 7.91927 12.4381 8.09341 12.264C8.26755 12.0898 8.50373 11.992 8.75 11.992ZM15.2499 10.1349C15.4962 10.135 15.7324 10.2329 15.9064 10.4072C16.0805 10.5814 16.1782 10.8176 16.178 11.0639C16.1779 11.3102 16.08 11.5463 15.9057 11.7204C15.7315 11.8944 15.4953 11.9921 15.249 11.992C15.0027 11.992 14.7666 11.8942 14.5924 11.72C14.4183 11.5459 14.3205 11.3097 14.3205 11.0634C14.3205 10.8172 14.4183 10.581 14.5924 10.4068C14.7666 10.2327 15.0027 10.1349 15.249 10.1349M9.67763 8.74202C9.92403 8.74202 10.1603 8.8399 10.3346 9.01413C10.5088 9.18836 10.6067 9.42466 10.6067 9.67105C10.6067 9.91744 10.5088 10.1537 10.3346 10.328C10.1603 10.5022 9.92403 10.6001 9.67763 10.6001C9.43136 10.6001 9.19518 10.5022 9.02104 10.3281C8.8469 10.154 8.74907 9.91779 8.74907 9.67152C8.74907 9.42524 8.8469 9.18906 9.02104 9.01492C9.19518 8.84078 9.43136 8.74202 9.67763 8.74202ZM12.9276 7.81439C13.1739 7.81439 13.4101 7.91222 13.5842 8.08636C13.7583 8.2605 13.8562 8.49668 13.8562 8.74295C13.8562 8.98922 13.7583 9.22541 13.5842 9.39955C13.4101 9.57368 13.1739 9.67152 12.9276 9.67152C12.6813 9.67152 12.4452 9.57368 12.271 9.39955C12.0969 9.22541 11.999 8.98922 11.999 8.74295C11.999 8.49668 12.0969 8.2605 12.271 8.08636C12.4452 7.91222 12.6813 7.81439 12.9276 7.81439Z" fill="currentColor" /></svg>
+        </div>
+      </div>
+      <div class="absolute left-[5%] top-[72%] motion-safe:animate-drift" style="--drift-x: 6px; --drift-y: -5px; animation-delay: -1.5s;">
+        <div class="flex rotate-[4deg] items-center gap-1.5 rounded-[8px] bg-canvas py-1.5 pl-1 pr-2.5 font-mono text-[13px] shadow-float ring-1 ring-ink/[0.06]">
+          <span class="h-5 w-5 shrink-0 text-ink-muted">{{ icon_float }}</span>
+          spacing/4 <span class="text-ink-muted">16</span>
+        </div>
+      </div>
+      <div class="absolute right-[3%] top-[8%] motion-safe:animate-drift-slow" style="--drift-x: -5px; --drift-y: -7px; animation-delay: -2s;">
+        <div class="flex rotate-[5deg] items-center gap-2 rounded-[8px] bg-canvas py-1.5 pl-1.5 pr-2.5 font-mono text-[13px] shadow-float ring-1 ring-ink/[0.06]">
+          <span class="h-5 w-5 rounded-[5px] bg-canvas ring-1 ring-inset ring-ink/15"></span>{color/white}
+        </div>
+      </div>
+      <div class="absolute right-[3%] top-[73%] motion-safe:animate-drift" style="--drift-x: 7px; --drift-y: 5px; animation-delay: -5s;">
+        <div class="flex -rotate-[5deg] items-center gap-1.5 rounded-[8px] bg-canvas py-1.5 pl-1 pr-2.5 font-mono text-[13px] shadow-float ring-1 ring-ink/[0.06]">
+          <svg class="h-5 w-5 text-ink-muted" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 7H16C16.2652 7 16.5196 7.10536 16.7071 7.29289C16.8946 7.48043 17 7.73478 17 8V16C17 16.2652 16.8946 16.5196 16.7071 16.7071C16.5196 16.8946 16.2652 17 16 17H8C7.73478 17 7.48043 16.8946 7.29289 16.7071C7.10536 16.5196 7 16.2652 7 16V8C7 7.73478 7.10536 7.48043 7.29289 7.29289C7.48043 7.10536 7.73478 7 8 7ZM6 8C6 7.46957 6.21071 6.96086 6.58579 6.58579C6.96086 6.21071 7.46957 6 8 6H16C16.5304 6 17.0391 6.21071 17.4142 6.58579C17.7893 6.96086 18 7.46957 18 8V16C18 16.5304 17.7893 17.0391 17.4142 17.4142C17.0391 17.7893 16.5304 18 16 18H8C7.46957 18 6.96086 17.7893 6.58579 17.4142C6.21071 17.0391 6 16.5304 6 16V8ZM9.5 9C9.36739 9 9.24021 9.05268 9.14645 9.14645C9.05268 9.24021 9 9.36739 9 9.5V10.5C9 10.6326 9.05268 10.7598 9.14645 10.8536C9.24021 10.9473 9.36739 11 9.5 11C9.63261 11 9.75979 10.9473 9.85355 10.8536C9.94732 10.7598 10 10.6326 10 10.5V10H11.5V14H11C10.8674 14 10.7402 14.0527 10.6464 14.1464C10.5527 14.2402 10.5 14.3674 10.5 14.5C10.5 14.6326 10.5527 14.7598 10.6464 14.8536C10.7402 14.9473 10.8674 15 11 15H13C13.1326 15 13.2598 14.9473 13.3536 14.8536C13.4473 14.7598 13.5 14.6326 13.5 14.5C13.5 14.3674 13.4473 14.2402 13.3536 14.1464C13.2598 14.0527 13.1326 14 13 14H12.5V10H14V10.5C14 10.6326 14.0527 10.7598 14.1464 10.8536C14.2402 10.9473 14.3674 11 14.5 11C14.6326 11 14.7598 10.9473 14.8536 10.8536C14.9473 10.7598 15 10.6326 15 10.5V9.5C15 9.36739 14.9473 9.24021 14.8536 9.14645C14.7598 9.05268 14.6326 9 14.5 9H9.5Z" fill="currentColor" /></svg>
+          font/family <span class="text-ink-muted">Inter</span>
+        </div>
+      </div>
+      <div class="absolute right-[15%] top-[40%] hidden motion-safe:animate-drift lg:block" style="--drift-x: -6px; --drift-y: -6px; animation-delay: -3.5s;">
+        <div class="flex h-14 w-14 -rotate-[7deg] items-center justify-center rounded-2xl bg-canvas shadow-float ring-1 ring-ink/[0.06]">
+          <svg class="h-9 w-9" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M10 8H14C15.0609 8 16.0783 8.42143 16.8284 9.17157C17.5786 9.92172 18 10.9391 18 12C18 13.0609 17.5786 14.0783 16.8284 14.8284C16.0783 15.5786 15.0609 16 14 16H10C8.93913 16 7.92172 15.5786 7.17157 14.8284C6.42143 14.0783 6 13.0609 6 12C6 10.9391 6.42143 9.92172 7.17157 9.17157C7.92172 8.42143 8.93913 8 10 8ZM5 12C5 10.6739 5.52678 9.40215 6.46447 8.46447C7.40215 7.52678 8.67392 7 10 7H14C15.3261 7 16.5979 7.52678 17.5355 8.46447C18.4732 9.40215 19 10.6739 19 12C19 13.3261 18.4732 14.5979 17.5355 15.5355C16.5979 16.4732 15.3261 17 14 17H10C8.67392 17 7.40215 16.4732 6.46447 15.5355C5.52678 14.5979 5 13.3261 5 12ZM10 14C9.46957 14 8.96086 13.7893 8.58579 13.4142C8.21071 13.0391 8 12.5304 8 12C8 11.4696 8.21071 10.9609 8.58579 10.5858C8.96086 10.2107 9.46957 10 10 10C10.5304 10 11.0391 10.2107 11.4142 10.5858C11.7893 10.9609 12 11.4696 12 12C12 12.5304 11.7893 13.0391 11.4142 13.4142C11.0391 13.7893 10.5304 14 10 14ZM7 12C7 11.2044 7.31607 10.4413 7.87868 9.87868C8.44129 9.31607 9.20435 9 10 9C10.7956 9 11.5587 9.31607 12.1213 9.87868C12.6839 10.4413 13 11.2044 13 12C13 12.7956 12.6839 13.5587 12.1213 14.1213C11.5587 14.6839 10.7956 15 10 15C9.20435 15 8.44129 14.6839 7.87868 14.1213C7.31607 13.5587 7 12.7956 7 12Z" fill="currentColor" /></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <h2 class="max-w-[900px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+      One plugin for every token workflow. <span class="text-ink-muted">Edit, see, generate, check — at any scale.</span>
+    </h2>
+
+    <div class="mt-10 grid gap-3 sm:mt-14 sm:gap-4 md:grid-cols-2 lg:grid-cols-6">
+      <!-- Table -->
+      <article class="relative flex flex-col overflow-hidden rounded-[20px] bg-panel md:col-span-2 lg:col-span-4 lg:row-span-3">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Spreadsheet table</h3>
+          <p class="mt-1.5 text-pretty max-w-[46ch] text-[15px] leading-relaxed text-ink-muted">Edit hundreds of variables inline. Slash paths become groups, and search narrows the list as you type.</p>
+        </div>
+        <div class="relative mt-6 h-72 grow sm:mt-8 sm:h-96 lg:h-auto">
+          <div class="absolute left-6 top-0 h-[calc(100%+48px)] w-[210%] overflow-hidden rounded-tl-xl bg-canvas shadow-window ring-1 ring-ink/[0.08] sm:left-8 sm:w-[150%] lg:aspect-[16/10] lg:w-auto">
+            <img src="{{ screens }}table.webp" width="2880" height="1800" alt="The table view: variables grouped by slash path, with swatches and values" loading="lazy" class="h-full w-full bg-panel object-cover object-left-top" />
+          </div>
+        </div>
+      </article>
+
+      <!-- Quick search -->
+      <article class="relative flex flex-col overflow-hidden rounded-[20px] bg-tint-lilac lg:col-span-2">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">⌘K quick search</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-on-lilac-muted">Jump to any token, group or collection. The graph flies straight to it.</p>
+        </div>
+        <div class="relative mt-6 h-52 grow sm:mt-8">
+          <div class="absolute -bottom-2 -right-2 left-6 top-0 overflow-hidden rounded-tl-xl bg-canvas shadow-window ring-1 ring-on-lilac-line sm:left-8">
+            <img src="{{ screens }}quick-search.webp" width="2400" height="1600" alt="The Command-K quick search palette open over the graph, with results for brand" loading="lazy" class="h-full w-full origin-[50%_30%] scale-[2.1] bg-panel object-cover object-[50%_30%] lg:scale-[1.85] xl:scale-[2.1]" />
+          </div>
+        </div>
+      </article>
+
+      <!-- JSON -->
+      <article class="relative flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-2">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">JSON editor</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">The whole token tree in a CodeMirror editor, with folding.</p>
+        </div>
+        <div class="relative mt-6 h-52 grow sm:mt-8">
+          <div class="absolute left-6 top-0 h-[calc(100%+48px)] w-[240%] overflow-hidden rounded-tl-xl bg-canvas shadow-window ring-1 ring-ink/[0.08] sm:left-8 sm:w-[150%] md:w-[240%]">
+            <img src="{{ screens }}json.webp" width="2400" height="1600" alt="The JSON tab: the token tree in a code editor with folding" loading="lazy" class="h-full w-full bg-panel object-cover object-left-top" />
+          </div>
+        </div>
+      </article>
+
+      <!-- Undo / redo -->
+      <article class="flex flex-col justify-between gap-8 rounded-[20px] bg-panel p-6 sm:p-8 md:col-span-2 md:flex-row md:items-center lg:col-span-2 lg:flex-col lg:items-stretch">
+        <div>
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Undo and redo</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">History for every change, so trying an idea costs nothing.</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-3" aria-hidden="true">
+          <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas shadow-float ring-1 ring-ink/[0.06]">
+            <svg class="h-9 w-9" viewBox="0 0 24 24" fill="none"><path d="M10.2 6.94998L7 10.15L10.2 13.35" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /><path d="M8 10.15H13.3C14.2813 10.15 15.2224 10.5398 15.9163 11.2337C16.6102 11.9276 17 12.8687 17 13.85C17 14.8313 16.6102 15.7724 15.9163 16.4663C15.2224 17.1602 14.2813 17.55 13.3 17.55H11.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas shadow-float ring-1 ring-ink/[0.06]">
+            <svg class="h-9 w-9" viewBox="0 0 24 24" fill="none"><path d="M13.8 6.94998L17 10.15L13.8 13.35" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /><path d="M16 10.15H10.7C9.7187 10.15 8.77759 10.5398 8.0837 11.2337C7.38982 11.9276 7 12.8687 7 13.85C7 14.8313 7.38982 15.7724 8.0837 16.4663C8.77759 17.1602 9.7187 17.55 10.7 17.55H12.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span class="ml-auto flex gap-1.5 pl-2 font-mono text-xs text-ink-muted">
+            <kbd class="rounded-md bg-canvas px-2 py-1 font-mono ring-1 ring-ink/[0.08]">⌘Z</kbd>
+            <kbd class="rounded-md bg-canvas px-2 py-1 font-mono ring-1 ring-ink/[0.08]">⇧⌘Z</kbd>
+          </span>
+        </div>
+      </article>
+
+      <!-- Relationships graph -->
+      <article class="relative flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-3">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Relationships graph</h3>
+          <p class="mt-1.5 text-pretty max-w-[46ch] text-[15px] leading-relaxed text-ink-muted">Aliases drawn as connections, collections as cards. Arrange Grid lays them out by dependency tier.</p>
+        </div>
+        <div class="relative mt-6 h-60 grow sm:mt-8 sm:h-72">
+          <div class="absolute left-6 top-0 h-[calc(100%+48px)] w-[200%] overflow-hidden rounded-tl-xl bg-canvas shadow-window ring-1 ring-ink/[0.08] sm:left-8 sm:w-[150%] md:w-[200%] lg:w-[150%]">
+            <img src="{{ screens }}graph.webp" width="3200" height="2000" alt="The Relationships graph: collection cards in dependency tiers, joined by alias lines" loading="lazy" class="h-full w-full bg-panel object-cover object-left-top" />
+          </div>
+        </div>
+      </article>
+
+      <!-- Shades -->
+      <article class="flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-3">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Shades generator</h3>
+          <p class="mt-1.5 text-pretty max-w-[46ch] text-[15px] leading-relaxed text-ink-muted">50–950 palettes shaped with Bézier curves. Managed shades update when the base color changes.</p>
+        </div>
+        <div class="mt-auto overflow-hidden p-2 pt-4 sm:p-3 sm:pt-5">
+          <img src="{{ screens }}shades.webp" width="1984" height="1323" alt="The Shades generator: a Bézier curve editor above a strip of generated swatches" loading="lazy" class="aspect-[3/2] w-full scale-[1.15] object-contain" />
+        </div>
+      </article>
+
+      <!-- Scale -->
+      <article class="flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-3">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Scale generator</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">Spacing and type scales from ratios like Golden Ratio and Major Third.</p>
+        </div>
+        <div class="mt-auto overflow-hidden p-2 pt-4 sm:p-3 sm:pt-5">
+          <img src="{{ screens }}scale.webp" width="1806" height="1204" alt="The Steps generator: a scale ratio, T-shirt size steps and the generated values" loading="lazy" class="aspect-[3/2] w-full scale-[1.25] object-contain" />
+        </div>
+      </article>
+
+      <!-- Contrast -->
+      <article class="flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-3">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Contrast checker</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">WCAG 2.1 AA and AAA results for every color pair.</p>
+        </div>
+        <div class="mt-auto overflow-hidden p-2 pt-4 sm:p-3 sm:pt-5">
+          <img src="{{ screens }}contrast.webp" width="1977" height="1318" alt="Brand blue shades 10 to 100 with their contrast ratios against white and AA and AAA results" loading="lazy" class="aspect-[3/2] w-full scale-[1.25] object-contain" />
+        </div>
+      </article>
+
+      <!-- Modes -->
+      <article class="flex flex-col overflow-hidden rounded-[20px] bg-panel md:col-span-2 lg:col-span-2">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Modes, per collection</h3>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">Pick a collection, then its mode. Same-named modes follow across collections.</p>
+        </div>
+        <div class="mt-auto overflow-hidden p-2 pt-4 sm:p-3 sm:pt-5 md:mx-auto md:w-full md:max-w-[520px] lg:max-w-none">
+          <img src="{{ screens }}modes.webp" width="1502" height="1126" alt="The mode picker: collection tags, with desktop and mobile modes for the dimensions collection" loading="lazy" class="aspect-[3/2] w-full scale-[1.25] object-contain" />
+        </div>
+      </article>
+
+      <!-- Move without breaking -->
+      <article class="flex flex-col overflow-hidden rounded-[20px] bg-tint-lime md:col-span-2 lg:col-span-4 lg:flex-row">
+        <div class="px-6 pt-6 sm:px-8 sm:pt-8 lg:w-1/2 lg:shrink-0 lg:pb-8 lg:pr-0">
+          <h3 class="text-lg font-semibold tracking-[-0.015em]">Move without breaking</h3>
+          <p class="mt-1.5 text-pretty max-w-[52ch] text-[15px] leading-relaxed text-on-lime-muted">Move a variable or a whole group to another collection. Every mode’s value comes along, aliases are rewired, and canvas fills, strokes and effects stay bound.</p>
+        </div>
+        <div class="flex flex-1 flex-col items-center justify-center gap-2.5 px-6 pb-8 pt-8 sm:flex-row sm:gap-3 sm:px-8 lg:flex-col" aria-hidden="true">
+          <div class="w-full max-w-[220px] rounded-xl bg-canvas p-1.5 shadow-float ring-1 ring-on-lime-line sm:w-[200px]">
+            <div class="flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-xs font-semibold">{{ icon_folder }}_global</div>
+            <ul class="font-mono text-[11.5px]">
+              <li class="flex items-center gap-2 rounded-md px-2 py-1.5"><span class="h-3 w-3 shrink-0 rounded-[3px] bg-tint-lilac ring-1 ring-inset ring-ink/10"></span>brand/100</li>
+              <li class="flex items-center gap-2 rounded-md px-2 py-1.5 text-ink-faint outline-dashed outline-1 -outline-offset-1 outline-select/60"><span class="h-3 w-3 shrink-0 rounded-[3px] bg-component/30"></span>brand/500</li>
+              <li class="flex items-center gap-2 rounded-md px-2 py-1.5"><span class="h-3 w-3 shrink-0 rounded-[3px] bg-ink"></span>brand/900</li>
+            </ul>
+          </div>
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-select text-canvas">
+            <svg class="h-4 w-4 rotate-90 sm:rotate-0 lg:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+          </span>
+          <div class="w-full max-w-[220px] rounded-xl bg-canvas p-1.5 shadow-float ring-1 ring-on-lime-line sm:w-[200px]">
+            <div class="flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-xs font-semibold">{{ icon_folder }}color</div>
+            <ul class="font-mono text-[11.5px]">
+              <li class="flex items-center gap-2 rounded-md bg-select/10 px-2 py-1.5 ring-1 ring-inset ring-select"><span class="h-3 w-3 shrink-0 rounded-[3px] bg-component"></span>brand/500</li>
+              <li class="grid grid-cols-2 gap-1 px-1 pb-1 pt-2 font-sans text-[11px] font-medium">
+                <span class="rounded-[6px] bg-panel px-1.5 py-0.5">Light ✓</span>
+                <span class="rounded-[6px] bg-panel px-1.5 py-0.5">Dark ✓</span>
+                <span class="rounded-[6px] bg-panel px-1.5 py-0.5">Aliases ✓</span>
+                <span class="rounded-[6px] bg-panel px-1.5 py-0.5">Fills ✓</span>
               </li>
             </ul>
           </div>
-
-          <!-- Feature 2 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Shades Generator</h3>
-            <p class="mt-2 text-slate-600">Generate 50-950 color palettes with advanced Bezier curve controls</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Bezier curves for lightness, saturation, hue
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Managed shades auto-update when base changes
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Real-time preview with accessibility badges
-              </li>
-            </ul>
-          </div>
-
-          <!-- Feature 3 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Steps Generator</h3>
-            <p class="mt-2 text-slate-600">Create spacing/sizing scales with Golden Ratio, Major Third, and more</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                8 preset ratios + custom values
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Reference existing variables as base
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                T-shirt, numeric, or custom naming
-              </li>
-            </ul>
-          </div>
-
-          <!-- Feature 4 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Node Graphs</h3>
-            <p class="mt-2 text-slate-600">Interactive graphs for colors and numbers showing all token relationships</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Drag to create variable aliases
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Visualize complex token hierarchies
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Pan, zoom, and keyboard shortcuts
-              </li>
-            </ul>
-          </div>
-
-          <!-- Feature 5 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Contrast Checker</h3>
-            <p class="mt-2 text-slate-600">WCAG 2.1 compliance with real-time AA/AAA badges</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Per-variable or per-group checking
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Pick colors or reference variables
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Instant ratio calculation
-              </li>
-            </ul>
-          </div>
-
-          <!-- Feature 6 -->
-          <div class="group rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-xl transition">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
-            </div>
-            <h3 class="mt-6 text-xl font-semibold text-slate-900">Bulk Editing</h3>
-            <p class="mt-2 text-slate-600">CSV and JSON editors for importing/exporting entire token sets</p>
-            <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Paste from spreadsheets (CSV)
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                JSON editor for power users
-              </li>
-              <li class="flex items-start gap-2">
-                <svg class="h-5 w-5 flex-shrink-0 text-slate-900" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Preview before applying
-              </li>
-            </ul>
-          </div>
         </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Screens strip -->
+{%- capture tour -%}
+Table|table.webp|2880|1800|window|The table view, listing variables in groups with their values
+Relationships|graph.webp|3200|2000|window|The Relationships graph: collection cards joined by alias lines, with a sidebar
+Quick search|quick-search.webp|2400|1600|window|The Command-K quick search palette open over the graph
+JSON|json.webp|2400|1600|window|The JSON tab: the token tree in a code editor with folding
+Shades|shades.webp|1984|1323|detail|The Shades generator: a Bézier curve editor above a strip of generated swatches
+Scale|scale.webp|1806|1204|detail|The Steps generator: a scale ratio, T-shirt size steps and the generated values
+Contrast|contrast.webp|1977|1318|detail|Brand blue shades with their contrast ratios against white and AA and AAA results
+Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop and mobile modes for the dimensions collection
+{%- endcapture -%}
+{%- assign tour = tour | strip | newline_to_br | split: '<br />' %}
+<section aria-labelledby="tour-title" class="py-14 sm:py-20">
+  <div class="mx-auto flex max-w-[1200px] items-end justify-between gap-6 px-4 sm:px-6">
+    <h2 id="tour-title" class="max-w-[900px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+      Every screen, built for scale. <span class="text-ink-muted">Take the tour.</span>
+    </h2>
+    <div class="max-sm:hidden" data-strip-controls hidden>
+      <div class="flex gap-2">
+        <button type="button" data-dir="-1" aria-label="Previous screens" class="flex h-11 w-11 items-center justify-center rounded-full bg-panel transition-colors hover:bg-panel-strong disabled:cursor-default disabled:opacity-40 disabled:hover:bg-panel">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+        </button>
+        <button type="button" data-dir="1" aria-label="Next screens" class="flex h-11 w-11 items-center justify-center rounded-full bg-panel transition-colors hover:bg-panel-strong disabled:cursor-default disabled:opacity-40 disabled:hover:bg-panel">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </button>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <!-- Latest Videos -->
-    <section id="videos" class="border-t border-slate-200 bg-white py-24">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="mx-auto max-w-2xl text-center">
-          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-600">Learn</h2>
-          <p class="mt-2 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            Latest Videos
-          </p>
-          <p class="mt-4 text-lg text-slate-600">
-            Step-by-step guides to master every feature
-          </p>
-        </div>
-
-        {% assign video_posts = site.categories.tutorials | where_exp: "post", "post.youtube" %}
-        {% if video_posts.size > 0 %}
-        <div class="mt-16 grid gap-8 lg:grid-cols-3">
-          {% for post in video_posts limit:3 %}
-          {% assign youtube_id = post.youtube | remove: 'https://youtu.be/' | remove: 'https://www.youtube.com/watch?v=' | remove: 'https://youtube.com/watch?v=' | split: '&' | first | split: '?' | first %}
-          <article class="group rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-lg transition">
-            <!-- Video Thumbnail -->
-            <div class="aspect-video w-full bg-slate-100 relative overflow-hidden">
-              <img
-                src="https://img.youtube.com/vi/{{ youtube_id }}/maxresdefault.jpg"
-                alt="{{ post.title }}"
-                class="absolute inset-0 w-full h-full object-cover"
-                loading="lazy"
-              />
-              <div class="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
-                <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-2xl">
-                  <svg class="w-6 w-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <!-- Content -->
-            <div class="p-6">
-              <div class="flex items-center gap-3 mb-3">
-                <time class="text-sm text-slate-500">{{ post.date | date: "%b %d, %Y" }}</time>
-              </div>
-
-              <h3 class="text-xl font-semibold text-slate-900 group-hover:text-slate-900 transition">
-                <a href="{{ post.url | relative_url }}">
-                  {{ post.title }}
-                </a>
-              </h3>
-
-              <div class="mt-4">
-                <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-slate-800">
-                  Read full tutorial
-                  <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </a>
-              </div>
-            </div>
-          </article>
-          {% endfor %}
-        </div>
-
-        <div class="mt-8 text-center">
-          <a href="{{ '/blog/tutorials' | relative_url }}" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-slate-900 transition">
-            View all tutorials
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-          </a>
-        </div>
-        {% else %}
-        <div class="mt-16 text-center">
-          <div class="inline-flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
-            <svg class="h-8 w-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+  <div role="region" aria-label="Plugin screens" tabindex="0" data-strip class="mt-10 snap-x snap-mandatory overflow-x-auto scroll-px-4 pb-2 [scrollbar-width:none] sm:mt-14 sm:scroll-px-6 lg:scroll-px-[max(24px,calc((100%_-_1152px)_/_2))] [&::-webkit-scrollbar]:hidden">
+    <ul class="flex w-max gap-4 px-4 sm:gap-6 sm:px-6 lg:px-[max(24px,calc((100vw_-_1152px)_/_2))]">
+      {%- for item in tour %}
+      {%- assign s = item | strip | split: '|' %}
+      <li class="w-[78vw] max-w-[460px] shrink-0 snap-start sm:w-[420px] lg:w-[460px]">
+        <p class="text-center text-sm font-medium">{{ s[0] }}</p>
+        <div class="mt-3 flex aspect-[10/7] items-center justify-center rounded-[20px] bg-panel {% if s[4] == 'window' %}p-4 sm:p-5{% else %}p-1.5 sm:p-2{% endif %}">
+          {%- if s[4] == 'window' %}
+          <div class="w-full overflow-hidden rounded-[10px] bg-canvas ring-1 ring-ink/[0.08]">
+            <img src="{{ screens }}{{ s[1] }}" width="{{ s[2] }}" height="{{ s[3] }}" alt="{{ s[5] }}" loading="lazy" class="aspect-[3/2] w-full bg-panel object-cover object-left-top" />
           </div>
-          <p class="mt-4 text-lg text-slate-600">No video tutorials available yet. Check back soon!</p>
+          {%- else %}
+          <img src="{{ screens }}{{ s[1] }}" width="{{ s[2] }}" height="{{ s[3] }}" alt="{{ s[5] }}" loading="lazy" class="h-full w-full object-contain" />
+          {%- endif %}
         </div>
-        {% endif %}
-      </div>
-    </section>
+      </li>
+      {%- endfor %}
+    </ul>
+  </div>
+</section>
 
-    <!-- Updates -->
-    <section id="updates" class="border-t border-slate-200 bg-slate-50 py-24">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="mx-auto max-w-2xl text-center">
-          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-600">What's New</h2>
-          <p class="mt-2 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            Latest Updates
-          </p>
-          <p class="mt-4 text-lg text-slate-600">
-            Recent improvements and new features
-          </p>
-        </div>
+<!-- Relationships graph -->
+<section id="graph" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="overflow-hidden rounded-[24px] bg-tint-sky px-5 pt-10 sm:rounded-[32px] sm:px-12 sm:pt-14 lg:px-16 lg:pt-20">
+      <p class="inline-flex items-center gap-1.5 text-sm font-medium">
+        <svg class="-ml-1 h-6 w-6 text-on-sky-muted" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.33333 10.1667C9.34586 10.1667 10.1667 9.34586 10.1667 8.33333C10.1667 7.32081 9.34586 6.5 8.33333 6.5C7.32081 6.5 6.5 7.32081 6.5 8.33333C6.5 9.34586 7.32081 10.1667 8.33333 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M15.6667 10.1667C16.6792 10.1667 17.5 9.34586 17.5 8.33333C17.5 7.32081 16.6792 6.5 15.6667 6.5C14.6542 6.5 13.8333 7.32081 13.8333 8.33333C13.8333 9.34586 14.6542 10.1667 15.6667 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M12 17.5C13.0125 17.5 13.8333 16.6792 13.8333 15.6667C13.8333 14.6542 13.0125 13.8333 12 13.8333C10.9875 13.8333 10.1667 14.6542 10.1667 15.6667C10.1667 16.6792 10.9875 17.5 12 17.5Z" stroke="currentColor" stroke-width="1.2" /><path d="M9.70834 9.70834L11.0833 13.8333M14.2917 9.70834L12.9167 13.8333M10.1667 8.33334H13.8333" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></svg>
+        Relationships graph
+      </p>
+      <h2 class="mt-4 max-w-[860px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+        See how every token connects. <span class="text-on-sky-muted">Aliases become lines, collections become cards.</span>
+      </h2>
 
-        <div class="mx-auto mt-16 max-w-3xl">
-          <div class="space-y-8">
-            {% for post in site.categories.releases limit:3 %}
-            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition">
-              <div class="flex items-start gap-4">
-                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-900">
-                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                </div>
-                <div class="flex-1">
-                  <div class="flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-slate-900">
-                      <a href="{{ post.url | relative_url }}" class="hover:text-slate-900 transition">
-                        {{ post.title }}
-                      </a>
-                    </h3>
-                    <time class="text-sm text-slate-500">{{ post.date | date: "%B %Y" }}</time>
-                  </div>
-                  {% if post.version %}
-                  <div class="mt-2">
-                    <span class="inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-800">
-                      v{{ post.version }}
-                    </span>
-                  </div>
-                  {% endif %}
-                  <p class="mt-2 text-sm text-slate-600">
-                    {{ post.excerpt | strip_html | truncatewords: 30 }}
-                  </p>
-                  <div class="mt-3">
-                    <a href="{{ post.url | relative_url }}" class="inline-flex items-center gap-1 text-sm font-semibold text-slate-900 hover:text-slate-800">
-                      Read more
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-
-          <div class="mt-8 text-center">
-            <a href="{{ '/blog/releases' | relative_url }}" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-slate-900 transition">
-              View all releases
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-            </a>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Comparison -->
-    <section id="comparison" class="bg-white py-24">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="mx-auto max-w-2xl text-center">
-          <h2 class="text-base font-semibold uppercase tracking-wider text-slate-900">Comparison</h2>
-          <p class="mt-2 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            vs Native Figma Variables
-          </p>
-          <p class="mt-4 text-lg text-slate-600">
-            Figma provides the foundation. Winden Tokens adds the workflows.
-          </p>
-        </div>
-
-        <div class="mt-12 overflow-hidden rounded-2xl border border-slate-200 shadow-lg">
-          <table class="w-full">
-            <thead class="border-b-2 border-slate-200 bg-slate-50">
-              <tr>
-                <th class="px-6 py-4 text-left text-sm font-semibold text-slate-900">Feature</th>
-                <th class="px-6 py-4 text-center text-sm font-semibold text-slate-900">Winden Tokens</th>
-                <th class="px-6 py-4 text-center text-sm font-semibold text-slate-900">Native Figma</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200 bg-white">
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Spreadsheet-style editing</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Yes
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center text-sm text-slate-500">Limited</td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Move variables between collections</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Dropdown
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center text-sm text-slate-500">Manual copy/paste</td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Auto-generate 50-950 color palettes</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Bezier curves
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Number scale generator (Golden Ratio, etc.)</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    8 presets
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Visual node graphs for relationships</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Colors + Numbers
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">WCAG contrast checking</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    AA/AAA badges
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">CSV/JSON batch editing</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Both
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">No</span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Auto-sync with native variables (2s)</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Yes
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center text-sm text-slate-500">N/A</td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Multi-mode support (Light/Dark)</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Yes
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Yes
-                  </span>
-                </td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">Group operations (move, edit, contrast)</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Yes
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center text-sm text-slate-500">Manual only</td>
-              </tr>
-              <tr class="hover:bg-slate-50">
-                <td class="px-6 py-4 text-sm font-medium text-slate-900">All variable types (Color, Number, String, Boolean)</td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    All 4
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    All 4
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA -->
-    <section class="grid-pattern border-t border-slate-800 bg-black py-24">
-      <div class="mx-auto max-w-4xl px-6 text-center lg:px-8">
-        <h2 class="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-          Manage tokens like a pro
-        </h2>
-        <p class="mt-6 text-xl text-slate-300">
-          Free, open source, and used by designers at top companies.
-        </p>
-        <div class="mt-10">
-          <a href="https://www.figma.com/community/plugin/1597659998667042080" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-white px-8 py-4 text-lg font-semibold text-slate-900 shadow-lg hover:bg-slate-100 transition">
-            <img src="./assets/figma-logo.svg" alt="Figma" class="h-5 w-5" />
-            Install Free Plugin
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- Blog / Recent Updates -->
-    <section class="bg-white py-24">
-      <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="flex items-end justify-between mb-12">
+      <ul class="mt-10 grid gap-x-8 gap-y-7 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
+        <li class="flex gap-4 sm:block">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-canvas/70 text-on-sky-muted ring-1 ring-on-sky-line">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
+          </span>
           <div>
-            <h2 class="text-3xl font-semibold text-slate-900 sm:text-4xl">
-              Latest Updates
-            </h2>
-            <p class="mt-3 text-lg text-slate-600">
-              News, features, and changelog
-            </p>
+            <h3 class="pt-2 text-[15px] font-semibold sm:mt-4 sm:pt-0">Arrange Grid</h3>
+            <p class="mt-1 text-pretty text-[15px] leading-relaxed text-on-sky-muted">Lays the cards out by dependency tier in one click.</p>
           </div>
-          <a href="{{ '/blog' | relative_url }}" class="text-slate-900 hover:text-slate-800 font-semibold flex items-center gap-2">
-            View all posts
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-          </a>
+        </li>
+        <li class="flex gap-4 sm:block">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-canvas/70 text-on-sky-muted ring-1 ring-on-sky-line">
+            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.33333 10.1667C9.34586 10.1667 10.1667 9.34586 10.1667 8.33333C10.1667 7.32081 9.34586 6.5 8.33333 6.5C7.32081 6.5 6.5 7.32081 6.5 8.33333C6.5 9.34586 7.32081 10.1667 8.33333 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M15.6667 10.1667C16.6792 10.1667 17.5 9.34586 17.5 8.33333C17.5 7.32081 16.6792 6.5 15.6667 6.5C14.6542 6.5 13.8333 7.32081 13.8333 8.33333C13.8333 9.34586 14.6542 10.1667 15.6667 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M12 17.5C13.0125 17.5 13.8333 16.6792 13.8333 15.6667C13.8333 14.6542 13.0125 13.8333 12 13.8333C10.9875 13.8333 10.1667 14.6542 10.1667 15.6667C10.1667 16.6792 10.9875 17.5 12 17.5Z" stroke="currentColor" stroke-width="1.2" /><path d="M9.70834 9.70834L11.0833 13.8333M14.2917 9.70834L12.9167 13.8333M10.1667 8.33334H13.8333" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></svg>
+          </span>
+          <div>
+            <h3 class="pt-2 text-[15px] font-semibold sm:mt-4 sm:pt-0">Trace a path</h3>
+            <p class="mt-1 text-pretty text-[15px] leading-relaxed text-on-sky-muted">Click a row to light up its path, up and down the alias chain.</p>
+          </div>
+        </li>
+        <li class="flex gap-4 sm:block">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-canvas/70 text-on-sky-muted ring-1 ring-on-sky-line">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 0 0 3.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0 1 20.25 6v1.5m0 9V18A2.25 2.25 0 0 1 18 20.25h-1.5m-9 0H6A2.25 2.25 0 0 1 3.75 18v-1.5M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+          </span>
+          <div>
+            <h3 class="pt-2 text-[15px] font-semibold sm:mt-4 sm:pt-0">Fly to a collection</h3>
+            <p class="mt-1 text-pretty text-[15px] leading-relaxed text-on-sky-muted">Click a collection name and the graph flies to its card.</p>
+          </div>
+        </li>
+        <li class="flex gap-4 sm:block">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-canvas/70 text-on-sky-muted ring-1 ring-on-sky-line">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+          </span>
+          <div>
+            <h3 class="pt-2 text-[15px] font-semibold sm:mt-4 sm:pt-0">Drag to alias</h3>
+            <p class="mt-1 text-pretty text-[15px] leading-relaxed text-on-sky-muted">Drag between handles to point one token at another.</p>
+          </div>
+        </li>
+      </ul>
+
+      <div class="relative mt-12 aspect-[16/9.2] sm:mt-16">
+        <div class="mr-[10%] overflow-hidden rounded-t-xl bg-canvas shadow-window ring-1 ring-on-sky-line">
+          {{ window_bar }}
+          <img src="{{ screens }}graph.webp" width="3200" height="2000" alt="The Relationships graph: collection cards joined by alias lines, with a sidebar" loading="lazy" class="aspect-[16/10] w-full bg-panel object-cover object-left-top" />
         </div>
-
-        <div class="grid gap-8 md:grid-cols-3">
-          {% for post in site.posts limit:3 %}
-          <article class="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:shadow-lg">
-            <div class="p-6 flex-1">
-              <div class="flex items-center gap-3 mb-4">
-                <time class="text-sm text-slate-500">{{ post.date | date: "%b %d, %Y" }}</time>
-                {% if post.version %}
-                <span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-800 rounded">
-                  v{{ post.version }}
-                </span>
-                {% endif %}
-              </div>
-
-              <h3 class="text-xl font-semibold text-slate-900 group-hover:text-slate-900 transition">
-                <a href="{{ post.url | relative_url }}" class="stretched-link">
-                  {{ post.title }}
-                </a>
-              </h3>
-
-              <p class="mt-3 text-slate-600 line-clamp-3">
-                {{ post.excerpt | strip_html | truncatewords: 25 }}
-              </p>
-            </div>
-
-            <div class="px-6 pb-6">
-              <div class="flex items-center gap-2 text-sm font-medium text-slate-900">
-                Read more
-                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              </div>
-            </div>
-          </article>
-          {% endfor %}
+        <div class="absolute bottom-6 right-0 w-[56%] overflow-hidden rounded-xl bg-canvas shadow-window ring-1 ring-on-sky-line sm:bottom-10 sm:w-[44%] lg:w-[40%]">
+          <div class="flex h-8 items-center gap-1 border-b border-on-sky-line px-2.5 text-[11px] font-semibold">
+            <svg class="h-5 w-5 text-on-sky-muted" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.33333 10.1667C9.34586 10.1667 10.1667 9.34586 10.1667 8.33333C10.1667 7.32081 9.34586 6.5 8.33333 6.5C7.32081 6.5 6.5 7.32081 6.5 8.33333C6.5 9.34586 7.32081 10.1667 8.33333 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M15.6667 10.1667C16.6792 10.1667 17.5 9.34586 17.5 8.33333C17.5 7.32081 16.6792 6.5 15.6667 6.5C14.6542 6.5 13.8333 7.32081 13.8333 8.33333C13.8333 9.34586 14.6542 10.1667 15.6667 10.1667Z" stroke="currentColor" stroke-width="1.2" /><path d="M12 17.5C13.0125 17.5 13.8333 16.6792 13.8333 15.6667C13.8333 14.6542 13.0125 13.8333 12 13.8333C10.9875 13.8333 10.1667 14.6542 10.1667 15.6667C10.1667 16.6792 10.9875 17.5 12 17.5Z" stroke="currentColor" stroke-width="1.2" /><path d="M9.70834 9.70834L11.0833 13.8333M14.2917 9.70834L12.9167 13.8333M10.1667 8.33334H13.8333" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></svg>
+            Trace a path
+          </div>
+          <img src="{{ screens }}graph-path.webp" width="1888" height="1259" alt="A zoomed-in graph with one row’s alias path highlighted" loading="lazy" class="aspect-[3/2] w-full bg-panel object-cover object-left-top" />
         </div>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
-    {% include footer.html %}
-  </body>
-</html>
+<!-- Browser tab + CLI -->
+<section id="bridge" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="grid gap-8 lg:grid-cols-12 lg:items-end lg:gap-12">
+      <div class="lg:col-span-7">
+        <p class="inline-flex items-center gap-2 text-sm font-medium">
+          <span class="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-canvas">New</span>
+          Browser tab and CLI
+        </p>
+        <h2 class="mt-4 text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+          Too big for a plugin window? <span class="text-ink-muted">Open it in a browser tab.</span>
+        </h2>
+      </div>
+      <div class="space-y-4 text-[17px] leading-relaxed text-ink-muted lg:col-span-5">
+        <p>The <code class="rounded-md bg-panel px-1.5 py-0.5 font-mono text-[0.88em] text-ink">winden-tokens</code> command serves the same interface full-size on your machine and drives the Figma file you have open. Edits land in Figma right away, and selecting a component in Figma shows its card in the tab.</p>
+        <p>Keep the plugin window open in Figma. It is the only thing that can reach the Figma API.</p>
+        <p class="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm">
+          <a href="https://www.npmjs.com/package/winden-tokens" target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-medium text-ink underline decoration-ink/25 underline-offset-4 transition-colors hover:decoration-ink">winden-tokens on npm{{ icon_external }}</a>
+          <span>Node.js 18+</span>
+        </p>
+      </div>
+    </div>
+
+    <div class="relative mt-10 overflow-hidden rounded-[24px] bg-panel p-3 sm:mt-14 sm:rounded-[32px] sm:p-10 lg:p-14">
+      <div class="overflow-hidden rounded-xl bg-canvas shadow-window ring-1 ring-ink/[0.08] lg:ml-[16%]">
+        <div class="flex h-10 items-center gap-3 border-b border-line px-3.5">
+          <span class="flex w-12 shrink-0 gap-1.5" aria-hidden="true">
+            <span class="h-2.5 w-2.5 rounded-full bg-ink/15"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-ink/15"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-ink/15"></span>
+          </span>
+          <span class="mx-auto flex h-6 min-w-0 items-center rounded-full bg-panel px-3 font-mono text-[11px] text-ink-muted">127.0.0.1:9337</span>
+          <span class="w-12 shrink-0" aria-hidden="true"></span>
+        </div>
+        <img src="{{ screens }}graph.webp" width="3200" height="2000" alt="The Winden Tokens graph running full-size in a browser tab at 127.0.0.1:9337" loading="lazy" class="aspect-[16/10] w-full bg-panel object-cover object-left-top" />
+      </div>
+
+      <div class="relative mx-2 -mt-8 sm:mx-8 sm:-mt-16 lg:absolute lg:bottom-14 lg:left-14 lg:m-0 lg:w-[600px]">
+        <div class="overflow-hidden rounded-xl bg-ink shadow-window">
+          <div class="flex h-9 items-center gap-1.5 border-b border-canvas/10 px-3.5" aria-hidden="true">
+            <span class="h-2.5 w-2.5 rounded-full bg-canvas/20"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-canvas/20"></span>
+            <span class="h-2.5 w-2.5 rounded-full bg-canvas/20"></span>
+            <span class="ml-2 font-mono text-[11px] text-canvas/60">Terminal</span>
+          </div>
+          <pre class="whitespace-pre-wrap p-4 font-mono text-[12.5px] leading-[1.75] text-canvas/80 sm:p-5"><code><span class="text-canvas/50">$</span> <span class="text-canvas">npx winden-tokens</span>
+
+  <span class="text-canvas">Winden Tokens bridge — protocol v1</span>
+  <span class="text-canvas/60">UI:</span>    <span class="text-select">http://127.0.0.1:9337/</span>
+  <span class="text-canvas/60">Relay:</span> <span class="text-select">ws://127.0.0.1:9337</span>
+
+  Now open the Winden Tokens plugin in Figma and leave that window open.
+  Ctrl-C to stop.</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <ul class="mt-10 grid gap-8 sm:mt-12 sm:grid-cols-3">
+      <li class="flex gap-4">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" /></svg>
+        </span>
+        <div>
+          <h3 class="text-[15px] font-semibold">Loopback only</h3>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">Listens on 127.0.0.1, so nothing on your network can reach it.</p>
+        </div>
+      </li>
+      <li class="flex gap-4">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+        </span>
+        <div>
+          <h3 class="text-[15px] font-semibold">Origin-checked</h3>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">A web page you happen to have open cannot connect to it.</p>
+        </div>
+      </li>
+      <li class="flex gap-4">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+        </span>
+        <div>
+          <h3 class="text-[15px] font-semibold">Stores nothing</h3>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">It forwards messages between the tab and Figma, and forgets them.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- Claude / MCP -->
+<section id="claude" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="rounded-[24px] bg-tint-peach px-5 py-10 sm:rounded-[32px] sm:px-12 sm:py-14 lg:px-16 lg:py-20">
+      <p class="inline-flex items-center gap-2 text-sm font-medium">
+        <span class="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-canvas">New</span>
+        MCP server
+      </p>
+      <h2 class="mt-4 max-w-[900px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+        Let Claude manage your tokens. <span class="text-on-peach-muted">An MCP server for the Figma file you have open.</span>
+      </h2>
+      <p class="mt-6 max-w-[640px] text-[17px] leading-relaxed text-on-peach-muted">
+        The same package installs an MCP server. Claude can list collections, read a variable and everything it references, create variables, groups and collections, and set values, all in the file you are working on.
+      </p>
+
+      <div class="mt-10 grid gap-6 sm:mt-12 lg:grid-cols-2 lg:gap-10">
+        <div>
+          <h3 class="text-[15px] font-semibold">Set it up in three steps</h3>
+          <ol class="mt-4 space-y-3">
+            <li class="rounded-[20px] bg-canvas/70 p-4 ring-1 ring-on-peach-line sm:p-5">
+              <div class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-on-peach-muted text-[13px] font-semibold text-canvas">1</span>
+                <p class="text-[15px] font-medium">Install the package</p>
+              </div>
+              <div class="mt-3 flex items-center gap-2 rounded-xl bg-canvas py-1 pl-3.5 pr-1 ring-1 ring-on-peach-line">
+                <code class="min-w-0 flex-1 py-2 font-mono text-[13px]">npm install <span class="whitespace-nowrap">-g</span> <span class="whitespace-nowrap">winden-tokens</span></code>
+                <button type="button" data-copy="npm install -g winden-tokens" aria-label="Copy command: npm install -g winden-tokens" class="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-on-peach-muted transition-colors hover:bg-tint-peach hover:text-ink">{{ icon_copy }}</button>
+              </div>
+            </li>
+            <li class="rounded-[20px] bg-canvas/70 p-4 ring-1 ring-on-peach-line sm:p-5">
+              <div class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-on-peach-muted text-[13px] font-semibold text-canvas">2</span>
+                <p class="text-[15px] font-medium">Add it to Claude Code</p>
+              </div>
+              <div class="mt-3 flex items-center gap-2 rounded-xl bg-canvas py-1 pl-3.5 pr-1 ring-1 ring-on-peach-line">
+                <code class="min-w-0 flex-1 py-2 font-mono text-[13px]">claude mcp add <span class="whitespace-nowrap">winden-tokens</span> <span class="whitespace-nowrap">--</span> <span class="whitespace-nowrap">winden-tokens-mcp</span></code>
+                <button type="button" data-copy="claude mcp add winden-tokens -- winden-tokens-mcp" aria-label="Copy command: claude mcp add winden-tokens -- winden-tokens-mcp" class="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-on-peach-muted transition-colors hover:bg-tint-peach hover:text-ink">{{ icon_copy }}</button>
+              </div>
+            </li>
+            <li class="rounded-[20px] bg-canvas/70 p-4 ring-1 ring-on-peach-line sm:p-5">
+              <div class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-on-peach-muted text-[13px] font-semibold text-canvas">3</span>
+                <p class="text-[15px] font-medium">Run it, then open the plugin in Figma</p>
+              </div>
+              <div class="mt-3 flex items-center gap-2 rounded-xl bg-canvas py-1 pl-3.5 pr-1 ring-1 ring-on-peach-line">
+                <code class="min-w-0 flex-1 py-2 font-mono text-[13px]"><span class="whitespace-nowrap">winden-tokens</span></code>
+                <button type="button" data-copy="winden-tokens" aria-label="Copy command: winden-tokens" class="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-on-peach-muted transition-colors hover:bg-tint-peach hover:text-ink">{{ icon_copy }}</button>
+              </div>
+            </li>
+          </ol>
+          <p class="sr-only" aria-live="polite" data-copy-status></p>
+        </div>
+
+        <figure class="self-start overflow-hidden rounded-[20px] bg-canvas shadow-window ring-1 ring-on-peach-line lg:mt-9">
+          <figcaption class="flex items-center justify-between gap-3 border-b border-on-peach-line px-5 py-3">
+            <span class="text-sm font-semibold">Claude</span>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-tint-peach px-2.5 py-1 font-mono text-[11px] text-on-peach-muted"><span class="h-1.5 w-1.5 rounded-full bg-cursor-green" aria-hidden="true"></span>winden-tokens</span>
+          </figcaption>
+          <div class="space-y-5 p-5 sm:p-6">
+            <p class="ml-auto max-w-[90%] rounded-2xl rounded-br-md bg-tint-peach/70 px-4 py-3 text-[15px] leading-relaxed">
+              Create <span class="font-mono text-[0.9em]">color/brand</span> with 100, 500 and 900, then point <span class="font-mono text-[0.9em]">button/<wbr />color/<wbr />primary/<wbr />enabled</span> at <span class="font-mono text-[0.9em]">color/brand/500</span>.
+            </p>
+            <div class="flex gap-3">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cursor-claude text-canvas" aria-hidden="true">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>
+              </span>
+              <div class="min-w-0 flex-1 space-y-3">
+                <ul class="space-y-1.5" aria-label="Tools Claude called">
+                  <li class="flex w-fit max-w-full items-center gap-2 rounded-[8px] bg-tint-peach/50 px-2.5 py-1.5 font-mono text-[12.5px]"><span class="text-cursor-green">{{ icon_check }}</span>list_collections</li>
+                  <li class="flex w-fit max-w-full items-center gap-2 rounded-[8px] bg-tint-peach/50 px-2.5 py-1.5 font-mono text-[12.5px]"><span class="text-cursor-green">{{ icon_check }}</span>create_group</li>
+                  <li class="flex w-fit max-w-full items-center gap-2 rounded-[8px] bg-tint-peach/50 px-2.5 py-1.5 font-mono text-[12.5px]"><span class="text-cursor-green">{{ icon_check }}</span>set_variable_value</li>
+                </ul>
+                <p class="text-[15px] leading-relaxed">
+                  Done — 3 variables in <span class="font-mono text-[0.9em]">color/brand</span>, and <span class="font-mono text-[0.9em]">button/<wbr />color/<wbr />primary/<wbr />enabled</span> now references <span class="font-mono text-[0.9em]">{color/brand/500}</span>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="mt-14 sm:mt-16">
+        <h3 class="text-[15px] font-semibold">The tools Claude gets</h3>
+        <ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">list_collections</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">Collections with their modes and counts.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">list_variables</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">Filter by collection, group, type or name.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">get_variable</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">A variable, its values per mode and everything it references.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">create_collection</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">An empty collection, ready for variables.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">create_variable</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">One variable. A slash in its name puts it in a group.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">create_group</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">A group of variables in one go.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">set_variable_value</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">A value or a <span class="font-mono text-[0.92em] text-ink">{reference}</span>, per mode.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">rename_variable</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">A new name. Aliases keep working, and a new path moves it to another group.</p>
+          </li>
+          <li class="rounded-[20px] bg-canvas/70 p-5 ring-1 ring-on-peach-line">
+            <code class="font-mono text-[13.5px] font-medium">delete_variable</code>
+            <p class="mt-1.5 text-sm leading-relaxed text-on-peach-muted">Reports what it would affect, then deletes.</p>
+          </li>
+        </ul>
+        <p class="mt-6 flex items-start gap-2 text-sm leading-relaxed text-on-peach-muted">
+          <svg class="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+          Renaming and deleting can’t be undone from Claude’s side. Figma’s own undo is the recovery.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+{%- capture compare_rows -%}
+Spreadsheet-style editing|Yes|Limited
+Visual relationship graph|Yes|No
+Quick search that flies the graph to a token|Yes|No
+JSON editing of the whole token tree|Yes|No
+50–950 palette generator|Bézier curves|No
+Number scale generator|8 presets|No
+WCAG contrast checking|AA/AAA|No
+Move variables between collections|Keeps references & bindings|Manual copy/paste
+Full-size browser view|Yes|No
+Multi-mode support|Yes|Yes
+Picks up changes made in Figma’s own variables panel|Yes|N/A
+{%- endcapture -%}
+{%- assign compare_rows = compare_rows | strip | newline_to_br | split: '<br />' %}
+<section id="compare" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <h2 class="max-w-[900px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+      Figma gives you variables. <span class="text-ink-muted">Winden&nbsp;Tokens gives you the workflows.</span>
+    </h2>
+
+    <div class="mt-10 overflow-x-auto rounded-[20px] bg-panel sm:mt-14">
+      <table class="w-full text-left">
+        <caption class="sr-only">Winden Tokens compared with native Figma variables</caption>
+        <thead>
+          <tr class="border-b border-ink/[0.07]">
+            <th scope="col" class="py-4 pl-4 pr-3 text-[13px] font-medium text-ink-muted sm:pl-8 sm:text-sm">Feature</th>
+            <th scope="col" class="w-[34%] px-3 py-4 text-[13px] font-semibold sm:w-[28%] sm:text-sm">Winden Tokens</th>
+            <th scope="col" class="w-[28%] py-4 pl-3 pr-4 text-[13px] font-medium text-ink-muted sm:w-[24%] sm:pr-8 sm:text-sm">Native Figma</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-ink/[0.07]">
+          {%- for row in compare_rows %}
+          {%- assign cells = row | strip | split: '|' %}
+          <tr>
+            <th scope="row" class="py-4 pl-4 pr-3 text-sm font-medium sm:pl-8 sm:text-[15px]">{{ cells[0] | escape | replace: '/', '/<wbr />' }}</th>
+            <td class="px-3 py-4 text-sm sm:text-[15px]">
+              <span class="flex items-start gap-2 font-medium sm:gap-2.5"><span class="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-ink text-canvas sm:h-5 sm:w-5">{{ icon_check }}</span>{{ cells[1] | escape | replace: '/', '/<wbr />' }}</span>
+            </td>
+            <td class="py-4 pl-3 pr-4 text-sm sm:pr-8 sm:text-[15px]">
+              {%- if cells[2] == 'Yes' %}
+              <span class="flex items-start gap-2 font-medium sm:gap-2.5"><span class="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-ink text-canvas sm:h-5 sm:w-5">{{ icon_check }}</span>Yes</span>
+              {%- elsif cells[2] == 'No' %}
+              <span class="flex items-start gap-2 text-ink-muted sm:gap-2.5"><span class="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-panel-strong sm:h-5 sm:w-5">{{ icon_minus }}</span>No</span>
+              {%- else %}
+              <span class="flex items-start gap-2 text-ink-muted sm:gap-2.5"><span class="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-panel-strong sm:h-5 sm:w-5">{{ icon_minus }}</span>{{ cells[2] | escape | replace: '/', '/<wbr />' }}</span>
+              {%- endif %}
+            </td>
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Tutorials -->
+<section id="videos" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <h2 class="max-w-[760px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+        Watch it in action. <span class="text-ink-muted">Video tutorials and walkthroughs.</span>
+      </h2>
+      <a href="{{ '/blog/tutorials' | relative_url }}" class="group inline-flex shrink-0 items-center gap-1.5 text-sm font-medium sm:pb-2">
+        View all tutorials
+        {{ icon_arrow }}
+      </a>
+    </div>
+
+    {% assign video_posts = site.categories.tutorials | where_exp: "post", "post.youtube" %}
+    {% if video_posts.size > 0 %}
+    <div class="mt-10 grid gap-4 sm:mt-14 md:grid-cols-3">
+      {% for post in video_posts limit:3 %}
+      {% assign youtube_id = post.youtube | remove: 'https://youtu.be/' | remove: 'https://www.youtube.com/watch?v=' | remove: 'https://youtube.com/watch?v=' | split: '&' | first | split: '?' | first %}
+      <article class="group relative flex flex-col rounded-[20px] bg-panel p-2 transition-colors hover:bg-panel-strong">
+        <div class="relative aspect-video overflow-hidden rounded-[14px] bg-panel-strong">
+          <img
+            src="https://img.youtube.com/vi/{{ youtube_id }}/maxresdefault.jpg"
+            alt="{{ post.title | escape }}"
+            width="1280"
+            height="720"
+            class="absolute inset-0 h-full w-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03]"
+            loading="lazy"
+          />
+          <span class="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-canvas/90 text-ink shadow-float backdrop-blur transition-transform motion-safe:group-hover:scale-105">{{ icon_play }}</span>
+          </span>
+        </div>
+        <div class="flex flex-1 flex-col px-4 pb-4 pt-5">
+          <time class="text-[13px] text-ink-muted" datetime="{{ post.date | date_to_xmlschema }}">{{ post.date | date: "%b %d, %Y" }}</time>
+          <h3 class="mt-1.5 text-[17px] font-semibold leading-snug tracking-[-0.01em]">
+            <a href="{{ post.url | relative_url }}" class="after:absolute after:inset-0 after:rounded-[20px]">{{ post.title }}</a>
+          </h3>
+          <span class="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-medium" aria-hidden="true">Watch tutorial {{ icon_arrow }}</span>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="mt-10 rounded-[20px] bg-panel px-6 py-14 text-center sm:mt-14">
+      <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-canvas text-ink-muted">
+        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+      </span>
+      <p class="mt-4 text-[15px] text-ink-muted">No video tutorials available yet. Check back soon!</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- What's new -->
+<section id="updates" class="py-14 sm:py-20">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <h2 class="max-w-[760px] text-balance text-[clamp(32px,4.6vw,56px)] font-semibold leading-[1.04] tracking-[-0.035em]">
+        What’s new. <span class="text-ink-muted">Recent releases and improvements.</span>
+      </h2>
+      <a href="{{ '/blog/releases' | relative_url }}" class="group inline-flex shrink-0 items-center gap-1.5 text-sm font-medium sm:pb-2">
+        View all releases
+        {{ icon_arrow }}
+      </a>
+    </div>
+
+    <div class="mt-10 grid gap-4 sm:mt-14 md:grid-cols-3">
+      {% for post in site.categories.releases limit:3 %}
+      <article class="group relative flex flex-col rounded-[20px] bg-panel p-6 transition-colors hover:bg-panel-strong sm:p-7">
+        <div class="flex items-center justify-between gap-3">
+          {% if post.version %}
+          <span class="rounded-[8px] bg-canvas px-2 py-1 font-mono text-xs font-medium ring-1 ring-ink/[0.06]">v{{ post.version }}</span>
+          {% endif %}
+          <time class="text-[13px] text-ink-muted" datetime="{{ post.date | date_to_xmlschema }}">{{ post.date | date: "%B %Y" }}</time>
+        </div>
+        <h3 class="mt-5 text-[17px] font-semibold leading-snug tracking-[-0.01em]">
+          <a href="{{ post.url | relative_url }}" class="after:absolute after:inset-0 after:rounded-[20px]">{{ post.title }}</a>
+        </h3>
+        <p class="mt-2 line-clamp-3 text-[15px] leading-relaxed text-ink-muted">
+          {{ post.excerpt | strip_html | truncatewords: 30 }}
+        </p>
+        <span class="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-medium" aria-hidden="true">Read more {{ icon_arrow }}</span>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="pb-4 pt-6 sm:pt-10">
+  <div class="mx-auto max-w-[1200px] px-4 sm:px-6">
+    <div class="relative overflow-hidden rounded-[24px] bg-ink px-6 py-14 sm:rounded-[32px] sm:px-12 sm:py-20 lg:px-16 lg:py-24">
+      <div class="pointer-events-none absolute inset-0 bg-grid-dots-inverse bg-dots [mask-image:linear-gradient(to_bottom,rgb(var(--ink)),transparent_85%)]" aria-hidden="true"></div>
+      <div class="relative flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between">
+        <h2 class="max-w-[800px] text-balance text-[clamp(36px,5.4vw,68px)] font-semibold leading-[1.02] tracking-[-0.035em] text-canvas">
+          Start with the tokens you already have.
+        </h2>
+        <div class="flex shrink-0 flex-col gap-3 sm:flex-row">
+          <a href="{{ figma_url }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-canvas px-6 text-[15px] font-medium text-ink transition-colors hover:bg-canvas/90">
+            <img src="{{ '/assets/figma-logo.svg' | relative_url }}" alt="" width="12" height="18" class="h-[18px] w-auto" />
+            Install free plugin
+          </a>
+          <a href="https://paypal.me/newinstockholm" target="_blank" rel="noopener" class="inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-[15px] font-medium text-canvas ring-1 ring-inset ring-canvas/30 transition-colors hover:bg-canvas/10">
+            ☕ Buy me a coffee
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var status = document.querySelector('[data-copy-status]');
+    function markCopied(button) {
+      button.setAttribute('data-copied', '');
+      if (status) status.textContent = 'Copied to clipboard';
+      setTimeout(function () {
+        button.removeAttribute('data-copied');
+        if (status) status.textContent = '';
+      }, 1600);
+    }
+    document.querySelectorAll('[data-copy]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var text = button.getAttribute('data-copy');
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(function () { markCopied(button); });
+          return;
+        }
+        var field = document.createElement('textarea');
+        field.value = text;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        try { document.execCommand('copy'); markCopied(button); } catch (error) {}
+        field.remove();
+      });
+    });
+
+    var strip = document.querySelector('[data-strip]');
+    var controls = document.querySelector('[data-strip-controls]');
+    if (!strip || !controls) return;
+    var prev = controls.querySelector('[data-dir="-1"]');
+    var next = controls.querySelector('[data-dir="1"]');
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function update() {
+      var max = strip.scrollWidth - strip.clientWidth - 1;
+      prev.disabled = strip.scrollLeft <= 1;
+      next.disabled = strip.scrollLeft >= max;
+    }
+    [prev, next].forEach(function (button) {
+      button.addEventListener('click', function () {
+        var step = Math.max(strip.clientWidth * 0.75, 320) * Number(button.getAttribute('data-dir'));
+        strip.scrollBy({ left: step, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+      });
+    });
+    strip.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    controls.hidden = false;
+    update();
+  })();
+</script>
