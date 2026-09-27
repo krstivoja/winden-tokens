@@ -1,6 +1,6 @@
 // Color picker modal component using React Aria ColorPicker
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useModalContext } from './ModalContext';
 import { TextButton } from '../common/Button';
 import { SegmentedControl } from '../common/SegmentedControl';
@@ -19,6 +19,18 @@ import { parseColor } from 'react-aria-components';
 
 type ColorMode = 'hex' | 'rgb' | 'hsl';
 
+const DEFAULT_COLOR = '#000000';
+
+// parseColor throws on anything it can't read (e.g. an unresolved {alias}),
+// which would unmount the whole UI - fall back to the default instead
+function parseInitialColor(value: string | undefined) {
+  try {
+    return parseColor(value || DEFAULT_COLOR);
+  } catch {
+    return parseColor(DEFAULT_COLOR);
+  }
+}
+
 const COLOR_MODE_OPTIONS = [
   { value: 'hex' as const, label: 'HEX' },
   { value: 'rgb' as const, label: 'RGB' },
@@ -30,14 +42,15 @@ export function ColorPickerModal() {
   const config = modals.colorPicker;
 
   const [colorMode, setColorMode] = useState<ColorMode>('hex');
-  const [color, setColor] = useState(() => parseColor('#000000'));
+  const [color, setColor] = useState(() => parseInitialColor(config?.initialColor));
 
-  // Update color when config changes
-  useEffect(() => {
-    if (config?.initialColor) {
-      setColor(parseColor(config.initialColor));
-    }
-  }, [config?.initialColor]);
+  // Reset to initialColor on every open (each openColorPicker call passes a
+  // new config object). Done during render so the first painted frame is right.
+  const [openedConfig, setOpenedConfig] = useState(config);
+  if (config !== openedConfig) {
+    setOpenedConfig(config);
+    if (config) setColor(parseInitialColor(config.initialColor));
+  }
 
   if (!config) return null;
 

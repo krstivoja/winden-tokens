@@ -78,10 +78,10 @@
 ### 4. Color Tools
 
 **Color Picker:**
-- RGB/HSL sliders
-- Hex input
-- Alpha channel
-- Color history
+- Saturation/brightness area and hue slider
+- HEX/RGB/HSL inputs
+- Opens at the variable's resolved color (aliases followed)
+- Resets on every open; Cancel discards edits
 
 **Color Scales:**
 - Generate 50-900 scales

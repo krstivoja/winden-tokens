@@ -5,7 +5,7 @@ import { useModalContext } from '../Modals/ModalContext';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
 import { hexToRgb } from '../../utils/color';
-import { resolveModeIdForCollection } from '../../utils/modes';
+import { resolveDisplayColor, resolveModeIdForCollection } from '../../utils/modes';
 import { ColorMenu } from './ColorMenu';
 
 interface ColorValueMenuProps {
@@ -26,7 +26,7 @@ export function ColorValueMenu({ position, variableId, currentValue, onClose }: 
   const handlePickColor = () => {
     onClose();
     openColorPicker({
-      initialColor: currentValue,
+      initialColor: resolveDisplayColor(collections, variables, currentValue, selectedModeId),
       onConfirm: (hex) => {
         post({ type: 'update-variable-value', id: variableId, value: hexToRgb(hex), modeId });
       },
