@@ -19,6 +19,9 @@
   "networkAccess": {
     "allowedDomains": [
       "none"
+    ],
+    "devAllowedDomains": [
+      "ws://localhost:9337"
     ]
   }
 }

@@ -1,0 +1,55 @@
+{
+  "name": "winden-tokens",
+  "version": "0.2.0",
+  "description": "Drive the Figma file you have open from outside Figma: the Winden Tokens UI full-size in a browser tab, and an MCP server for your design tokens. Local relay + prebuilt UI, loopback only.",
+  "type": "module",
+  "bin": {
+    "winden-tokens": "cli.mjs",
+    "winden-tokens-mcp": "mcp.mjs"
+  },
+  "main": "server.mjs",
+  "exports": {
+    ".": "./server.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cli.mjs",
+    "mcp.mjs",
+    "mcp-tokens.mjs",
+    "server.mjs",
+    "ui/index.html"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "prepack": "node ./scripts/build-ui.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "ws": "^8.21.3"
+  },
+  "keywords": [
+    "figma",
+    "figma-plugin",
+    "design-tokens",
+    "mcp",
+    "model-context-protocol",
+    "winden",
+    "bridge"
+  ],
+  "author": "Marko Krstic",
+  "license": "MIT",
+  "homepage": "https://github.com/krstivoja/winden-tokens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krstivoja/winden-tokens.git",
+    "directory": "bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/krstivoja/winden-tokens/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -22,9 +22,9 @@ import type {
   OnConnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CollectionData, ShadeGroupData, VariableData } from '../../types';
+import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
-import { getCollectionGroupKey, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
+import { getVariableGroupName } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -45,6 +45,9 @@ import {
   ConnectionFlags,
   GridLayoutSettings,
   GridLayoutDraft,
+  TierPlacement,
+  GroupNodeData,
+  WrapperNodeData,
 } from './GroupedGraph/types';
 import {
   GROUP_WIDTH,
@@ -60,21 +63,26 @@ import {
   IDLE_HANDLE_FILL_COLOR,
   STANDARD_GROUP_HEADER_FILL,
   SHADER_GROUP_HEADER_FILL,
-  WRAPPER_HEADER_HEIGHT,
-  WRAPPER_PADDING,
-  WRAPPER_GAP,
+  TIER_LABEL_HEIGHT,
+  TIER_LABEL_GAP_Y,
+  TIER_LABEL_NODE_PREFIX,
+  WRAPPER_NODE_PREFIX,
 } from './GroupedGraph/constants';
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
+import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
+import { GraphSearchPalette, isQuickSearchShortcut } from './GroupedGraph/GraphSearchPalette';
+import type { GraphSearchItem, GraphSearchTarget } from './GroupedGraph/GraphSearchPalette';
 import {
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,
   normalizeGridLayoutSettings,
+  toGridLayoutDraft,
   sortGroupsByPosition,
   getManagedLane,
   getStandaloneLane,
@@ -85,7 +93,20 @@ import {
   createPaletteNode,
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
+  buildCollectionCards,
+  isCardHidden,
+  buildArrangeUnits,
+  isTierLabelNodeId,
+  getWrapperKey,
+  parseWrapperKey,
+  getGroupCardKey,
+  bucketUnmanagedVariables,
+  buildWrapperPathOwners,
+  migrateGroupedPaths,
+  migrateGraphPositions,
+  isAbsorbedCard,
 } from './GroupedGraph/utils';
+import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -93,7 +114,12 @@ const nodeTypes: NodeTypes = {
   groupNode: GroupNodeComponent,
   groupWrapper: GroupWrapperComponent,
   propertyNode: PropertyNodeComponent,
+  tierLabel: TierLabelNode,
 };
+
+// Every arranged tier's cards start at y = 0, so the captions form one row
+// just above that.
+const TIER_LABEL_Y = -(TIER_LABEL_HEIGHT + TIER_LABEL_GAP_Y);
 
 const PROPERTY_COLUMN_GAP = 220;
 
@@ -104,19 +130,28 @@ const PROPERTY_COLUMN_GAP = 220;
 // (the row's handle still shows, but no connecting line is drawn).
 const getSelectionNodeId = (figmaNodeId: string) => `selection:${figmaNodeId}`;
 
-// Shallowest (outermost) grouped ancestor of `path` — the top-level wrapper
-// that ultimately contains it, even when wrappers are nested inside one
-// another. Mirrors wrapperLayout.ts's path-prefix walk but stops at the
-// FIRST match (ascending depth) instead of the deepest one, since Arrange
-// treats a whole nested wrapper frame as a single movable unit.
-const outermostGroupedAncestor = (path: string, grouped: Set<string>): string | null => {
-  const parts = path.split('/');
-  for (let depth = 1; depth < parts.length; depth++) {
-    const prefix = parts.slice(0, depth).join('/');
-    if (grouped.has(prefix)) return prefix;
-  }
-  return null;
+/** Tier captions read back out of client storage, which is untyped.
+ *  Captions persisted while tiers could wrap also carry a `columns` count;
+ *  rebuilding each entry from its three live fields drops it rather than
+ *  passing a dead key through to the node's `data`. Their `x`/`width` are
+ *  kept as stored, because they match the card positions stored alongside
+ *  them — the next Arrange rewrites both together. */
+const normalizeTierLabels = (value: unknown): TierPlacement[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is TierPlacement => (
+      !!entry && typeof entry === 'object'
+      && typeof (entry as TierPlacement).tier === 'number'
+      && typeof (entry as TierPlacement).x === 'number'
+      && typeof (entry as TierPlacement).width === 'number'
+    ))
+    .map(({ tier, x, width }) => ({ tier, x, width }));
 };
+
+// Stable empty index: the quick-search palette's items are only built while
+// it is open, and this keeps the closed state from minting a new array (and a
+// fresh memo result inside the palette) on every render.
+const EMPTY_SEARCH_ITEMS: GraphSearchItem[] = [];
 
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
@@ -126,7 +161,7 @@ const edgeTypes: EdgeTypes = {
 
 function GroupedGraphInner() {
   const { collections, variables, selectedCollectionIds, shadeGroups, selectedModeId, selectedNode, hasMultipleSelection } = useAppContext();
-  const { openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
+  const { modals, openShadesModal, openStepsModal, openInputModal, openAddVariableModal, openBulkEdit } = useModalContext();
   const groupedGraphRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
 
@@ -147,28 +182,72 @@ function GroupedGraphInner() {
   const variableType: 'COLOR' | 'FLOAT' = hasColorVars ? 'COLOR' : 'FLOAT';
   const isColorType = variableType === 'COLOR';
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
-    gapX: GROUP_GAP_X,
-    gapY: GROUP_GAP_Y,
-  });
-  const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>({
-    gapX: String(GROUP_GAP_X),
-    gapY: String(GROUP_GAP_Y),
-  });
+  const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>(
+    () => normalizeGridLayoutSettings({})
+  );
+  const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>(
+    () => toGridLayoutDraft(normalizeGridLayoutSettings({}))
+  );
+  // Tier captions from the last Arrange Grid run. Pure wayfinding chrome:
+  // they carry no graph meaning, never reach `savedPositions`, and are
+  // replaced only by Arrange, its undo, or hydration. The element objects are
+  // handed to the caption nodes as `data` unchanged, so the layout effect
+  // does not mint a fresh data identity on every pass.
+  const [tierLabels, setTierLabels] = useState<TierPlacement[]>([]);
   const [positionsHydrated, setPositionsHydrated] = useState(false);
+  // The layout effect seeds node positions from `savedPositions`, but that
+  // state is rewritten by the 300ms debounce after every drag — keeping it in
+  // the effect's deps made every drag-end rebuild every node and edge. The
+  // effect reads it through this ref instead, and `savedPositionsRevision` is
+  // bumped only by the paths that genuinely need a re-layout from stored
+  // positions: hydration from client storage, Arrange Grid, and its undo.
+  const savedPositionsRef = useRef(savedPositions);
+  const [savedPositionsRevision, setSavedPositionsRevision] = useState(0);
+  // Declared above the layout effect on purpose: effects run in declaration
+  // order, so the ref is already current when the layout effect reads it.
+  useEffect(() => {
+    savedPositionsRef.current = savedPositions;
+  }, [savedPositions]);
   // Highlight target: a group card (varName null = whole card's chain) or a
   // single variable row inside it (varName set = only that row's chain).
   const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
   const highlightedGroupKey = highlightTarget?.groupKey ?? null;
   const highlightedVarName = highlightTarget?.varName ?? null;
-  // Parent paths the user has wrapped into a group frame. Empty = flat leaf
-  // cards. A path here draws a wrapper around all cards sharing that parent.
+  // Frames the user has wrapped, as `<collectionId>::<path>` keys (see
+  // getWrapperKey). Empty = flat leaf cards. A key here draws a wrapper
+  // around every card of THAT collection at or below that path; the empty
+  // path is the collection's own frame.
   const [groupedPaths, setGroupedPaths] = useState<Set<string>>(new Set());
+  // Card key → the xyflow node that actually DRAWS that card. Identity for a
+  // leaf card; the container's `wrapper:<cid>::<path>` id for a card a
+  // container absorbed (part 4 — the card IS the container, so it is no
+  // longer a node of its own).
+  //
+  // Held in a ref, written by the layout effect: the callbacks below address
+  // a card by key and need the node id, and a state dep here would put every
+  // one of them back in the layout effect's deps and undo the drag-perf work.
+  const cardNodeIdRef = useRef<Map<string, string>>(new Map());
+  const nodeIdForCard = useCallback(
+    (cardKey: string) => cardNodeIdRef.current.get(cardKey) ?? cardKey,
+    []
+  );
+  // Records read from client storage that still hold the pre-3a/3b bare-path
+  // shape. Migrating them needs the collections/variables to work out which
+  // collection owns a bare path, and storage answers long before the plugin
+  // sends data — so the raw payload is parked here and the effect below
+  // applies it as soon as data lands. Never dropped for arriving early.
+  const pendingStorageRef = useRef<{
+    positions: unknown;
+    groupedPaths: unknown;
+  }>({ positions: null, groupedPaths: null });
+  const [pendingStorageRevision, setPendingStorageRevision] = useState(0);
   const reactFlowInstance = useReactFlow();
   // One-step undo for the last "Arrange Grid" run: the top-level positions it
   // overwrote, so a single click can put everything back. Cleared after use
   // or once superseded by a fresh arrange.
   const lastArrangeUndoRef = useRef<Record<string, { x: number; y: number }> | null>(null);
+  // The captions that were on screen before that arrange, restored with it.
+  const lastArrangeTierLabelsRef = useRef<TierPlacement[]>([]);
   const [hasArrangeUndo, setHasArrangeUndo] = useState(false);
 
   // Get filter state from context
@@ -188,18 +267,14 @@ function GroupedGraphInner() {
     () => new Map(variables.map(variable => [variable.id, variable])),
     [variables]
   );
+  // Collection frames (`<cid>::`) are titled with the collection's name.
+  // Memoized so the layout effect's dep on it only changes when the
+  // collections do, never on a drag.
+  const collectionNameById = useMemo(
+    () => new Map(collections.map(collection => [collection.id, collection.name])),
+    [collections]
+  );
 
-  // Stats for the sidebar footer (based on currently selected collections)
-  const sidebarStats = useMemo(() => {
-    const filtered = variables.filter(v => localSelectedCollections.has(v.collectionId));
-    const refPattern = /^\{(.+)\}$/;
-    return {
-      total: filtered.length,
-      colors: filtered.filter(v => v.resolvedType === 'COLOR').length,
-      numbers: filtered.filter(v => v.resolvedType === 'FLOAT').length,
-      references: filtered.filter(v => refPattern.test(v.value)).length,
-    };
-  }, [variables, localSelectedCollections]);
   const [colorMenu, setColorMenu] = useState<{
     show: boolean;
     position: { top: number; left: number };
@@ -251,12 +326,20 @@ function GroupedGraphInner() {
     const storageKey = `graph-positions`;
     setSavedPositions({});
     setPositionsHydrated(false);
+    pendingStorageRef.current.positions = null;
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
-        setSavedPositions(msg.value || {});
+        // Parked, not applied: the record may still hold bare `wrapper:<path>`
+        // or `group:<name>` keys, and rewriting those needs the collections —
+        // they say which collection owns a bare path. The migration
+        // effect below bumps savedPositionsRevision when it applies, which is
+        // also what covers a response landing after the 100ms fallback has
+        // already flipped positionsHydrated.
+        pendingStorageRef.current.positions = msg.value || {};
+        setPendingStorageRevision(rev => rev + 1);
         setPositionsHydrated(true);
       }
     };
@@ -275,7 +358,7 @@ function GroupedGraphInner() {
 
   useEffect(() => {
     const storageKey = `graph-layout-settings`;
-    setGridLayoutSettings({ gapX: GROUP_GAP_X, gapY: GROUP_GAP_Y });
+    setGridLayoutSettings(normalizeGridLayoutSettings({}));
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
@@ -293,12 +376,87 @@ function GroupedGraphInner() {
   useEffect(() => {
     const storageKey = `graph-grouped-paths`;
     setGroupedPaths(new Set());
+    pendingStorageRef.current.groupedPaths = null;
     post({ type: 'get-client-storage', key: storageKey });
 
     const handleStorage = (event: MessageEvent) => {
       const msg = event.data.pluginMessage;
       if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
-        setGroupedPaths(new Set(Array.isArray(msg.value) ? msg.value : []));
+        // Parked for the migration effect below — see pendingStorageRef.
+        pendingStorageRef.current.groupedPaths = msg.value;
+        setPendingStorageRevision(rev => rev + 1);
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, [variableType]);
+
+  // Apply the parked storage records, migrating the pre-3a/3b bare-path shape
+  // to collection-scoped wrapper AND card keys on the way in. On the real
+  // file `graph-positions` is the layout of ~161 cards, so dropping it would
+  // mean re-arranging everything by hand.
+  //
+  // This is deliberately NOT done in the storage handlers: resolving which
+  // collection owns a bare path needs the variables, and client storage
+  // answers well before the plugin has sent any. Holding the raw record until
+  // data lands is what keeps an early response from being silently dropped.
+  //
+  // `collections.length > 0` is the readiness signal. With no collections
+  // there is nothing to key against, every entry would resolve to nothing and
+  // be dropped — so the record stays parked instead, and is applied the
+  // moment real data arrives.
+  //
+  // Each record is consumed (set back to null) as it is applied, so this runs
+  // exactly once per storage response and can never clobber a drag.
+  useEffect(() => {
+    if (pendingStorageRevision === 0) return;
+    const pending = pendingStorageRef.current;
+    if (pending.positions === null && pending.groupedPaths === null) return;
+    if (collections.length === 0) return;
+
+    const owners = buildWrapperPathOwners(collections, variables);
+    // Cards need EXACT-path ownership, frames need at-or-below — see
+    // buildWrapperPathOwners. A collection whose only variable is
+    // `test/test2/leaf` is inside the frame `test` but has no CARD there.
+    const cardOwners = buildWrapperPathOwners(collections, variables, { exactPathOnly: true });
+
+    if (pending.groupedPaths !== null) {
+      const raw = pending.groupedPaths;
+      const migrated = migrateGroupedPaths(raw, owners);
+      pending.groupedPaths = null;
+      setGroupedPaths(new Set(migrated));
+      // Write the migrated shape back only when it actually changed, so the
+      // old record is gone after one load and an already-migrated one costs
+      // no write at all.
+      if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+        post({ type: 'set-client-storage', key: `graph-grouped-paths`, value: migrated });
+      }
+    }
+
+    if (pending.positions !== null) {
+      const raw = pending.positions;
+      const migrated = migrateGraphPositions(raw, owners, cardOwners);
+      pending.positions = null;
+      setSavedPositions(migrated);
+      setSavedPositionsRevision(rev => rev + 1);
+      if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+        post({ type: 'set-client-storage', key: `graph-positions`, value: migrated });
+      }
+    }
+  }, [pendingStorageRevision, collections, variables]);
+
+  // Load the tier captions the last arrange produced, so a reloaded plugin
+  // shows the same captions over the same (also persisted) positions.
+  useEffect(() => {
+    const storageKey = `graph-tier-labels`;
+    setTierLabels([]);
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setTierLabels(normalizeTierLabels(msg.value));
       }
     };
 
@@ -316,24 +474,29 @@ function GroupedGraphInner() {
   }, []);
 
   // "Level up": wrap a card/wrapper together with its siblings into a frame
-  // for their shared parent path.
-  const handleLevelUp = useCallback((path: string) => {
-    if (!path || !path.includes('/')) return;
+  // for their shared parent.
+  //
+  // A top-level path yields the EMPTY parent, which is the collection's own
+  // frame — the case that used to return early and leave a card like `test`
+  // with nowhere to rise to. The empty path itself has no parent (a
+  // collection frame is the root), which is also why neither the collection
+  // frame nor the collection root card offers the button.
+  const handleLevelUp = useCallback((collectionId: string, path: string) => {
+    if (!collectionId || !path) return;
     const parent = path.split('/').slice(0, -1).join('/');
-    if (!parent) return;
     persistGroupedPaths(prev => {
       const next = new Set(prev);
-      next.add(parent);
+      next.add(getWrapperKey(collectionId, parent));
       return next;
     });
   }, [persistGroupedPaths]);
 
   // Remove a wrapper frame (its cards/sub-wrappers pop back out).
-  const handleUngroup = useCallback((path: string) => {
-    if (!path) return;
+  const handleUngroup = useCallback((collectionId: string, path: string) => {
+    if (!collectionId) return;
     persistGroupedPaths(prev => {
       const next = new Set(prev);
-      next.delete(path);
+      next.delete(getWrapperKey(collectionId, path));
       return next;
     });
   }, [persistGroupedPaths]);
@@ -364,10 +527,14 @@ function GroupedGraphInner() {
   }, [isColorType, openShadesModal, openStepsModal, selectedModeId]);
 
   const handleAddVariableToGroup = useCallback((group: GroupData) => {
-    if (group.kind !== 'standard' || !group.sourceGroupName) return;
+    // An empty collection's placeholder card has no group path, so its
+    // variable is created at the collection root — no name prefix.
+    const isCollectionCard = group.kind === 'collection';
+    if (!isCollectionCard && (group.kind !== 'standard' || !group.sourceGroupName)) return;
+    const namePrefix = isCollectionCard ? '' : `${group.sourceGroupName}/`;
 
     openAddVariableModal({
-      title: `New Variable in ${group.sourceGroupName}`,
+      title: `New Variable in ${isCollectionCard ? group.title : group.sourceGroupName}`,
       confirmText: 'Add',
       onConfirm: (name, type) => {
         const variableName = normalizePathSegment(name);
@@ -375,7 +542,7 @@ function GroupedGraphInner() {
         post({
           type: 'create-variable',
           collectionId: group.collectionId,
-          name: `${group.sourceGroupName}/${variableName}`,
+          name: `${namePrefix}${variableName}`,
           varType: type,
           value: getDefaultVariableValue(type),
         });
@@ -470,6 +637,13 @@ function GroupedGraphInner() {
     post({ type: 'update-variable-value', id: receiverVarId, value: resolvedValue, modeId });
   }, [collections, selectedModeId, variablesById]);
 
+  // Unbind a property on the selected Figma node. Stable identity so the
+  // selection card's edges can carry plain values (unbindNodeId/unbindTarget)
+  // instead of a fresh closure per edge per layout pass.
+  const handleUnbindProperty = useCallback((nodeId: string, target: InspectorBindingTarget) => {
+    post({ type: 'unbind-node-property', nodeId, target });
+  }, []);
+
   // Highlight the full connected chain of a group (toggle off if re-selected)
   const handleHighlightPath = useCallback((group: GroupData) => {
     setHighlightTarget(prev => (
@@ -490,6 +664,11 @@ function GroupedGraphInner() {
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
+    // A collection root card with no loose variables has no chain to
+    // highlight — clicking it would just dim the whole graph. One that does
+    // hold rows behaves like any other card.
+    const clickedGroup = (node.data as { group?: GroupData } | undefined)?.group;
+    if (clickedGroup?.kind === 'collection' && clickedGroup.variables.length === 0) return;
     setHighlightTarget(prev => (
       prev?.groupKey === node.id && prev.varName === null
         ? null
@@ -499,6 +678,20 @@ function GroupedGraphInner() {
 
   const clearHighlight = useCallback(() => setHighlightTarget(null), []);
 
+  // Pan/zoom to one xyflow node, on the next frame so a node the same
+  // interaction just caused to be rebuilt has painted before we measure it.
+  // Takes a NODE id, not a card key — every card-key caller goes through
+  // nodeIdForCard first, because an absorbed card has no node of its own.
+  const zoomToNodeId = useCallback((nodeId: string) => {
+    requestAnimationFrame(() => {
+      try {
+        reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 400, padding: 0.5, maxZoom: 1 });
+      } catch {
+        // Node may not be rendered (filtered out) — any highlight still applies.
+      }
+    });
+  }, [reactFlowInstance]);
+
   // Sidebar label click — same toggle behavior as clicking the card in the graph,
   // plus panning the canvas to it since (unlike a card click) it may be off-screen.
   const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
@@ -506,17 +699,52 @@ function GroupedGraphInner() {
       const next = prev?.groupKey === graphGroupKey && prev.varName === null
         ? null
         : { groupKey: graphGroupKey, varName: null };
-      if (next) {
-        requestAnimationFrame(() => {
-          try {
-            reactFlowInstance.fitView({ nodes: [{ id: graphGroupKey }], duration: 400, padding: 0.5, maxZoom: 1 });
-          } catch {
-            // Node may not be rendered (filtered out) — highlight state still applies.
-          }
-        });
-      }
+      // An absorbed card is drawn by its container, so pan to that node.
+      if (next) zoomToNodeId(nodeIdForCard(graphGroupKey));
       return next;
     });
+  }, [zoomToNodeId, nodeIdForCard]);
+
+  // Quick-search's card/variable jump. Deliberately NOT a toggle, unlike the
+  // sidebar: searching for the card that already happens to be highlighted
+  // must still move the viewport to it, not clear it and stay put.
+  const focusCard = useCallback((cardKey: string, varName: string | null) => {
+    setHighlightTarget({ groupKey: cardKey, varName });
+    zoomToNodeId(nodeIdForCard(cardKey));
+  }, [zoomToNodeId, nodeIdForCard]);
+
+  // Sidebar → canvas for a whole collection. No highlight: `highlightTarget`
+  // addresses one group key, and a collection is a set of cards.
+  const handleZoomToCollection = useCallback((collectionId: string) => {
+    // Live nodes off the instance rather than the `nodes` state, so this
+    // callback keeps one identity across layout passes (see the drag-perf work).
+    const targets = reactFlowInstance
+      .getNodes()
+      .filter(node => {
+        // Filtered-out cards stay in the node list as `hidden`. Zooming to one
+        // would park the canvas on empty space.
+        if (node.hidden) return false;
+        if (node.type === 'groupNode') {
+          return (node.data as { group?: GroupData } | undefined)?.group?.collectionId === collectionId;
+        }
+        // A container is a card too, and for a collection whose cards are all
+        // grouped it may be the only node that collection has.
+        if (node.type === 'groupWrapper') {
+          return (node.data as WrapperNodeData | undefined)?.collectionId === collectionId;
+        }
+        return false;
+      })
+      .map(node => ({ id: node.id }));
+
+    // Nothing visible to move to. Silent: the collection's own checkbox is in
+    // the same row and is the reason.
+    if (targets.length === 0) return;
+
+    try {
+      reactFlowInstance.fitView({ nodes: targets, duration: 400, padding: 0.2, maxZoom: 1 });
+    } catch {
+      // Same defence as the group case — a node can leave between read and fit.
+    }
   }, [reactFlowInstance]);
 
   const handleCreateGroup = useCallback(() => {
@@ -708,19 +936,18 @@ function GroupedGraphInner() {
     const unmanagedVars = typeVars.filter(
       v => !managedSourceIds.has(v.id) && !managedGeneratedIds.has(v.id)
     );
-    const unmanagedGroupsMap = new Map<string, { nodes: VariableNode[]; collectionId: string }>();
-
-    unmanagedVars.forEach(variable => {
-      // Cards are leaf groups (one per parent path) — wrappers group cards
-      // visually without merging their variables.
-      const parts = variable.name.split('/');
-      const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : variable.name;
-      const existing = unmanagedGroupsMap.get(groupName) || { nodes: [], collectionId: variable.collectionId };
-      // Use the actual variable's type instead of global isColorType
-      const varIsColorType = variable.resolvedType === 'COLOR';
-      existing.nodes.push(formatVariableNode(variable, varsByName, varIsColorType, collections, selectedModeId));
-      unmanagedGroupsMap.set(groupName, existing);
-    });
+    // Buckets are keyed `<collectionId>::<groupName>`, and loose (slash-less)
+    // variables come back separately for their collection's root card — see
+    // bucketUnmanagedVariables, which owns both rules.
+    const { groups: unmanagedGroupsMap, loose: looseVariablesByCollection } =
+      bucketUnmanagedVariables(unmanagedVars, variable => formatVariableNode(
+        variable,
+        varsByName,
+        // The actual variable's type, not the global isColorType.
+        variable.resolvedType === 'COLOR',
+        collections,
+        selectedModeId
+      ));
 
     const columnStep = GROUP_WIDTH + GROUP_GAP_X;
     const managedLaneBottoms = new Map<number, number>();
@@ -734,9 +961,13 @@ function GroupedGraphInner() {
     // Place unmanaged groups: primitives at column 0, semantic groups further right
     // First pass: create all groups and track which reference which
     const unmanagedEntries: Array<{ groupName: string; groupVariables: VariableNode[]; collectionId: string; hasReferences: boolean }> = [];
-    Array.from(unmanagedGroupsMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([groupName, { nodes: groupVariables, collectionId }]) => {
+    // Sorted by group NAME (collection id only as a tie-break), so the
+    // initial stacking order of a single-collection file is exactly what it
+    // was before the bucket key gained a collection — the raw ids sort
+    // meaninglessly.
+    Array.from(unmanagedGroupsMap.values())
+      .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.collectionId.localeCompare(b.collectionId))
+      .forEach(({ groupName, nodes: groupVariables, collectionId }) => {
         const hasReferences = groupVariables.some(v => v.isReference);
         unmanagedEntries.push({ groupName, groupVariables, collectionId, hasReferences });
       });
@@ -744,13 +975,14 @@ function GroupedGraphInner() {
     // Primitives (no references) go at column 0, stacked below managed source groups
     let primitiveY = managedLaneBottoms.get(0) || 0;
     unmanagedEntries.filter(e => !e.hasReferences).forEach(entry => {
-      const groupKey = `group:${entry.groupName}`;
+      const groupKey = getGroupCardKey(entry.collectionId, entry.groupName);
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: primitiveY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
-        canGroup: entry.groupName.includes('/'),
+        // Always: a top-level path levels up into its collection's frame.
+        canGroup: true,
       };
       groupsArray.push(groupData);
       entry.groupVariables.forEach((vNode, variableIndex) => {
@@ -759,18 +991,34 @@ function GroupedGraphInner() {
       primitiveY += getGroupHeight(groupData) + GROUP_GAP_Y;
     });
 
+    // Every collection gets a root card: it holds the collection's loose
+    // (slash-less) variables and carries the only "+" that can create a
+    // variable at the collection root. Emitted unconditionally, so a
+    // collection whose variables are all grouped still has a reachable root.
+    // Kept in column 0 with the primitives rather than in the depth-based
+    // semantic columns below: a collection root is structural, not derived
+    // from what its rows happen to reference.
+    buildCollectionCards(collections, looseVariablesByCollection, primitiveY).forEach(card => {
+      groupsArray.push(card);
+      card.variables.forEach((vNode, variableIndex) => {
+        varMap.set(vNode.name, { group: card.key, index: variableIndex, node: vNode });
+      });
+      primitiveY += getGroupHeight(card) + GROUP_GAP_Y;
+    });
+
     // Semantic groups (with references) - we'll set initialX after building connections
     // so we can compute depth. For now, place them temporarily.
     const semanticGroups: GroupData[] = [];
     let semanticY = 0;
     unmanagedEntries.filter(e => e.hasReferences).forEach(entry => {
-      const groupKey = `group:${entry.groupName}`;
+      const groupKey = getGroupCardKey(entry.collectionId, entry.groupName);
       const groupData: GroupData = {
         key: groupKey, title: entry.groupName, variables: entry.groupVariables,
         x: 0, y: 0, initialX: 0, initialY: semanticY,
         kind: 'standard', sourceGroupName: entry.groupName, headerFill: STANDARD_GROUP_HEADER_FILL,
         collectionId: entry.collectionId,
-        canGroup: entry.groupName.includes('/'),
+        // Always: a top-level path levels up into its collection's frame.
+        canGroup: true,
       };
       groupsArray.push(groupData);
       semanticGroups.push(groupData);
@@ -838,6 +1086,32 @@ function GroupedGraphInner() {
     return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
   }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
+  // Cards that provide a bound token to the current Figma selection. They are
+  // force-shown even when the filters would hide them (see isCardHidden), so
+  // the selection's connection is never drawn to nothing. Hoisted out of the
+  // layout effect because Arrange Grid needs the same set: a force-shown card
+  // is on screen, so it must get a grid slot.
+  const selectionProviderGroupKeys = useMemo(() => {
+    const keys = new Set<string>();
+    selectedLayers.forEach(layer => layer.entries.forEach(entry => {
+      if (entry.kind !== 'variable' || !entry.token) return;
+      const info = variableMap.get(entry.token.name);
+      if (info) keys.add(info.group);
+    }));
+    return keys;
+  }, [selectedLayers, variableMap]);
+
+  // The one definition of "is this card on screen right now", shared by the
+  // layout effect (which renders the answer as node.hidden) and Arrange Grid
+  // (which must skip hidden cards instead of reserving empty grid slots).
+  const cardVisibilityFilters = useMemo<CardVisibilityFilters>(() => ({
+    selectedCollections: localSelectedCollections,
+    selectedTypes,
+    selectedGroups,
+    variablesById,
+    selectionProviderGroupKeys,
+  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys]);
+
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
     const connected = new Map<string, ConnectionFlags>();
@@ -861,8 +1135,159 @@ function GroupedGraphInner() {
 
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
+  // ── Quick search (Cmd+K / Ctrl+K) ────────────────────────────────
+  // Only the open flag lives here. The query lives inside the palette, so
+  // typing never re-renders the graph.
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Read by the shortcut listener, which is attached once. A modal open
+  // anywhere else owns the keyboard; the palette must not jump in front of it.
+  const anyModalOpenRef = useRef(false);
+  useEffect(() => {
+    anyModalOpenRef.current = Object.values(modals).some(Boolean);
+  }, [modals]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isQuickSearchShortcut(event)) return;
+      const target = event.target as HTMLElement | null;
+      // An editable target elsewhere owns the keystroke — another modal's
+      // input, the toolbar search, a rename field. The palette's own input is
+      // exempt, so Cmd+K still closes it.
+      const inPalette = !!target?.closest('[data-graph-quick-search]');
+      const isEditable = !!target && !inPalette && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      );
+      if (isEditable) return;
+      if (!inPalette && anyModalOpenRef.current) return;
+      event.preventDefault();
+      setSearchOpen(open => !open);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Built only while the palette is open — a closed palette costs nothing,
+  // and this is deliberately outside the layout effect.
+  const searchItems = useMemo<GraphSearchItem[]>(() => {
+    if (!searchOpen) return EMPTY_SEARCH_ITEMS;
+
+    const nameOf = (collectionId: string) => collectionNameById.get(collectionId) || collectionId;
+    const items: GraphSearchItem[] = [];
+    // Wrapper keys a real card sits at, so a container that merely absorbed a
+    // card is not also offered as a nameless frame.
+    const cardWrapperKeys = new Set<string>();
+    const visibleCardsPerCollection = new Map<string, number>();
+
+    groupsData.forEach(group => {
+      // The same predicate the layout effect renders as `node.hidden` and
+      // Arrange Grid packs by — never a second opinion about visibility.
+      const hidden = isCardHidden(group, cardVisibilityFilters);
+      if (!hidden) {
+        visibleCardsPerCollection.set(
+          group.collectionId,
+          (visibleCardsPerCollection.get(group.collectionId) || 0) + 1
+        );
+      }
+      if (group.kind === 'standard' || group.kind === 'collection') {
+        cardWrapperKeys.add(getWrapperKey(group.collectionId, group.sourceGroupName || ''));
+      }
+      const collectionName = nameOf(group.collectionId);
+      // A collection ROOT card with no loose rows has no chain to highlight —
+      // highlighting it would dim every other card and light up nothing, the
+      // exact case handleNodeClick already refuses. The Collection result
+      // carries the same name and is the better jump anyway, so this card is
+      // simply not offered.
+      const isEmptyCollectionCard = group.kind === 'collection' && group.variables.length === 0;
+      if (!isEmptyCollectionCard) {
+        items.push({
+          id: `card:${group.key}`,
+          label: group.title,
+          context: collectionName,
+          target: { kind: 'card', cardKey: group.key },
+          hidden,
+        });
+      }
+      group.variables.forEach(node => {
+        // Generator/palette rows are card chrome, not variables to jump to.
+        if (node.isVirtual) return;
+        items.push({
+          id: `var:${group.key}::${node.name}`,
+          label: node.name,
+          context: `${group.title} · ${collectionName}`,
+          target: { kind: 'variable', cardKey: group.key, varName: node.name },
+          hidden,
+          // Drives the row's COLOR/FLOAT/STRING icon. A row formatted from a
+          // variable carries its resolved type; fall back to the variable
+          // itself when it does not, and to COLOR only as a last resort so
+          // the row never renders without an icon.
+          variableType: node.resolvedType
+            ?? variablesById.get(node.id ?? '')?.resolvedType
+            ?? 'COLOR',
+        });
+      });
+    });
+
+    // Grouped paths no card sits at: a frame and nothing else. They get a
+    // zoom-only target — `highlightTarget` addresses CARD keys, and handing
+    // it a `wrapper:` id would dim every card and highlight none.
+    const nodesById = new Map(reactFlowInstance.getNodes().map(node => [node.id, node]));
+    groupedPaths.forEach(wrapperKey => {
+      if (cardWrapperKeys.has(wrapperKey)) return;
+      const parsed = parseWrapperKey(wrapperKey);
+      if (!parsed) return;
+      const nodeId = `${WRAPPER_NODE_PREFIX}${wrapperKey}`;
+      const node = nodesById.get(nodeId);
+      if (!node) return;
+      items.push({
+        id: `container:${nodeId}`,
+        label: parsed.path || nameOf(parsed.collectionId),
+        context: nameOf(parsed.collectionId),
+        target: { kind: 'container', nodeId },
+        hidden: node.hidden === true,
+      });
+    });
+
+    collections.forEach(collection => {
+      const visible = visibleCardsPerCollection.get(collection.id) || 0;
+      items.push({
+        id: `collection:${collection.id}`,
+        label: collection.name,
+        context: `${visible} ${visible === 1 ? 'card' : 'cards'}`,
+        target: { kind: 'collection', collectionId: collection.id },
+        // Nothing of it is on the canvas, so there is nothing to fit to —
+        // the same check handleZoomToCollection makes before moving.
+        hidden: visible === 0,
+      });
+    });
+
+    return items;
+  }, [searchOpen, groupsData, collections, collectionNameById, cardVisibilityFilters, groupedPaths, reactFlowInstance]);
+
+  const handleSearchActivate = useCallback((target: GraphSearchTarget) => {
+    setSearchOpen(false);
+    switch (target.kind) {
+      case 'collection':
+        handleZoomToCollection(target.collectionId);
+        break;
+      case 'container':
+        zoomToNodeId(target.nodeId);
+        break;
+      case 'card':
+        focusCard(target.cardKey, null);
+        break;
+      case 'variable':
+        focusCard(target.cardKey, target.varName);
+        break;
+    }
+  }, [handleZoomToCollection, zoomToNodeId, focusCard]);
+
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+
   useEffect(() => {
     if (!positionsHydrated) return;
+    // Read through the ref: see savedPositionsRef above.
+    const savedPositions = savedPositionsRef.current;
 
     // Resolve the highlighted lineage of the selected card. References are
     // per-variable (row), so we trace the chain at the VARIABLE level using
@@ -928,18 +1353,29 @@ function GroupedGraphInner() {
     // dropped). A token with NO local card (e.g. a published library variable)
     // gets a synthetic "external" card so its connection is still drawn.
     const hexColorRe = /^#[0-9A-Fa-f]{6,8}$/;
-    const selectionProviderGroupKeys = new Set<string>();
     const externalTokenCardKey = new Map<string, string>();
     const externalTokensByCard = new Map<string, { title: string; collectionId: string; nodes: VariableNode[] }>();
     selectedLayers.forEach(layer => {
       layer.entries.forEach(entry => {
         if (entry.kind !== 'variable' || !entry.token) return;
-        const info = variableMap.get(entry.token.name);
-        if (info) {
-          selectionProviderGroupKeys.add(info.group);
-          return;
-        }
+        // A token with a local card is already counted in
+        // selectionProviderGroupKeys (hoisted above the effect).
+        if (variableMap.get(entry.token.name)) return;
         // No local match — bucket into a synthetic card by path prefix.
+        // The slash-less fallback below has the same collision local cards
+        // just lost (external token `test` and the parent path of
+        // `test/test2` share one key). Left as is deliberately: the fix for
+        // local cards was to host loose variables on their collection's root
+        // card, and a published library token has no local collection card to
+        // host it.
+        //
+        // The key is NOT collection-scoped either, for the same reason: the
+        // only id available is the PUBLISHING library's, which no local
+        // collection, ownership map or wrapper frame can resolve, and tokens
+        // with none at all would all collapse onto the literal `'external'`
+        // anyway. So `ext-group:` stays a bare path — and, since nothing
+        // rewrites it, its saved position survives untouched.
+        // Mirrored at handleFocusSelection — keep the two in step.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         const cardKey = `ext-group:${groupName}`;
@@ -966,85 +1402,94 @@ function GroupedGraphInner() {
       });
     });
 
-    // Determine whether a card is hidden by the active filters.
-    const isCardHidden = (group: GroupData): boolean => {
-      if (!localSelectedCollections.has(group.collectionId)) return true;
+    // Visibility comes from the shared predicate (GroupedGraph/utils) so that
+    // Arrange Grid applies exactly the same rule — see cardVisibilityFilters.
+    const cardHidden = (group: GroupData) => isCardHidden(group, cardVisibilityFilters);
 
-      const hasMatchingType = group.variables.some(v => {
-        if (v.isVirtual) return true;
-        const sourceVar = variablesById.get(v.id);
-        return sourceVar && selectedTypes.has(sourceVar.resolvedType);
-      });
-      if (!hasMatchingType) return true;
-
-      let hasMatchingGroup = false;
-      if (group.kind === 'shader' || group.kind === 'shades') {
-        if (group.sourceGroupName) {
-          hasMatchingGroup = selectedGroups.has(
-            getCollectionGroupKey(group.collectionId, group.sourceGroupName)
-          );
-        }
-      } else {
-        hasMatchingGroup = group.variables.some(v => {
-          if (v.isVirtual) return false;
-          return isVariableVisibleForGroupFilters(
-            { collectionId: group.collectionId, name: v.name },
-            selectedGroups
-          );
-        });
-      }
-      return !hasMatchingGroup;
+    // One card's worth of node data. Shared, because a CONTAINER renders the
+    // card it absorbed from exactly this object — same header, same rows,
+    // same actions (part 4).
+    const buildCardData = (group: GroupData): GroupNodeData => {
+      const firstRealVar = group.variables.find(v => !v.isVirtual);
+      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
+      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
+      return {
+        group,
+        isColorType: groupIsColorType,
+        variableType: groupIsColorType ? 'COLOR' : 'FLOAT',
+        connectedVars,
+        isHighlighted: hasHighlight && highlightedGroups.has(group.key),
+        isDimmed: hasHighlight && !highlightedGroups.has(group.key),
+        highlightActive: hasHighlight,
+        highlightedVars,
+        highlightedVarSeed: highlightedVarName,
+        onHighlightPath: handleHighlightPath,
+        onHighlightVariable: handleHighlightVariable,
+        onGeneratorOpen: handleGeneratorOpen,
+        onShowColorMenu: handleShowColorMenu,
+        onAddVariable: handleAddVariableToGroup,
+        onRenameGroup: handleRenameGroup,
+        onDuplicateGroup: handleDuplicateGroup,
+        onEditAsText: handleEditGroupAsText,
+        onLevelUp: handleLevelUp,
+        onDeleteGroup: handleDeleteGraphGroup,
+        onRenameVariable: handleRenameGraphVariable,
+        onDeleteVariable: handleDeleteGraphVariable,
+        onDisconnect: handleDisconnect,
+      };
     };
 
     const buildCardNode = (
       group: GroupData,
       position: { x: number; y: number },
       parentId: string | null
-    ): Node => {
-      const firstRealVar = group.variables.find(v => !v.isVirtual);
-      const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
-      const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
-      const groupVariableType = groupIsColorType ? 'COLOR' : 'FLOAT';
-      return {
-        id: group.key,
-        type: 'groupNode',
-        position,
-        // Force-show cards that provide a value to the current selection,
-        // even when the active filters would otherwise hide them.
-        hidden: isCardHidden(group) && !selectionProviderGroupKeys.has(group.key),
-        ...(parentId ? { parentId, extent: 'parent' as const } : {}),
-        data: {
-          group,
-          isColorType: groupIsColorType,
-          variableType: groupVariableType,
-          connectedVars,
-          isHighlighted: hasHighlight && highlightedGroups.has(group.key),
-          isDimmed: hasHighlight && !highlightedGroups.has(group.key),
-          highlightActive: hasHighlight,
-          highlightedVars,
-          highlightedVarSeed: highlightedVarName,
-          onHighlightPath: handleHighlightPath,
-          onHighlightVariable: handleHighlightVariable,
-          onGeneratorOpen: handleGeneratorOpen,
-          onShowColorMenu: handleShowColorMenu,
-          onAddVariable: handleAddVariableToGroup,
-          onRenameGroup: handleRenameGroup,
-          onDuplicateGroup: handleDuplicateGroup,
-          onEditAsText: handleEditGroupAsText,
-          onLevelUp: handleLevelUp,
-          onDeleteGroup: handleDeleteGraphGroup,
-          onRenameVariable: handleRenameGraphVariable,
-          onDeleteVariable: handleDeleteGraphVariable,
-          onDisconnect: handleDisconnect,
-        },
-        dragHandle: '.group-header',
-      };
-    };
+    ): Node => ({
+      id: group.key,
+      type: 'groupNode',
+      position,
+      // Force-show cards that provide a value to the current selection,
+      // even when the active filters would otherwise hide them (folded into
+      // the shared predicate via cardVisibilityFilters).
+      hidden: cardHidden(group),
+      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
+      data: buildCardData(group),
+      dragHandle: '.group-header',
+    });
 
-    const standardCards = groupsData.filter(g => g.kind === 'standard');
-    const managedGroups = groupsData.filter(g => g.kind !== 'standard');
+    // Collection root cards lay out alongside the standard cards
+    // (buildWrapperLayout treats their empty path as a top-level root), so
+    // they share the same column packing instead of floating absolutely.
+    const isStandardLayoutCard = (g: GroupData) => g.kind === 'standard' || g.kind === 'collection';
+    const standardCards = groupsData.filter(isStandardLayoutCard);
+    const managedGroups = groupsData.filter(g => !isStandardLayoutCard(g));
 
     const newNodes: Node[] = [];
+
+    // Tier captions go in FIRST, so xyflow (which stacks in array order)
+    // draws them beneath every card — a caption is chrome and must never sit
+    // over a card that overlaps it. Their position in the array is otherwise
+    // free: a caption has no `parentId` and is no node's parent, so it cannot
+    // break the "nested node must follow its parentId" rule, and prepending
+    // leaves the relative order of every real node untouched.
+    tierLabels.forEach(label => {
+      newNodes.push({
+        id: `${TIER_LABEL_NODE_PREFIX}${label.tier}`,
+        type: 'tierLabel',
+        position: { x: label.x, y: TIER_LABEL_Y },
+        // `pointerEvents: none` on the node wrapper itself, so panning and
+        // rubber-band selection pass straight through the caption row.
+        style: { width: label.width, height: TIER_LABEL_HEIGHT, pointerEvents: 'none' },
+        // Inert in every way xyflow understands: no dragging, no selection,
+        // no connecting, no keyboard focus, no delete.
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        focusable: false,
+        deletable: false,
+        // The state object itself — see `tierLabels`.
+        data: label,
+      });
+    });
 
     // Managed groups (shader/steps/source) stay top-level and absolute.
     managedGroups.forEach(group => {
@@ -1055,18 +1500,54 @@ function GroupedGraphInner() {
     // Standard cards, nested inside wrapper frames for expanded groups.
     const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
     const cardHiddenByKey = new Map<string, boolean>();
-    standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g) && !selectionProviderGroupKeys.has(g.key)));
+    standardCards.forEach(g => cardHiddenByKey.set(g.key, cardHidden(g)));
+
+    // Card key → the node that draws it. A card a container absorbed is no
+    // longer a node of its own, and every edge endpoint names a CARD key, so
+    // this is what keeps those edges attached to something that exists.
+    const cardNodeId = new Map<string, string>();
+    // Containers that actually hold something below their own rows — the
+    // separator between the two depends on it.
+    const containerChildCount = new Map<string, number>();
+    placements.forEach(p => {
+      if (p.kind === 'wrapper' && p.group) cardNodeId.set(p.group.key, p.id);
+      if (p.parentId) {
+        containerChildCount.set(p.parentId, (containerChildCount.get(p.parentId) || 0) + 1);
+      }
+    });
+    cardNodeIdRef.current = cardNodeId;
+    const edgeNodeId = (cardKey: string) => cardNodeId.get(cardKey) ?? cardKey;
 
     placements.forEach(p => {
       if (p.kind === 'card') {
         newNodes.push(buildCardNode(p.group, p.position, p.parentId));
       } else {
         // Wrapper hidden when every card it contains is filtered out.
+        // Membership is the same rule buildWrapperLayout used: same
+        // collection, and the empty path (the collection's own frame) holds
+        // all of them.
         const hasVisibleChild = standardCards.some(g => {
+          if (g.collectionId !== p.collectionId) return false;
           const path = g.sourceGroupName || '';
-          const within = path === p.path || path.startsWith(p.path + '/');
+          const within = p.path === '' || path === p.path || path.startsWith(p.path + '/');
           return within && !cardHiddenByKey.get(g.key);
         });
+        const wrapperData: WrapperNodeData = {
+          path: p.path,
+          collectionId: p.collectionId,
+          // A collection's own frame is titled with the COLLECTION NAME —
+          // its path is empty and the raw id means nothing to the user. A
+          // path frame is titled with its path, which is also the absorbed
+          // card's own title.
+          title: p.path || collectionNameById.get(p.collectionId) || p.collectionId,
+          onLevelUp: handleLevelUp,
+          onUngroup: handleUngroup,
+          // The absorbed card: its header actions and rows ARE the
+          // container's. Null for a grouped path no card sits at.
+          card: p.group ? buildCardData(p.group) : null,
+          cardHidden: p.group ? (cardHiddenByKey.get(p.group.key) ?? false) : true,
+          hasChildren: (containerChildCount.get(p.id) || 0) > 0,
+        };
         newNodes.push({
           id: p.id,
           type: 'groupWrapper',
@@ -1075,7 +1556,7 @@ function GroupedGraphInner() {
           hidden: !hasVisibleChild,
           selectable: false,
           style: { width: p.width, height: p.height },
-          data: { path: p.path, title: p.path, onLevelUp: handleLevelUp, onUngroup: handleUngroup },
+          data: wrapperData,
           dragHandle: '.group-header',
         });
       }
@@ -1154,10 +1635,23 @@ function GroupedGraphInner() {
       });
     }
 
-    // Create visibility map for groups (cards only; edges connect cards).
+    // Create visibility map for groups, keyed by CARD key — that is what a
+    // connection record names. A container contributes the card it absorbed:
+    // visible only when the container is on screen AND its own card is not
+    // filtered out (the container can outlive its own rows when its children
+    // are still visible).
     const groupVisibility = new Map<string, boolean>();
     newNodes.forEach(node => {
-      if (node.type === 'groupNode') groupVisibility.set(node.id, !node.hidden);
+      if (node.type === 'groupNode') {
+        groupVisibility.set(node.id, !node.hidden);
+        return;
+      }
+      if (node.type === 'groupWrapper') {
+        const wrapperData = node.data as WrapperNodeData;
+        if (wrapperData.card) {
+          groupVisibility.set(wrapperData.card.group.key, !node.hidden && !wrapperData.cardHidden);
+        }
+      }
     });
 
     // Hide edges if either source or target node is hidden
@@ -1170,8 +1664,10 @@ function GroupedGraphInner() {
 
         return {
           id: conn.id,
-          source: conn.fromGroup,
-          target: conn.toGroup,
+          // An absorbed card's rows live on its container node, so the edge
+          // has to name the container — the card key is not a node id any more.
+          source: edgeNodeId(conn.fromGroup),
+          target: edgeNodeId(conn.toGroup),
           sourceHandle: `${conn.fromVar}::out`,
           targetHandle: `${conn.toVar}::in`,
           type: 'customEdge',
@@ -1211,7 +1707,7 @@ function GroupedGraphInner() {
 
         newEdges.push({
           id: `prop-edge:${layer.layerIndex}:${index}`,
-          source: sourceGroupKey,
+          source: edgeNodeId(sourceGroupKey),
           target: selectionNodeId,
           sourceHandle: `${entry.token.name}::out`,
           targetHandle: getPropertyHandleId(layer.layerIndex, index, 'in'),
@@ -1222,9 +1718,9 @@ function GroupedGraphInner() {
             receiverName: entry.property,
             receiverShortName: entry.property,
             resolvedValue: '',
-            onDisconnect: () => {
-              post({ type: 'unbind-node-property', nodeId: layerNodeId, target: bindingTarget });
-            },
+            onUnbindProperty: handleUnbindProperty,
+            unbindNodeId: layerNodeId,
+            unbindTarget: bindingTarget,
           },
         });
       }));
@@ -1232,24 +1728,76 @@ function GroupedGraphInner() {
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
-      localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode, selectedLayers,
+  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
+      tierLabels,
+      cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
-      handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
+      handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
       handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
+
+  // Everything that can add, remove or move a handle *under an existing node
+  // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
+  // output handle is suppressed for connection-disabled rows), and the
+  // selection card's bindable rows. A drag, a highlight click or a filter
+  // toggle changes none of it.
+  const handleSignature = useMemo(() => {
+    const cards = groupsData
+      .map(g => `${g.key}[${g.variables
+        .map(v => `${v.name}|${v.connectionsDisabled ? 1 : 0}|${v.virtualType || ''}`)
+        .join(',')}]`)
+      .join(';');
+    // A container withholds its rows while its own card is filtered out. That
+    // adds and removes handles under a node id that STAYS MOUNTED — unlike a
+    // hidden card node, which xyflow removes wholesale — so the handle bounds
+    // would go stale without a re-measure. A leaf card's visibility is
+    // deliberately NOT in here: hiding it removes the node and its handles
+    // with it.
+    const containers = groupsData
+      .filter(g => isAbsorbedCard(g, groupedPaths))
+      .map(g => `${g.key}|${isCardHidden(g, cardVisibilityFilters) ? 0 : 1}`)
+      .join(',');
+    const selection = selectedNode
+      ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
+        .map(layer => `${layer.layerIndex}:${layer.entries
+          .map(e => `${e.kind}|${e.bindingTarget ? 1 : 0}|${e.token?.name || ''}`)
+          .join(',')}`)
+        .join(';')}]`
+      : '';
+    return `${cards}#${containers}#${selection}`;
+  }, [groupsData, selectedNode, selectedLayers, groupedPaths, cardVisibilityFilters]);
+
+  const lastHandleSignatureRef = useRef<string | null>(null);
+  const pendingMeasureNodesRef = useRef<Node[] | null>(null);
 
   // The selection card now carries a per-element id (see getSelectionNodeId),
   // so switching elements mounts a fresh node with correctly measured handles.
   // We still refresh internals here to cover in-place changes — e.g. rebinding a
   // property on the *same* selected element adds/removes handles under one id.
+  //
+  // `nodes` stays in the deps only so the re-measure runs against the array the
+  // layout effect just committed; the signature guard turns every other `nodes`
+  // identity change (a drag emits one per frame) into an early return, instead
+  // of scheduling a re-measure of every node id in the graph.
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (lastHandleSignatureRef.current !== handleSignature) {
+      lastHandleSignatureRef.current = handleSignature;
+      // The layout effect's setNodes lands in a *later* commit; remember the
+      // pre-rebuild array so we measure the rebuilt one, not this one.
+      pendingMeasureNodesRef.current = nodes;
+    }
+    if (pendingMeasureNodesRef.current === null) return;
+    if (nodes.length === 0 || nodes === pendingMeasureNodesRef.current) return;
+    const ids = nodes.map(n => n.id);
     const raf = requestAnimationFrame(() => {
-      updateNodeInternals(nodes.map(n => n.id));
+      // Cleared only once the measure actually runs: if another `nodes` change
+      // cancels this frame first, the request is still pending and the next
+      // run re-schedules it against the newer array.
+      pendingMeasureNodesRef.current = null;
+      updateNodeInternals(ids);
     });
     return () => cancelAnimationFrame(raf);
-  }, [nodes, updateNodeInternals]);
+  }, [nodes, handleSignature, updateNodeInternals]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1264,6 +1812,10 @@ function GroupedGraphInner() {
         const currentNodes = reactFlowInstance.getNodes();
         const positionsObj: Record<string, { x: number; y: number }> = {};
         currentNodes.forEach(n => {
+          // Tier captions are not part of the graph and must never enter the
+          // persisted record: on the next hydration they would come back as
+          // phantom cards.
+          if (isTierLabelNodeId(n.id)) return;
           // Top-level nodes save their absolute position as-is. Nested
           // cards/wrappers are normally auto-stacked inside their parent each
           // render, but a manual drag is remembered under a `rel:` key (same
@@ -1332,7 +1884,10 @@ function GroupedGraphInner() {
     const settings = overrideSettings || gridLayoutSettings;
     const currentNodes = reactFlowInstance.getNodes();
     const currentGroups = groupsData.map(group => {
-      const rfNode = currentNodes.find(n => n.id === group.key);
+      // An absorbed card has no node of its own; seed it from the container
+      // that draws it.
+      const nodeId = nodeIdForCard(group.key);
+      const rfNode = currentNodes.find(n => n.id === nodeId);
       return {
         ...group,
         x: rfNode?.position.x ?? group.initialX,
@@ -1340,90 +1895,87 @@ function GroupedGraphInner() {
       };
     });
 
-    // A wrapped card can't be arranged on its own — its coordinates are
-    // parent-relative, and the wrapper frame itself never moves otherwise.
-    // Fold each card into its outermost wrapper's unit key so the whole
-    // frame is arranged as one block; standalone cards are their own unit.
-    // Only 'standard' cards can ever be wrapped (buildWrapperLayout never
-    // nests managed source/shader/shades groups), so leave those alone even
-    // if their sourceGroupName happens to share a prefix with a grouped path.
-    const unitKeyForGroup = (group: GroupData): string => {
-      if (group.kind !== 'standard') return group.key;
-      const outermost = outermostGroupedAncestor(group.sourceGroupName || '', groupedPaths);
-      return outermost ? `wrapper:${outermost}` : group.key;
-    };
-
-    // One pseudo GroupData per top-level unit. For a wrapper unit, reuse its
-    // first member card and override key/title/position — only those plus
-    // the height override matter to the arrange algorithm.
-    const unitGroups = new Map<string, GroupData>();
-    const wrapperMemberHeightSum = new Map<string, number>();
-    currentGroups.forEach(group => {
-      const unitKey = unitKeyForGroup(group);
-      if (unitKey === group.key) {
-        unitGroups.set(unitKey, group);
-        return;
-      }
-      if (!unitGroups.has(unitKey)) {
-        const wrapperNode = currentNodes.find(n => n.id === unitKey);
-        unitGroups.set(unitKey, {
-          ...group,
-          key: unitKey,
-          title: unitKey.slice('wrapper:'.length),
-          x: wrapperNode?.position.x ?? group.x,
-          y: wrapperNode?.position.y ?? group.y,
-        });
-      }
-      wrapperMemberHeightSum.set(unitKey, (wrapperMemberHeightSum.get(unitKey) || 0) + getGroupHeight(group) + WRAPPER_GAP);
+    // Fold cards into arrangeable units and split them by visibility. The
+    // helper applies the SAME predicate the layout effect renders as
+    // `node.hidden` (cardVisibilityFilters, selection-provider force-show
+    // included), so a card that isn't on screen never reserves a grid slot —
+    // which is what used to leave the large empty gaps.
+    const wrapperFrames = new Map<string, WrapperFrameGeometry>();
+    currentNodes.forEach(n => {
+      if (n.type !== 'groupWrapper') return;
+      wrapperFrames.set(n.id, { position: n.position, measuredHeight: n.measured?.height });
     });
-
-    // Wrapper units use the measured frame height when xyflow has it;
-    // otherwise fall back to summing member card heights + gaps, wrapped in
-    // the same chrome buildWrapperLayout adds (header + top/bottom padding).
-    const heightOverrides = new Map<string, number>();
-    unitGroups.forEach((group, unitKey) => {
-      if (!unitKey.startsWith('wrapper:')) return;
-      const wrapperNode = currentNodes.find(n => n.id === unitKey);
-      const measured = wrapperNode?.measured?.height;
-      if (typeof measured === 'number' && measured > 0) {
-        heightOverrides.set(unitKey, measured);
-      } else {
-        const memberSum = wrapperMemberHeightSum.get(unitKey) || 0;
-        heightOverrides.set(
-          unitKey,
-          memberSum > 0
-            ? memberSum - WRAPPER_GAP + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-            : WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
-        );
-      }
-    });
-
-    const arrangeUnits = Array.from(unitGroups.values());
+    const {
+      units: arrangeUnits,
+      hiddenUnits,
+      heightOverrides,
+      unitKeyByGroupKey,
+      hiddenByKey,
+    } = buildArrangeUnits(currentGroups, groupedPaths, cardVisibilityFilters, wrapperFrames);
 
     // Remap connections onto their unit keys; a connection that becomes a
     // self-loop within one unit (both ends now the same wrapper) is dropped.
-    const remappedConnections = connectionData.reduce<ConnectionRecord[]>((acc, conn) => {
-      const fromGroup = currentGroups.find(g => g.key === conn.fromGroup);
-      const toGroup = currentGroups.find(g => g.key === conn.toGroup);
-      if (!fromGroup || !toGroup) return acc;
-      const fromUnit = unitKeyForGroup(fromGroup);
-      const toUnit = unitKeyForGroup(toGroup);
-      if (fromUnit === toUnit) return acc;
-      acc.push({ ...conn, fromGroup: fromUnit, toGroup: toUnit });
-      return acc;
-    }, []);
+    // Two lists come out of this, and the difference matters:
+    //  - `visibleConnections` drives the packing. An edge that isn't drawn
+    //    must not shape where the cards land.
+    //  - `allConnections` drives the tier (topological depth) each card sits
+    //    in, hidden endpoints included. Dropping those edges here is what made
+    //    deselecting `_global` turn every token that references it into a root
+    //    and flatten the graph into two very long columns.
+    const allConnections: ConnectionRecord[] = [];
+    const visibleConnections: ConnectionRecord[] = [];
+    connectionData.forEach(conn => {
+      const fromUnit = unitKeyByGroupKey.get(conn.fromGroup);
+      const toUnit = unitKeyByGroupKey.get(conn.toGroup);
+      if (!fromUnit || !toUnit) return;
+      if (fromUnit === toUnit) return;
+      const remapped: ConnectionRecord = { ...conn, fromGroup: fromUnit, toGroup: toUnit };
+      allConnections.push(remapped);
+      if (hiddenByKey.get(conn.fromGroup) || hiddenByKey.get(conn.toGroup)) return;
+      visibleConnections.push(remapped);
+    });
 
-    const newPositions = arrangeGroupsByConnectedBlocks(
-      arrangeUnits, remappedConnections, settings.gapX, settings.gapY, heightOverrides
+    // `tiers` describes the caption row: one entry per non-empty tier, each
+    // one column wide. It is taken BEFORE the hidden units are parked below,
+    // so a parked column never gets a caption of its own.
+    const { positions: newPositions, tiers } = arrangeGroupsByConnectedBlocks(
+      arrangeUnits, visibleConnections, settings.gapX, settings.gapY,
+      {
+        heightOverrides,
+        depthConnections: allConnections,
+      }
     );
+
+    // Hidden units get no slot, but they must keep an entry in the saved
+    // record. Dropping it would re-seed them from their natural origin on the
+    // next layout pass and drop them straight on top of the arranged grid the
+    // moment the filter is lifted. Park them in a spare column just right of
+    // the arranged content, ordered by their pre-arrange position so the
+    // result is deterministic. Undo restores their real positions anyway (the
+    // snapshot below covers every top-level node, hidden ones included).
+    if (hiddenUnits.length > 0) {
+      hiddenUnits.sort(sortGroupsByPosition);
+      const parkX = newPositions.size > 0
+        ? Math.max(...Array.from(newPositions.values(), pos => pos.x)) + GROUP_WIDTH + settings.gapX
+        : 0;
+      let parkY = 0;
+      hiddenUnits.forEach(unit => {
+        newPositions.set(unit.key, { x: parkX, y: parkY });
+        parkY += (heightOverrides.get(unit.key) ?? getGroupHeight(unit)) + settings.gapY;
+      });
+    }
 
     // Snapshot current top-level positions for one-step undo before applying.
     const previousPositions: Record<string, { x: number; y: number }> = {};
     currentNodes.forEach(n => {
       if (n.parentId) return;
+      // Captions are chrome, not positions — keeping them out here keeps them
+      // out of `savedPositions` when the undo writes this record back.
+      if (isTierLabelNodeId(n.id)) return;
       previousPositions[n.id] = { x: n.position.x, y: n.position.y };
     });
     lastArrangeUndoRef.current = previousPositions;
+    lastArrangeTierLabelsRef.current = tierLabels;
     setHasArrangeUndo(true);
 
     setNodes(prevNodes =>
@@ -1437,13 +1989,19 @@ function GroupedGraphInner() {
     const positionsObj: Record<string, { x: number; y: number }> = {};
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
     setSavedPositions(positionsObj);
+    // Arrange also drops the `rel:` overrides of manually moved nested cards,
+    // so the graph must be re-laid out from the new record.
+    setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
+
+    setTierLabels(tiers);
+    post({ type: 'set-client-storage', key: `graph-tier-labels`, value: tiers });
 
     // Deferred so the new positions are committed before we measure for fit.
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, setNodes, variableType]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels, nodeIdForCard]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;
@@ -1457,9 +2015,15 @@ function GroupedGraphInner() {
       })
     );
     setSavedPositions(previousPositions);
+    setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: previousPositions });
 
+    const previousTierLabels = lastArrangeTierLabelsRef.current;
+    setTierLabels(previousTierLabels);
+    post({ type: 'set-client-storage', key: `graph-tier-labels`, value: previousTierLabels });
+
     lastArrangeUndoRef.current = null;
+    lastArrangeTierLabelsRef.current = [];
     setHasArrangeUndo(false);
   }, [setNodes]);
 
@@ -1470,9 +2034,11 @@ function GroupedGraphInner() {
       if (entry.kind !== 'variable' || !entry.token) return;
       const info = variableMap.get(entry.token.name);
       if (info) {
-        wanted.add(info.group);
+        // The card may be drawn by the container that absorbed it.
+        wanted.add(nodeIdForCard(info.group));
       } else {
-        // Mirror the synthetic external-card key built during node layout.
+        // Mirror the synthetic external-card key built during node layout —
+        // bare path, deliberately not collection-scoped like `group:` is.
         const parts = entry.token.name.split('/');
         const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
         wanted.add(`ext-group:${groupName}`);
@@ -1501,7 +2067,7 @@ function GroupedGraphInner() {
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
       { padding: 0.2, duration: 400 }
     );
-  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance]);
+  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance, nodeIdForCard]);
 
   // Auto-frame the selection (and its providers) whenever a NEW node is
   // selected in Figma — the selection card is laid out past every token card,
@@ -1520,7 +2086,7 @@ function GroupedGraphInner() {
       gapY: Number.parseInt(gridLayoutDraft.gapY, 10),
     });
     setGridLayoutSettings(settings);
-    setGridLayoutDraft({ gapX: String(settings.gapX), gapY: String(settings.gapY) });
+    setGridLayoutDraft(toGridLayoutDraft(settings));
     post({
       type: 'set-client-storage',
       key: `graph-layout-settings`,
@@ -1557,10 +2123,7 @@ function GroupedGraphInner() {
             position="bottom-right"
             onOpenChange={(open) => {
               if (open) {
-                setGridLayoutDraft({
-                  gapX: String(gridLayoutSettings.gapX),
-                  gapY: String(gridLayoutSettings.gapY),
-                });
+                setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings));
               }
             }}
           >
@@ -1598,12 +2161,7 @@ function GroupedGraphInner() {
               <div className="flex gap-2 justify-end">
                 <TextButton
                   variant="ghost"
-                  onClick={() => {
-                    setGridLayoutDraft({
-                      gapX: String(gridLayoutSettings.gapX),
-                      gapY: String(gridLayoutSettings.gapY),
-                    });
-                  }}
+                  onClick={() => setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings))}
                 >
                   Cancel
                 </TextButton>
@@ -1628,15 +2186,8 @@ function GroupedGraphInner() {
           onGroupToggle={handleGroupToggle}
           highlightedGroupKey={highlightedGroupKey}
           onHighlightGroup={handleHighlightFromSidebar}
+          onZoomToCollection={handleZoomToCollection}
           showTypeFilters={true}
-          footer={
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-70">
-              <span>{sidebarStats.total} variables</span>
-              <span>{sidebarStats.colors} colors</span>
-              <span>{sidebarStats.numbers} numbers</span>
-              <span>{sidebarStats.references} references</span>
-            </div>
-          }
         />
 
         {/* Graph content */}
@@ -1671,6 +2222,13 @@ function GroupedGraphInner() {
           </ReactFlow>
         </div>
       </div>
+
+      <GraphSearchPalette
+        isOpen={searchOpen}
+        items={searchItems}
+        onClose={closeSearch}
+        onActivate={handleSearchActivate}
+      />
 
       {colorMenu.show && (
         <ColorValueMenu

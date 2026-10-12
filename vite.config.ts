@@ -14,6 +14,11 @@ export default defineConfig(({ command }) => ({
   root: path.resolve(__dirname, 'src/ui'),
   server: {
     port: 5173,
+    // Pinned: the bridge relay allows the browser client only from
+    // http://localhost:5173. If vite silently fell back to 5174 the relay
+    // would reject it as an unknown Origin, which reads as a bridge bug.
+    // Better to fail here, loudly, with the port already in use.
+    strictPort: true,
     open: true,
   },
   build: {

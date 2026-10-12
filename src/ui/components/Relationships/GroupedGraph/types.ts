@@ -1,7 +1,7 @@
 // Types for GroupedGraph component
 
 import type { Node, Edge } from '@xyflow/react';
-import { CollectionData, ShadeGroupData, VariableData } from '../../../types';
+import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../../types';
 
 // ── Main Component Props ───────────────────────────────────────────
 
@@ -41,12 +41,18 @@ export interface GroupData {
   y: number;
   initialX: number;
   initialY: number;
-  kind: 'standard' | 'source' | 'shader' | 'shades';
+  // 'collection' is a variable collection's ROOT card — one per collection,
+  // always. It has no sourceGroupName; its rows are the collection's loose
+  // (slash-less) variables, of which there may be none, and its "+" is the
+  // only way to create a variable at the collection root.
+  kind: 'standard' | 'source' | 'shader' | 'shades' | 'collection';
   sourceGroupName?: string;
   headerFill: string;
   collectionId: string;
-  // True when this card has a parent path it can be grouped under a wrapper
-  // frame ("level up"; standard groups only).
+  // True when this card has a parent it can be grouped under a wrapper frame
+  // ("level up"; standard groups only). Every standard card has one now: a
+  // top-level path levels up into its COLLECTION's frame. A collection root
+  // card is already the root and never sets this.
   canGroup?: boolean;
 }
 
@@ -87,6 +93,27 @@ export interface GridLayoutDraft {
   gapY: string;
 }
 
+// ── Tier captions ──────────────────────────────────────────────────
+
+/**
+ * One "Tier N" caption Arrange Grid emits. A tier is exactly one column wide,
+ * so a caption spans exactly one card. A plain object (not an interface) so it
+ * satisfies xyflow's `Record<string, unknown>` node-data constraint directly,
+ * and the very same object can be handed to the node as `data` — the layout
+ * effect must not mint a fresh identity for it on every pass.
+ */
+export type TierPlacement = {
+  /** 1-based, as displayed. Empty tiers collapse, so this is the tier's
+   *  position among the tiers that actually hold something. */
+  tier: number;
+  /** Left edge — the x of the tier's column. */
+  x: number;
+  /** Caption width: one column, i.e. GROUP_WIDTH. */
+  width: number;
+};
+
+export type TierLabelNodeData = TierPlacement;
+
 // ── Node Data Type ─────────────────────────────────────────────────
 
 export type GroupNodeData = {
@@ -111,7 +138,7 @@ export type GroupNodeData = {
   onRenameGroup: (group: GroupData) => void;
   onDuplicateGroup: (group: GroupData) => void;
   onEditAsText: (group: GroupData) => void;
-  onLevelUp: (path: string) => void;
+  onLevelUp: (collectionId: string, path: string) => void;
   onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
@@ -121,10 +148,35 @@ export type GroupNodeData = {
 // ── Wrapper Node Data Type ─────────────────────────────────────────
 
 export type WrapperNodeData = {
+  /** Bare path; empty for a collection's own frame, which has no level-up. */
   path: string;
+  /** The collection this frame belongs to — the other half of its key. */
+  collectionId: string;
   title: string;
-  onLevelUp: (path: string) => void;
-  onUngroup: (path: string) => void;
+  onLevelUp: (collectionId: string, path: string) => void;
+  onUngroup: (collectionId: string, path: string) => void;
+  /**
+   * The card this container ABSORBED (part 4): the one whose own
+   * (collection, path) is this frame's. Its rows and header actions render as
+   * the container's own, which is why the card is no longer a node of its
+   * own. Null for a grouped path with no card — a header and no rows, same
+   * chrome, no special case.
+   */
+  card: GroupNodeData | null;
+  /**
+   * The absorbed card is filtered out while the container still has visible
+   * children. The rows are withheld, exactly as a hidden card NODE vanishes;
+   * the space buildWrapperLayout reserved for them stays, the same way a
+   * hidden member card's slot inside a frame does.
+   */
+  cardHidden?: boolean;
+  /**
+   * The container holds child cards (or nested containers) below its own
+   * rows. The last own row then keeps its bottom border — it is no longer the
+   * last thing in the box, and without the separator the rows and the
+   * children read as one undifferentiated stack.
+   */
+  hasChildren?: boolean;
 };
 
 // ── Edge Data Type ─────────────────────────────────────────────────
@@ -140,7 +192,14 @@ export type CustomEdgeData = {
   // Off-chain edge touching the highlighted row's own card — drawn in the
   // highlight color but faded, to show group membership vs. selection.
   isGroupSibling?: boolean;
-  onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
+  // Token-to-token edges: reset the receiving variable to a literal value.
+  onDisconnect?: (receiverVarName: string, resolvedValue: string) => void;
+  // Token-to-property edges: unbind a property on the selected Figma node.
+  // Held as plain values + one stable callback rather than a per-edge closure,
+  // so the edge's `data` keeps a stable shape across layout passes.
+  onUnbindProperty?: (nodeId: string, target: InspectorBindingTarget) => void;
+  unbindNodeId?: string;
+  unbindTarget?: InspectorBindingTarget;
 };
 
 // ── React Flow Types ───────────────────────────────────────────────

@@ -6,7 +6,7 @@ import type { EdgeProps, Edge } from '@xyflow/react';
 import { CustomEdgeData } from './types';
 import { GENERATED_CONNECTION_COLOR, REFERENCE_CONNECTION_COLOR, HIGHLIGHT_COLOR } from './constants';
 
-export function CustomEdge({
+function CustomEdgeInner({
   sourceX,
   sourceY,
   targetX,
@@ -37,8 +37,14 @@ export function CustomEdge({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (kind !== 'reference' || !data) return;
-    if (confirm(`Disconnect ${data.receiverShortName}?`)) {
-      data.onDisconnect(data.receiverName, data.resolvedValue);
+    if (!confirm(`Disconnect ${data.receiverShortName}?`)) return;
+    // Property-row edges carry the unbind target as plain values plus a stable
+    // callback (see GroupedGraph's handleUnbindProperty); token-to-token edges
+    // still go through onDisconnect.
+    if (data.onUnbindProperty && data.unbindNodeId && data.unbindTarget) {
+      data.onUnbindProperty(data.unbindNodeId, data.unbindTarget);
+    } else {
+      data.onDisconnect?.(data.receiverName, data.resolvedValue);
     }
   };
 
@@ -65,3 +71,7 @@ export function CustomEdge({
     </g>
   );
 }
+
+// Memoized: only the edges attached to the node being dragged get new
+// coordinates, so the rest skip re-rendering entirely.
+export const CustomEdge = React.memo(CustomEdgeInner);

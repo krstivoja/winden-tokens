@@ -130,6 +130,85 @@ Supports all Figma variable types:
    - Go to **Plugins** > **Development** > **Import plugin from manifest...**
    - Select the `manifest.json` file from this folder
 
+## Browser Version
+
+The same UI can run full-size in a browser tab, driving the Figma file you have open.
+Handy for the Relationships graph, which is cramped inside the plugin window.
+
+A small local relay (`winden-tokens`, in [bridge/](bridge/)) pairs the Figma plugin window with the browser tab and forwards messages between them.
+The plugin window must stay open: it is the only thing that can talk to the Figma API.
+While the tab is connected, the plugin window collapses to a status strip.
+
+> **Dev plugin only, for now.**
+> The manifest allows `ws://localhost:9337` only under `devAllowedDomains`, so only a plugin imported from `manifest.json` can reach the relay.
+> The Figma Community version cannot connect yet.
+
+### 1. Build a bridge-enabled plugin
+
+A plain `npm run build` contains no bridge code at all, so build with `VITE_BRIDGE=1`:
+
+```bash
+npm install
+VITE_BRIDGE=1 npm run build
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:VITE_BRIDGE=1; npm run build
+```
+
+Then import `manifest.json` into Figma Desktop (see [Development / Local Install](#development--local-install)).
+
+`dist/index.html` is tracked in git.
+Do not commit a `VITE_BRIDGE=1` bundle; run a plain `npm run build` before committing.
+
+### 2. Start the relay
+
+From this checkout:
+
+```bash
+node bridge/cli.mjs
+```
+
+Or the published package, which works without the repo:
+
+```bash
+npx winden-tokens
+```
+
+It serves the UI at `http://127.0.0.1:9337/` and opens the browser there.
+Pass `--no-open` to skip opening the browser, or `--help` for all options.
+Do not change `--port` unless you also change `devAllowedDomains` in `manifest.json` and rebuild.
+
+### 3. Open the plugin in Figma
+
+Run Winden Tokens in Figma on the file you want.
+The browser tab fills with that file's variables.
+Order does not matter, both sides reconnect on their own.
+
+### Developing the UI against live Figma
+
+```bash
+npm run dev:bridge
+```
+
+Runs the relay in dev mode alongside vite.
+Open `http://localhost:5173` (not port 9337) for hot reload against the open Figma file.
+The plugin in Figma still needs the `VITE_BRIDGE=1` build from step 1.
+
+### Manage tokens from Claude (MCP)
+
+With the relay running and the plugin open, add the MCP server:
+
+```bash
+npm install --prefix bridge
+claude mcp add winden-tokens -- node "$(pwd)/bridge/mcp.mjs"
+```
+
+With the published package, it is `claude mcp add winden-tokens -- npx -y -p winden-tokens winden-tokens-mcp`.
+See [specs/devnotes.md](specs/devnotes.md) for the tools it offers and the relay's security model.
+
 ## Usage
 
 ### Table View
@@ -247,9 +326,10 @@ Name variables with forward slashes to create groups:
 
 ```bash
 npm run build         # Build the plugin (UI + plugin code)
-npm run watch         # Development mode with watch
-npm run lint          # Run ESLint
-npm run lint:fix      # Run ESLint with auto-fix
+npm run dev           # Development mode with watch
+npm run dev:bridge    # Relay + vite, UI in a browser tab against live Figma
+npm test              # Run the test suite
+npm run verify        # Build + test
 ```
 
 ## Releasing

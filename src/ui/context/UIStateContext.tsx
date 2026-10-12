@@ -1,6 +1,6 @@
 // UI state context for UI-specific state (collapsed groups, contrast colors)
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 interface UIStateContextValue {
   collapsedGroups: Set<string>;
@@ -83,7 +83,7 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
     return singleContrastColors[variableId] || null;
   }, [singleContrastColors]);
 
-  const value: UIStateContextValue = {
+  const value = useMemo<UIStateContextValue>(() => ({
     collapsedGroups,
     toggleGroup,
     collapseGroups,
@@ -95,7 +95,19 @@ export function UIStateProvider({ children }: { children: ReactNode }) {
     singleContrastColors,
     setSingleContrastColor,
     getSingleContrastColor,
-  };
+  }), [
+    collapsedGroups,
+    toggleGroup,
+    collapseGroups,
+    expandGroups,
+    isGroupCollapsed,
+    groupContrastColors,
+    setGroupContrastColor,
+    getGroupContrastColor,
+    singleContrastColors,
+    setSingleContrastColor,
+    getSingleContrastColor,
+  ]);
 
   return <UIStateContext.Provider value={value}>{children}</UIStateContext.Provider>;
 }

@@ -71,7 +71,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return shadeGroupsByGroupName.get(`${selectedCollectionId}:${groupName}`) || null;
   }, [shadeGroupsByGroupName, selectedCollectionId]);
 
-  const value: DataContextValue = {
+  const value = useMemo<DataContextValue>(() => ({
     collections,
     variables,
     shadeGroups,
@@ -81,7 +81,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     colorVariables,
     getShadeGroupBySourceId,
     getShadeGroupByGroupName,
-  };
+  }), [
+    collections,
+    variables,
+    shadeGroups,
+    setData,
+    selectedCollectionId,
+    setSelectedCollectionId,
+    colorVariables,
+    getShadeGroupBySourceId,
+    getShadeGroupByGroupName,
+  ]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

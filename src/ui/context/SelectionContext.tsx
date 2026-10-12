@@ -1,6 +1,6 @@
 // Selection context - tracks the currently selected Figma node for the Inspector tab
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { InspectorNodeData } from '../types';
 
 interface SelectionContextValue {
@@ -20,11 +20,11 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     setHasMultipleSelection(multiple);
   }, []);
 
-  const value: SelectionContextValue = {
+  const value = useMemo<SelectionContextValue>(() => ({
     selectedNode,
     hasMultipleSelection,
     setSelection,
-  };
+  }), [selectedNode, hasMultipleSelection, setSelection]);
 
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
