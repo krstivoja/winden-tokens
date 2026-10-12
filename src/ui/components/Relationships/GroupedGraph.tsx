@@ -40,6 +40,7 @@ import { Input } from '../common/Input/Input';
 import {
   CustomEdgeData,
   GroupData,
+  GroupNodeData,
   VariableNode,
   ConnectionRecord,
   ConnectionFlags,
@@ -86,6 +87,48 @@ import {
   detectManagedNumberStepGroups,
   arrangeGroupsByConnectedBlocks,
 } from './GroupedGraph/utils';
+
+// ── Highlight helpers ──────────────────────────────────────────────
+
+type HighlightInfo = {
+  hasHighlight: boolean;
+  highlightedGroups: Set<string>;
+  highlightedVars: Set<string>;
+  highlightedEdgeIds: Set<string>;
+  selectedCardVars: Set<string>;
+  highlightedVarSeed: string | null;
+};
+// Shared when nothing is highlighted, so node data keeps a stable identity.
+const EMPTY_SET: Set<string> = new Set();
+
+// External (library token) cards never join a chain: they are drawn plain.
+function cardHighlightFlags(groupKey: string, h: HighlightInfo) {
+  const participates = !groupKey.startsWith('ext-group:');
+  const on = participates && h.hasHighlight && h.highlightedGroups.has(groupKey);
+  return {
+    isHighlighted: on,
+    isDimmed: participates && h.hasHighlight && !on,
+    highlightActive: h.hasHighlight,
+    highlightedVars: h.highlightedVars,
+    highlightedVarSeed: h.highlightedVarSeed,
+  };
+}
+
+function edgeHighlightFlags(edgeId: string, fromVar: string, toVar: string, h: HighlightInfo) {
+  const on = h.hasHighlight && h.highlightedEdgeIds.has(edgeId);
+  return {
+    isHighlighted: on,
+    isDimmed: h.hasHighlight && !on,
+    isGroupSibling: h.hasHighlight && !on && (h.selectedCardVars.has(fromVar) || h.selectedCardVars.has(toVar)),
+  };
+}
+
+// Handles a node can own; when this changes React Flow must re-measure it.
+function handleCountOf(n: Node): number {
+  if (n.type === 'groupNode') return (n.data as GroupNodeData).group.variables.length * 2;
+  if (n.type === 'propertyNode') return (n.data as PropertyNodeData).layers.reduce((acc, l) => acc + l.entries.length, 0);
+  return 0;
+}
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -147,6 +190,14 @@ function GroupedGraphInner() {
   const variableType: 'COLOR' | 'FLOAT' = hasColorVars ? 'COLOR' : 'FLOAT';
   const isColorType = variableType === 'COLOR';
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
+  // Latest positions without being a render dependency: a drag updates the
+  // ref and client storage only, so it never rebuilds the graph. State
+  // changes (hydration, arrange, undo) still flow through the rebuild.
+  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  useEffect(() => { savedPositionsRef.current = savedPositions; }, [savedPositions]);
+  // Signature of every node's handle set; handles are re-measured only when it changes.
+  const [internalsKey, setInternalsKey] = useState('');
+  const internalsIdsRef = useRef<string[]>([]);
   const [gridLayoutSettings, setGridLayoutSettings] = useState<GridLayoutSettings>({
     gapX: GROUP_GAP_X,
     gapY: GROUP_GAP_Y,
@@ -861,9 +912,10 @@ function GroupedGraphInner() {
 
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
-  useEffect(() => {
-    if (!positionsHydrated) return;
-
+  // Highlight lineage, computed on its own so toggling a highlight never
+  // rebuilds the graph: the apply-effect below flips flags on the nodes and
+  // edges whose state changed and leaves every other object untouched.
+  const highlight = useMemo<HighlightInfo>(() => {
     // Resolve the highlighted lineage of the selected card. References are
     // per-variable (row), so we trace the chain at the VARIABLE level using
     // fromVar/toVar — otherwise passing through an intermediate card would fan
@@ -921,6 +973,45 @@ function GroupedGraphInner() {
       highlightedGroups.add(highlightedGroupKey);
     }
     const hasHighlight = highlightedGroupKey !== null;
+    return { hasHighlight, highlightedGroups, highlightedVars: hasHighlight ? highlightedVars : EMPTY_SET,
+             highlightedEdgeIds, selectedCardVars, highlightedVarSeed: highlightedVarName };
+  }, [highlightedGroupKey, highlightedVarName, connectionData, groupsData, variableMap]);
+  const highlightRef = useRef(highlight);
+  highlightRef.current = highlight;
+
+  useEffect(() => {
+    setNodes(prev => {
+      let changed = false;
+      const next = prev.map(n => {
+        if (n.type !== 'groupNode') return n;
+        const d = n.data as GroupNodeData;
+        const f = cardHighlightFlags(n.id, highlight);
+        if (d.isHighlighted === f.isHighlighted && d.isDimmed === f.isDimmed && d.highlightActive === f.highlightActive
+            && d.highlightedVars === f.highlightedVars && d.highlightedVarSeed === f.highlightedVarSeed) return n;
+        changed = true;
+        return { ...n, data: { ...d, ...f } };
+      });
+      return changed ? next : prev;
+    });
+    setEdges(prev => {
+      let changed = false;
+      const next = prev.map(e => {
+        const d = e.data;
+        if (!d || d.fromVar === undefined || d.toVar === undefined) return e;
+        const f = edgeHighlightFlags(e.id, d.fromVar, d.toVar, highlight);
+        if (d.isHighlighted === f.isHighlighted && d.isDimmed === f.isDimmed && d.isGroupSibling === f.isGroupSibling) return e;
+        changed = true;
+        return { ...e, data: { ...d, ...f } };
+      });
+      return changed ? next : prev;
+    });
+  }, [highlight, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!positionsHydrated) return;
+
+    const highlight = highlightRef.current;
+    const positionsNow = savedPositionsRef.current;
 
     // Resolve the selected node's bound tokens against the local token cards.
     // A token that maps to a real card marks that card as a "provider" (kept
@@ -1018,11 +1109,7 @@ function GroupedGraphInner() {
           isColorType: groupIsColorType,
           variableType: groupVariableType,
           connectedVars,
-          isHighlighted: hasHighlight && highlightedGroups.has(group.key),
-          isDimmed: hasHighlight && !highlightedGroups.has(group.key),
-          highlightActive: hasHighlight,
-          highlightedVars,
-          highlightedVarSeed: highlightedVarName,
+          ...cardHighlightFlags(group.key, highlight),
           onHighlightPath: handleHighlightPath,
           onHighlightVariable: handleHighlightVariable,
           onGeneratorOpen: handleGeneratorOpen,
@@ -1048,12 +1135,12 @@ function GroupedGraphInner() {
 
     // Managed groups (shader/steps/source) stay top-level and absolute.
     managedGroups.forEach(group => {
-      const position = savedPositions[group.key] || { x: group.initialX, y: group.initialY };
+      const position = positionsNow[group.key] || { x: group.initialX, y: group.initialY };
       newNodes.push(buildCardNode(group, position, null));
     });
 
     // Standard cards, nested inside wrapper frames for expanded groups.
-    const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
+    const placements = buildWrapperLayout(standardCards, groupedPaths, positionsNow);
     const cardHiddenByKey = new Map<string, boolean>();
     standardCards.forEach(g => cardHiddenByKey.set(g.key, isCardHidden(g) && !selectionProviderGroupKeys.has(g.key)));
 
@@ -1100,7 +1187,7 @@ function GroupedGraphInner() {
           kind: 'shader', sourceGroupName: bucket.title,
           headerFill: SHADER_GROUP_HEADER_FILL, collectionId: bucket.collectionId,
         };
-        const position = savedPositions[cardKey] || { x: externalX, y: externalY };
+        const position = positionsNow[cardKey] || { x: externalX, y: externalY };
         newNodes.push({
           id: cardKey,
           type: 'groupNode',
@@ -1111,11 +1198,7 @@ function GroupedGraphInner() {
             isColorType: bucket.nodes.every(n => n.resolvedType === 'COLOR'),
             variableType: 'FLOAT',
             connectedVars,
-            isHighlighted: false,
-            isDimmed: false,
-            highlightActive: hasHighlight,
-            highlightedVars,
-            highlightedVarSeed: highlightedVarName,
+            ...cardHighlightFlags(cardKey, highlight),
             onHighlightPath: handleHighlightPath,
             onHighlightVariable: handleHighlightVariable,
             onGeneratorOpen: handleGeneratorOpen,
@@ -1139,7 +1222,7 @@ function GroupedGraphInner() {
         ? externalX + GROUP_WIDTH + PROPERTY_COLUMN_GAP
         : externalX;
       const selectionNodeId = getSelectionNodeId(selectedNode.id);
-      const position = savedPositions[selectionNodeId] || { x: selectionX, y: 0 };
+      const position = positionsNow[selectionNodeId] || { x: selectionX, y: 0 };
       newNodes.push({
         id: selectionNodeId,
         type: 'propertyNode',
@@ -1181,10 +1264,9 @@ function GroupedGraphInner() {
             receiverName: toVarInfo?.node.id || '',
             receiverShortName: toVarInfo?.node.shortName || '',
             resolvedValue: toVarInfo?.node.resolvedValue || '',
-            isHighlighted: hasHighlight && highlightedEdgeIds.has(conn.id),
-            isDimmed: hasHighlight && !highlightedEdgeIds.has(conn.id),
-            isGroupSibling: hasHighlight && !highlightedEdgeIds.has(conn.id)
-              && (selectedCardVars.has(conn.fromVar) || selectedCardVars.has(conn.toVar)),
+            fromVar: conn.fromVar,
+            toVar: conn.toVar,
+            ...edgeHighlightFlags(conn.id, conn.fromVar, conn.toVar, highlight),
             onDisconnect: handleDisconnect,
           },
         };
@@ -1232,24 +1314,27 @@ function GroupedGraphInner() {
 
     setNodes(newNodes);
     setEdges(newEdges);
+    internalsIdsRef.current = newNodes.map(n => n.id);
+    setInternalsKey(newNodes.map(n => `${n.id}:${handleCountOf(n)}`).join('|'));
+  // savedPositions stays a dependency so hydration / arrange / undo rebuild; drags only touch the ref.
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositions, groupedPaths,
       localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleShowColorMenu, handleHighlightPath,
-      handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
+      handleHighlightVariable, setNodes, setEdges]);
 
   // The selection card now carries a per-element id (see getSelectionNodeId),
   // so switching elements mounts a fresh node with correctly measured handles.
   // We still refresh internals here to cover in-place changes — e.g. rebinding a
   // property on the *same* selected element adds/removes handles under one id.
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (!internalsKey) return;
     const raf = requestAnimationFrame(() => {
-      updateNodeInternals(nodes.map(n => n.id));
+      updateNodeInternals(internalsIdsRef.current);
     });
     return () => cancelAnimationFrame(raf);
-  }, [nodes, updateNodeInternals]);
+  }, [internalsKey, updateNodeInternals]);
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1276,11 +1361,11 @@ function GroupedGraphInner() {
           }
         });
         const storageKey = `graph-positions`;
-        setSavedPositions(positionsObj);
+        savedPositionsRef.current = positionsObj;   // not setState: a drag must not rebuild the graph
         post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
       }, 300);
     }
-  }, [onNodesChange, reactFlowInstance, variableType, setSavedPositions]);
+  }, [onNodesChange, reactFlowInstance, variableType]);
 
   // Handle new connections (drag from handle to handle)
   const handleConnect: OnConnect = useCallback((connection) => {

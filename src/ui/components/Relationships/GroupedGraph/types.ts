@@ -140,6 +140,9 @@ export type CustomEdgeData = {
   // Off-chain edge touching the highlighted row's own card — drawn in the
   // highlight color but faded, to show group membership vs. selection.
   isGroupSibling?: boolean;
+  // Endpoints (variable names) so highlight flags can be recomputed in place.
+  fromVar?: string;
+  toVar?: string;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
 };
 
