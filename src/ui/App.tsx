@@ -1,9 +1,10 @@
 // Main App component
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
-import { useBridge, releaseBridgePeer, isInsideFigma, BRIDGE_ENABLED } from './hooks/useBridge';
+import { useBridge, answerBridgePairing, isInsideFigma, BRIDGE_CLIENT_ENABLED } from './hooks/useBridge';
+import { BRIDGE_CLI_COMMAND } from './bridge/protocol';
 import { TextButton } from './components/common/Button';
 import { TabBar, type TabId } from './components/Tabs/TabBar';
 import { TabContent } from './components/Tabs/TabContent';
@@ -18,15 +19,13 @@ import { ResizeHandles } from './components/ResizeHandles';
 
 export type ActiveTab = TabId;
 
-// Headless is a status line, not a screen: one row, no scroll, no resize grips.
-const HEADLESS_WINDOW = { width: 320, height: 52 };
+// The bridge banners share one look: a single row under the top edge.
+const BRIDGE_BANNER_CLASS =
+  'flex shrink-0 items-center justify-center gap-2 border-b border-border bg-base-2 px-4 py-2 text-center';
 
-// Whether a browser tab attaching may take the wheel on its own.
-// A relay with a tab still open is the normal state of a dev machine, so
-// treating "a tab is there" as "hand the window over" cost a click on every
-// single launch. The plugin UI is the default; handing over is a decision,
-// and it is remembered so it only has to be made once.
-const HANDOVER_STORAGE_KEY = 'bridge-auto-handover';
+// Where a user finds the Figma half of the bridge.
+const BRIDGE_MENU_HINT =
+  'run "Bridge to browser" from its menu (Plugins → Winden Tokens → Bridge to browser)';
 
 export function App() {
   const { setData, setSelection } = useAppContext();
@@ -77,99 +76,34 @@ export function App() {
 
   usePluginMessages(messageHandlers());
 
-  // Dev bridge: while a browser tab is driving this file, the plugin window
-  // stays open (only it can reach the Figma API) but stops rendering the app,
-  // so the graph is not paid for twice.
+  // Browser tab only: the relay connection behind this tab. Inside Figma, and
+  // in any bundle built without the bridge client, this is a constant
+  // disabled status and every banner below folds away.
   const bridgeStatus = useBridge();
-  const hasBrowserPeer = bridgeStatus.role === 'plugin'
-    && bridgeStatus.connected
-    && bridgeStatus.peerAttached;
+  const showBridgeBanners = BRIDGE_CLIENT_ENABLED && bridgeStatus.enabled;
 
-  // Persisted across plugin launches, so the answer survives the window being
-  // reopened. Starts false: with nothing stored, a launch lands in the plugin
-  // UI, which is what someone who never set this up expects to see.
-  const [autoHandover, setAutoHandover] = useState(false);
+  // A bridge protocol mismatch, in the relay's own words. Shown in preference
+  // to the generic "not connected" copy below, because "update the older half"
+  // is the actual instruction.
+  const bridgeError = showBridgeBanners ? bridgeStatus.error : null;
 
-  useEffect(() => {
-    if (!BRIDGE_ENABLED || isBrowserClient) {
-      return;
-    }
-
-    const handleStorage = (event: MessageEvent) => {
-      const msg = event.data?.pluginMessage;
-      if (msg?.type === 'client-storage-data' && msg.key === HANDOVER_STORAGE_KEY) {
-        setAutoHandover(msg.value === true);
-      }
-    };
-
-    window.addEventListener('message', handleStorage);
-    post({ type: 'get-client-storage', key: HANDOVER_STORAGE_KEY });
-    return () => window.removeEventListener('message', handleStorage);
-  }, [isBrowserClient]);
-
-  const setHandover = useCallback((value: boolean) => {
-    setAutoHandover(value);
-    post({ type: 'set-client-storage', key: HANDOVER_STORAGE_KEY, value });
-  }, []);
-
-  const handOverToBrowser = useCallback(() => setHandover(true), [setHandover]);
-
-  // Taking the window back also cancels the standing permission, otherwise the
-  // very next launch hands it straight back and the click bought nothing.
-  const takeBackFromBrowser = useCallback(() => {
-    setHandover(false);
-    releaseBridgePeer();
-  }, [setHandover]);
-
-  const isHeadless = hasBrowserPeer && autoHandover;
+  // An unknown Figma plugin window wants to drive this file. Only a browser
+  // tab can let it in — a hostile web page cannot be a client — so the prompt
+  // lives here, with the code the Figma window shows for comparison.
+  const pairingCode = showBridgeBanners ? bridgeStatus.pairingCode : null;
 
   // The browser tab is a remote control with no document of its own: with no
   // plugin window on the other end it renders a perfectly normal, perfectly
   // empty app, which reads as "selection is broken" rather than "nothing is
   // connected". Say so, persistently, until the plugin attaches — the relay's
   // status frames clear this the moment it does.
-  // `BRIDGE_ENABLED` first so a production build folds the whole banner away
-  // rather than shipping dead dev-only markup.
   const isDetachedClient =
-    BRIDGE_ENABLED &&
-    bridgeStatus.role === 'client' &&
+    showBridgeBanners &&
     bridgeStatus.probed &&
     !bridgeStatus.peerAttached;
 
-  // A bridge protocol mismatch, in the relay's own words. It reaches BOTH
-  // roles: the rejected side learns it from its close reason, the side still
-  // attached from the relay's broadcast. Shown in preference to the generic
-  // "not connected" copy below, because "update the older half" is the actual
-  // instruction and "run npm run dev:bridge" would be a wrong one.
-  const bridgeError = BRIDGE_ENABLED ? bridgeStatus.error : null;
-
-  // Nothing is rendered in headless mode, so the window must not keep the
-  // size the full UI needed — shrink it to the strip and hand the old size
-  // back when the browser tab lets go.
-  const restoreWindowRef = useRef<{ width: number; height: number } | null>(null);
-
-  useEffect(() => {
-    if (!BRIDGE_ENABLED || isBrowserClient) {
-      return;
-    }
-
-    if (isHeadless) {
-      if (!restoreWindowRef.current) {
-        restoreWindowRef.current = {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        };
-      }
-      post({ type: 'resize', ...HEADLESS_WINDOW });
-      return;
-    }
-
-    const previous = restoreWindowRef.current;
-    if (previous) {
-      restoreWindowRef.current = null;
-      post({ type: 'resize', ...previous });
-    }
-  }, [isHeadless, isBrowserClient]);
+  const approvePairing = useCallback(() => answerBridgePairing(true), []);
+  const denyPairing = useCallback(() => answerBridgePairing(false), []);
 
   useEffect(() => {
     post({ type: 'ui-ready' });
@@ -213,62 +147,56 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [historyState.canRedo, historyState.canUndo]);
 
-  if (isHeadless) {
-    return (
-      <div
-        className="flex h-full items-center gap-2 bg-base px-3"
-        title="Keep this window open — it is the only thing that can talk to Figma."
-      >
-        <span className="size-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
-        <span className="truncate text-xs text-text">Browser has the wheel</span>
-        <TextButton
-          variant="outline"
-          size="sm"
-          className="ml-auto shrink-0 px-2 py-1 text-xs"
-          onClick={takeBackFromBrowser}
-        >
-          Take over
-        </TextButton>
-      </div>
-    );
-  }
-
   return (
     <>
-      {(isDetachedClient || bridgeError) && (
+      {bridgeError ? (
+        <div role="status" className={BRIDGE_BANNER_CLASS}>
+          <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
+          <span className="text-xs text-text">{bridgeError}</span>
+        </div>
+      ) : pairingCode ? (
         <div
-          role="status"
-          className="flex shrink-0 items-center justify-center gap-2 border-b border-border bg-base-2 px-4 py-2 text-center"
+          role="alert"
+          className={`${BRIDGE_BANNER_CLASS} flex-wrap border-b-primary`}
         >
+          {/* Dot and copy wrap as one unit, so the dot never sits alone on a row. */}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+            <span className="text-xs text-text">
+              A Figma plugin window wants to connect. Code:{' '}
+              <strong className="font-mono font-semibold tracking-wider">{pairingCode}</strong>
+              {' '}— check it matches the code in the Figma "Bridge to browser" window.
+            </span>
+          </span>
+          <span className="flex shrink-0 gap-2">
+            <TextButton
+              variant="primary"
+              size="sm"
+              className="px-2 py-1 text-xs"
+              onClick={approvePairing}
+            >
+              Approve
+            </TextButton>
+            <TextButton
+              variant="outline"
+              size="sm"
+              className="px-2 py-1 text-xs"
+              onClick={denyPairing}
+            >
+              Deny
+            </TextButton>
+          </span>
+        </div>
+      ) : isDetachedClient ? (
+        <div role="status" className={BRIDGE_BANNER_CLASS}>
           <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
           <span className="text-xs text-text">
-            {bridgeError
-              ?? (bridgeStatus.connected
-                ? 'No plugin connected. Open the Winden Tokens plugin in Figma — this tab has no data of its own.'
-                : 'Bridge relay not reachable. Run winden-tokens (or npm run dev:bridge), then open the Winden Tokens plugin in Figma.')}
+            {bridgeStatus.connected
+              ? `No plugin connected. Open the Winden Tokens plugin in Figma and ${BRIDGE_MENU_HINT} — this tab has no data of its own.`
+              : `Bridge relay not reachable. Run ${BRIDGE_CLI_COMMAND} (or npm run dev:bridge), then open the Winden Tokens plugin in Figma and ${BRIDGE_MENU_HINT}.`}
           </span>
         </div>
-      )}
-
-      {hasBrowserPeer && !autoHandover && (
-        <div
-          role="status"
-          className="flex shrink-0 items-center gap-2 border-b border-border bg-base-2 px-4 py-2"
-        >
-          <span className="size-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
-          <span className="truncate text-xs text-text">
-            Browser tab connected. Both windows are live — edits from either one land in this file.
-          </span>
-          <TextButton
-            variant="outline"
-            size="sm"
-            className="ml-auto shrink-0 px-2 py-1 text-xs"
-            onClick={handOverToBrowser}
-          >
-            Hand over
-          </TextButton>
-        </div>
-      )}
+      ) : null}
 
       {!isBrowserClient && (
         <TabBar

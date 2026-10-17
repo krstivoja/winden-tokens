@@ -4,7 +4,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
-export default defineConfig(({ command }) => ({
+// Two UI entries, one per Figma menu command (manifest.json `ui` map):
+//   dist/index.html  — the app ("open"). No network code, ever.
+//   dist/bridge.html — the "Bridge to browser" window (src/ui/bridge/).
+// vite-plugin-singlefile can only inline a build with ONE input, so each entry
+// is its own build: the default mode builds the app, `--mode bridge` builds the
+// bridge window. `npm run build` chains both.
+const BRIDGE_MODE = 'bridge';
+
+export default defineConfig(({ command, mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -26,9 +34,9 @@ export default defineConfig(({ command }) => ({
     emptyOutDir: false,
     cssCodeSplit: false,
     rollupOptions: {
-      input: path.resolve(__dirname, 'src/ui/index.html'),
+      input: path.resolve(__dirname, mode === BRIDGE_MODE ? 'src/ui/bridge.html' : 'src/ui/index.html'),
       output: {
-        entryFileNames: 'ui.js'
+        entryFileNames: mode === BRIDGE_MODE ? 'bridge.js' : 'ui.js'
       }
     }
   },

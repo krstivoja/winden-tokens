@@ -1,6 +1,6 @@
 {
   "name": "winden-tokens",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Drive the Figma file you have open from outside Figma: the Winden Tokens UI full-size in a browser tab, and an MCP server for your design tokens. Local relay + prebuilt UI, loopback only.",
   "type": "module",
   "bin": {

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"tsc --watch --project tsconfig.plugin.json\"",
     "dev:bridge": "concurrently -n bridge,vite -c magenta,cyan \"node bridge/cli.mjs --dev --no-open\" \"vite\"",
-    "build": "vite build && tsc --project tsconfig.plugin.json",
+    "build": "vite build && vite build --mode bridge && tsc --project tsconfig.plugin.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

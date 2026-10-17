@@ -1,6 +1,24 @@
 // Tokens Manager - Figma Plugin
 
-figma.showUI(__html__, { width: 750, height: 500, themeColors: true } as any);
+// One plugin, two windows (manifest.json `ui` map + `menu`):
+//   'open'   — the app. Also what a relaunch button or a menu-less run gives us.
+//   'bridge' — "Bridge to browser": a status strip that relays this sandbox to
+//              the local winden-tokens relay (src/ui/bridge/). The sandbox does
+//              not care which window it talks to; message handling is shared.
+const BRIDGE_COMMAND = 'bridge';
+const IS_BRIDGE_WINDOW = figma.command === BRIDGE_COMMAND;
+
+if (IS_BRIDGE_WINDOW) {
+  figma.showUI(__uiFiles__.bridge, { width: 320, height: 64, themeColors: true, title: 'Winden Tokens Bridge' });
+} else {
+  figma.showUI(__uiFiles__.open, { width: 750, height: 500, themeColors: true } as any);
+}
+
+// The bridge window's pairing identity with the relay (src/ui/bridge/key.ts).
+// Reserved: the generic client-storage messages refuse it, so a browser tab
+// driving the sandbox through the relay can never read or overwrite it.
+const BRIDGE_KEY_STORAGE = 'winden-bridge-plugin-key';
+const BRIDGE_KEY_PATTERN = /^[0-9a-f]{32}$/;
 
 // Track variable state for change detection
 let lastDataHash = '';
@@ -4352,11 +4370,12 @@ figma.on('selectionchange', () => {
 // Start polling - check every 5 seconds to reduce overhead
 setInterval(checkForChanges, 5000);
 
-// Initial fetch
+// Initial fetch. The bridge window cannot show data and has no relay socket
+// yet, so it skips the read; an attaching tab asks for one (`ui-ready`).
 void (async () => {
-  await fetchData();
+  if (!IS_BRIDGE_WINDOW) await fetchData();
   await resetHistory();
-  await sendSelection();
+  if (!IS_BRIDGE_WINDOW) await sendSelection();
 })();
 
 // Message handler
@@ -4492,7 +4511,24 @@ figma.ui.onmessage = async (msg: any) => {
       await sendSelection();
       break;
 
+    case 'bridge-get-key':
+      // The bridge window sends a fresh candidate (the sandbox has no reliable
+      // crypto.getRandomValues). Keep an existing key, else store the candidate.
+      try {
+        let key = await figma.clientStorage.getAsync(BRIDGE_KEY_STORAGE);
+        if (typeof key !== 'string' || !BRIDGE_KEY_PATTERN.test(key)) {
+          key = typeof msg.candidate === 'string' && BRIDGE_KEY_PATTERN.test(msg.candidate) ? msg.candidate : null;
+          if (key) await figma.clientStorage.setAsync(BRIDGE_KEY_STORAGE, key);
+        }
+        figma.ui.postMessage({ type: 'bridge-key', key });
+      } catch (error) {
+        console.error('[Plugin] Error reading the bridge key:', error);
+        figma.ui.postMessage({ type: 'bridge-key', key: null });
+      }
+      break;
+
     case 'get-client-storage':
+      if (msg.key === BRIDGE_KEY_STORAGE) break;
       try {
         const value = await figma.clientStorage.getAsync(msg.key);
         figma.ui.postMessage({ type: 'client-storage-data', key: msg.key, value });
@@ -4502,6 +4538,7 @@ figma.ui.onmessage = async (msg: any) => {
       break;
 
     case 'set-client-storage':
+      if (msg.key === BRIDGE_KEY_STORAGE) break;
       try {
         await figma.clientStorage.setAsync(msg.key, msg.value);
       } catch (error) {

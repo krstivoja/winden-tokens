@@ -23,18 +23,20 @@
  *
  * Every frame is JSON:
  *
- *     { v: 1, role: 'plugin' | 'client' | 'mcp', kind: 'hello' | 'message', payload }
+ *     { v: 2, role: 'plugin' | 'client' | 'mcp', kind: 'hello' | 'message' | 'status', payload }
  *
  * `payload` is opaque to the relay. It carries the existing plugin message
  * types verbatim (`refresh`, `create-variable`, `bind-node-property`, …).
  * The relay only reads `payload.type` for logging, and forwards the ORIGINAL
- * bytes unchanged — it never re-serialises your payload.
+ * bytes unchanged — it never re-serialises your payload. The two exceptions
+ * are the hello (below) and a client's `kind: 'status'` frame, which is
+ * addressed to the relay itself and never forwarded (see 5).
  *
  * 1. hello — first frame on every socket, names the role:
  *
- *        { v: 1, role: 'plugin', kind: 'hello', payload: {...} }
- *        { v: 1, role: 'client', kind: 'hello', payload: {...} }
- *        { v: 1, role: 'mcp',    kind: 'hello', payload: {...} }
+ *        { v: 2, role: 'plugin', kind: 'hello', payload: { pluginKey: '<32-128 hex>' } }
+ *        { v: 2, role: 'client', kind: 'hello', payload: {...} }
+ *        { v: 2, role: 'mcp',    kind: 'hello', payload: { token: '<contents of ~/.winden-tokens/mcp-token>' } }
  *
  *    Before its hello a socket is unidentified: the relay sends it nothing and
  *    forwards nothing from it. A socket that has not said hello within
@@ -80,7 +82,7 @@
  *    `refresh`.
  *
  *    WIRE LABEL OF AN MCP COMMAND, AND WHY IT SAYS `client`. The plugin half of
- *    the bridge speaks protocol v1 and knows exactly two peer roles; its
+ *    the bridge knows exactly two peer roles (as of v1); its
  *    `decodeEnvelope` DROPS a frame whose role it does not recognise. So an
  *    `mcp`-labelled command frame would be silently discarded by every plugin
  *    build that exists. The MCP server therefore names itself `mcp` in its
@@ -88,12 +90,12 @@
  *    its command frames `client`, the role the plugin already accepts commands
  *    from. The relay routes on the socket's hello role and never on a frame's
  *    label, so this changes nothing here; it is stated because it looks like an
- *    inconsistency and is not one. The v2 cleanup is to teach `decodeEnvelope`
+ *    inconsistency and is not one. The cleanup is to teach `decodeEnvelope`
  *    the `mcp` role and drop the relabel, which costs a plugin rebuild.
  *
  * 3. CLIENT HELLO IS FORWARDED TO THE PLUGIN VERBATIM.
  *    When a browser tab says hello, the plugin socket receives that exact
- *    frame — `{ v:1, role:'client', kind:'hello', payload }`. That is the
+ *    frame — `{ v:2, role:'client', kind:'hello', payload }`. That is the
  *    plugin's cue to push a full `refresh`, so a tab opened late still gets
  *    current data. There is no special wrapper kind for this: the plugin
  *    simply listens for `kind === 'hello'` from `role === 'client'`.
@@ -101,21 +103,21 @@
  * 4. Relay-generated status frames use a THIRD role, `'relay'`, and the kind
  *    `'status'`, so they can never be confused with app traffic:
  *
- *        { v:1, role:'relay', kind:'status', payload:{ type:'bridge/plugin-connected'    } }
- *        { v:1, role:'relay', kind:'status', payload:{ type:'bridge/plugin-disconnected' } }
+ *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/plugin-connected'    } }
+ *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/plugin-disconnected' } }
  *            → sent to clients. `plugin-disconnected` is what lets the browser
  *              say "lost the document" instead of hanging. A client also gets
  *              one of these immediately after its own hello, describing the
  *              current state.
  *
- *        { v:1, role:'relay', kind:'status', payload:{ type:'bridge/client-attached', clients:N } }
- *        { v:1, role:'relay', kind:'status', payload:{ type:'bridge/client-detached', clients:N } }
+ *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/client-attached', clients:N } }
+ *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/client-detached', clients:N } }
  *            → sent to the plugin, for the headless status strip. Purely
  *              informational; safe to ignore. The refresh cue is the forwarded
  *              client hello in (3), NOT these frames.
  *
- *        { v:1, role:'relay', kind:'status', payload:{ type:'bridge/version-mismatch',
- *                                                      relay:1, peer:2, message:'…' } }
+ *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/version-mismatch',
+ *                                                      relay:2, peer:3, message:'…' } }
  *            → broadcast to every attached client when a socket is turned away
  *              for speaking a different protocol version. Without it, the
  *              failure a user actually sees is "my tab is empty" — the rejected
@@ -124,114 +126,117 @@
  *              a client on another version is itself being rejected, and learns
  *              why from its close reason instead.)
  *
+ * 5. PAIRING — how an unknown plugin becomes trusted. All frames below are
+ *    `{ v:2, role:'relay', kind:'status', payload }` unless marked client → relay.
+ *
+ *        relay → pending plugin   { type:'bridge/pairing-pending', code }
+ *        relay → every client     { type:'bridge/pairing-request', code }
+ *            (also sent to a client that attaches while a request is open,
+ *            right after its plugin-connected/-disconnected frame)
+ *        client → relay           { v:2, role:'client', kind:'status',
+ *                                   payload:{ type:'bridge/pairing-answer', code, approve:boolean } }
+ *            (ignored unless `code` is the CURRENT request's code, so an answer
+ *            meant for one plugin can never approve another)
+ *        relay → plugin           { type:'bridge/pairing-approved' }
+ *            then the normal plugin-connected flow, exactly as for a known key
+ *        relay → every client     { type:'bridge/pairing-resolved', approved:true }
+ *                                 { type:'bridge/pairing-resolved', approved:false,
+ *                                   reason:'denied' | 'timeout' | 'closed' }
+ *
+ *    `code` is 6 characters of Crockford base32 (no I, L, O, U) taken from
+ *    sha256(pluginKey) — the same on the plugin window and in every tab, so the
+ *    user approves the window they can actually see.
+ *
+ * Close codes: 4000 replaced by a newer plugin · 4001 policy (Origin/role
+ * violation, missing/malformed pluginKey, wrong mcp token, no hello) ·
+ * 4002 protocol version mismatch · 4003 pairing denied · 4004 pairing timed out
+ * (PAIRING_TIMEOUT_MS) · 4005 another plugin is already waiting for pairing.
+ *
  * Exactly one plugin socket exists at a time. Figma reloads the plugin often,
- * so a new plugin hello REPLACES the old socket, closing it with code 4000.
+ * so a new TRUSTED plugin hello REPLACES the old socket, closing it with 4000.
+ * At most one plugin waits for pairing at a time; while it waits it is
+ * PENDING: it replaces nothing, every frame it sends is dropped, and nothing
+ * but its own pairing frames is sent to it.
  *
  * ---------------------------------------------------------------------------
- * THREAT MODEL  (read before changing the Origin logic)
+ * THREAT MODEL  (read before changing the Origin or pairing logic)
  * ---------------------------------------------------------------------------
  *
- * A WebSocket handshake is NOT subject to CORS. Without an Origin check, any
- * web page the user happens to have open in any tab could connect to
- * ws://localhost:9337 and issue write commands into their Figma file. The
- * same-origin policy does not stop it, and no preflight is made.
+ * A WebSocket handshake is NOT subject to CORS. Without checks, any web page
+ * the user happens to have open could connect to ws://localhost:9337 and issue
+ * write commands into their Figma file. No preflight is made.
  *
- * Three mitigations, all required:
+ * Mitigations, all required:
  *
  *   1. Bind 127.0.0.1 only — never 0.0.0.0. Nothing off this machine can reach
- *      the relay, so a hostile device on the LAN is out of the picture.
+ *      the relay.
  *
- *   2. Check the Origin header at handshake and answer 403 before the upgrade
- *      completes. A browser sets Origin itself and a page cannot forge it, so
- *      this is sufficient against a hostile page. A local process CAN forge it,
- *      but that already implies code execution on the machine — out of scope.
- *
- *   3. Check the Host header on every request, HTTP and upgrade alike. Only
- *      `127.0.0.1:<port>` and `localhost:<port>` are answered. This is the DNS
+ *   2. Check the Host header on every request, HTTP and upgrade alike. Only
+ *      `127.0.0.1:<port>` and `localhost:<port>` are answered — the DNS
  *      rebinding guard: a name an attacker controls, re-pointed at 127.0.0.1,
  *      arrives with ITS name in Host and is refused before anything else runs.
  *
- * WHICH ORIGINS ARE ALLOWED, AND WHY THAT LIST GOT SHORTER
+ *   3. Check the Origin header at handshake (403 before the upgrade) and bind
+ *      the role claimed in the hello to it:
+ *        an allowed client origin → may claim ONLY 'client'
+ *        null / absent Origin     → may claim ONLY 'plugin' or 'mcp'
+ *        anything else            → 403
+ *      Allowed client origins are the relay's OWN (`http://127.0.0.1:<port>`,
+ *      `http://localhost:<port>`) — it serves the UI itself, so only a page it
+ *      served has one — plus the vite dev origin in dev mode only (`--dev` /
+ *      `WINDEN_BRIDGE_DEV=1`, never set by a published install).
  *
- *   The relay now serves the browser UI itself, so the normal client origin is
- *   the relay's OWN origin — `http://127.0.0.1:<port>` and its `localhost`
- *   spelling. Only a page this relay served can have that origin, so the
- *   allowlist and the set of pages that exist are the same set.
+ *   4. Authenticate every role that arrives from a null Origin, because a null
+ *      Origin proves NOTHING. Any web page can create
+ *      `<iframe sandbox="allow-scripts">`; its opaque origin sends
+ *      `Origin: null` — the very mechanism that gives Figma's own plugin iframe
+ *      its null Origin. So "null" is "the Figma plugin, a Node process, or any
+ *      website", and is treated as such:
  *
- *   The vite dev origin (`http://localhost:5173`) used to be allowed
- *   unconditionally. It is now allowed ONLY in dev mode — `--dev`, or
- *   `WINDEN_BRIDGE_DEV=1` — which is set by `npm run dev:bridge` in this
- *   repo and by nothing a published install does. Someone developing the UI
- *   opts in explicitly; everyone else never has 5173 on the list at all.
- *   Dev mode is an explicit flag rather than "is there a checkout next to me"
- *   precisely because it must be impossible to enter by accident.
+ *        mcp    — must send the token the relay wrote at start to
+ *                 <home>/mcp-token (fresh per start, dir 0700, file 0600; home
+ *                 is ~/.winden-tokens or WINDEN_TOKENS_HOME). Compared in
+ *                 constant time; wrong/missing → 4001. A page cannot read the
+ *                 file.
+ *        plugin — must send a `pluginKey`. A key whose sha256 is listed in
+ *                 <home>/trusted-plugins.json (0600, hashes only, never keys)
+ *                 is promoted as before. Any other key waits for a human: the
+ *                 code is shown in the plugin window and in every tab, and only
+ *                 a CLIENT may answer — a role a hostile page cannot hold, by
+ *                 (3). One pending plugin at a time, so a page cannot queue
+ *                 prompts; a pending one cannot replace the real plugin, reach
+ *                 a tab, or send anything at all.
  *
- * The awkward part, handled honestly rather than hand-waved: the role is
- * claimed in the `hello`, which arrives AFTER the handshake, so the role is
- * unknown at Origin-check time. So the check runs in two stages:
+ *      The Figma iframe cannot keep a secret from the user, but it does not
+ *      need to: the key only has to be unknown to OTHER pages, and a sandboxed
+ *      page cannot read the plugin's `figma.clientStorage`.
  *
- *   Stage 1 (handshake): accept if the Origin is EITHER an allowed client
- *     origin (see above) OR null/absent. Anything else → 403. Figma's plugin
- *     iframe is sandboxed, so it sends `Origin: null` or no Origin at all —
- *     which is why null must be allowed through at all.
+ *   An `mcp` socket can never become the plugin socket and never reaches a
+ *   client — enforced below, not assumed.
  *
- *   Stage 2 (hello): bind the claim to the origin.
- *       null/absent origin  → may claim 'plugin' or 'mcp'
- *       an allowed origin   → may claim ONLY 'client'
- *     A violation closes the socket with a reason.
- *
- * WHY `mcp` SHARES THE NULL-ORIGIN BUCKET WITH `plugin` — a deliberate choice,
- * not an oversight.
- *
- *   A Node process sends no Origin header, so `winden-tokens-mcp` arrives in
- *   exactly the condition this relay has always read as "the Figma plugin
- *   iframe". Three ways to tell the two apart were considered:
- *
- *     (a) a shared secret the CLI prints and the MCP server passes. It would
- *         stop nothing: whoever can run a process on this machine can read the
- *         same file or the same terminal. Real auth here is a different design
- *         (see "No tokens" below), not a token bolted onto one role.
- *     (b) a separate loopback port for the mcp role. The port is not a
- *         capability — anything that can reach 9337 can reach 9338.
- *     (c) nothing beyond the role claim itself. Chosen.
- *
- *   The reasoning for (c): the null-Origin bucket ALREADY lets any local
- *   process claim `plugin`, which is strictly MORE power than `mcp` — a plugin
- *   socket replaces the real one (close code 4000) and can feed every attached
- *   browser tab a forged `data-loaded`. An `mcp` socket can do neither. So
- *   admitting `mcp` from a null Origin adds no capability that was not already
- *   reachable from the same position, and the threat model is unchanged: a
- *   hostile WEB PAGE still cannot claim `mcp`, because a browser sets Origin
- *   itself and cannot make it null for a WebSocket.
- *
- *   What DOES have to hold, and is enforced below rather than assumed: a socket
- *   that claimed `mcp` can never become the plugin socket, and never reaches a
- *   client. The distinction between the two null-Origin roles is therefore not
- *   a security boundary — it is a capability floor. If a real boundary is ever
- *   wanted here, it needs authentication for ALL roles, and the place to start
- *   is that the Figma iframe cannot hold a secret either.
- *
- *   The consequence worth stating plainly: stage 1 lets any NON-BROWSER client
- *   (curl, a script) reach stage 2 and claim `plugin`, because a non-browser
- *   client can simply omit Origin. That is accepted — it is the same "local
- *   code execution" case as forging Origin. What the check does buy is the
- *   thing that actually matters: a hostile WEB PAGE is blocked, because a
- *   browser always sets Origin to that page's real origin and cannot make it
- *   null for a WebSocket.
- *
- * No tokens, no other auth — deliberately out of scope. Loopback, dev machine.
+ * WHAT REMAINS ACCEPTED: local code execution. A process running as the user
+ * can read the token and the trusted list, forge any Origin, and drive the
+ * relay. That position already owns the user's files and browser profile.
+ * A user who approves a hostile page's code instead of their plugin's is also
+ * not protected against — the code on screen is the defence.
  */
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { WebSocketServer } from 'ws';
 
 export const DEFAULT_PORT = 9337;
 export const HOST = '127.0.0.1'; // loopback ONLY — see threat model above
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 const HELLO_TIMEOUT_MS = 10_000;
 const HEARTBEAT_MS = 30_000;
+/** How long an unknown plugin waits for a human before it is closed (4004). */
+export const PAIRING_TIMEOUT_MS = 60_000;
 
 /** The vite dev server's origin. Allowed only in dev mode — see threat model. */
 const VITE_DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
@@ -239,11 +244,68 @@ const VITE_DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 /** Hostnames that may appear in Host / Origin. Loopback spellings only. */
 const LOOPBACK_HOSTNAMES = ['127.0.0.1', 'localhost'];
 
-/** Close codes (4000-4999 is the application-private range). */
-const CLOSE_REPLACED = 4000;
-const CLOSE_POLICY = 4001;
+/** Close codes (4000-4999 is the application-private range). See PROTOCOL. */
+export const CLOSE_REPLACED = 4000;
+export const CLOSE_POLICY = 4001;
 /** Protocol version mismatch. Distinct from POLICY: retrying can never fix it. */
 export const CLOSE_VERSION = 4002;
+export const CLOSE_PAIRING_DENIED = 4003;
+export const CLOSE_PAIRING_TIMEOUT = 4004;
+/** Another plugin is already waiting for pairing. Retrying later can work. */
+export const CLOSE_PAIRING_BUSY = 4005;
+
+/** A plugin key: 128 bits or more of hex. Upper bound only to refuse junk. */
+export const PLUGIN_KEY_RE = /^[0-9a-f]{32,128}$/i;
+
+export const MCP_TOKEN_FILE = 'mcp-token';
+export const TRUSTED_PLUGINS_FILE = 'trusted-plugins.json';
+
+/** Where the relay keeps its secrets: option, then WINDEN_TOKENS_HOME, then ~/.winden-tokens. */
+export function resolveHome(home) {
+  return home || process.env.WINDEN_TOKENS_HOME || join(homedir(), '.winden-tokens');
+}
+
+export function mcpTokenPath(home) {
+  return join(resolveHome(home), MCP_TOKEN_FILE);
+}
+
+/** The token the running relay wrote, or null if there is none (relay not running). */
+export function readMcpToken(home) {
+  try {
+    return readFileSync(mcpTokenPath(home), 'utf8').trim() || null;
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+function sha256(text) {
+  return createHash('sha256').update(text, 'utf8').digest();
+}
+
+/** What trusted-plugins.json stores for a key: never the key itself. */
+export function hashPluginKey(pluginKey) {
+  return sha256(pluginKey.toLowerCase()).toString('hex');
+}
+
+/** Crockford base32 — no I, L, O, U, so the code reads aloud unambiguously. */
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** The 6-character pairing code shown in the plugin window and in every tab. */
+export function pairingCode(pluginKey) {
+  const bits = sha256(pluginKey.toLowerCase()).readUInt32BE(0) >>> 2; // top 30 bits
+  let code = '';
+  for (let i = 5; i >= 0; i--) code += CODE_ALPHABET[(bits >>> (i * 5)) & 31];
+  return code;
+}
+
+/** Write a 0600 file atomically: a reader never sees a half-written secret. */
+function writeSecretFile(path, content) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  rmSync(tmp, { force: true });
+  writeFileSync(tmp, content, { mode: 0o600, flag: 'wx' });
+  renameSync(tmp, path);
+}
 
 const BODY_403 = 'Forbidden — the Winden Tokens bridge relay answers loopback requests only.\n';
 
@@ -255,9 +317,25 @@ const BODY_403 = 'Forbidden — the Winden Tokens bridge relay answers loopback 
  * @param {boolean} [options.dev]    Also allow the vite dev origin as a client.
  * @param {string|null} [options.uiFile] Absolute path to the single-file UI to
  *        serve at `/`. `null` serves a 404 with an explanation instead.
- * @returns {Promise<{ port:number, url:string, close:() => Promise<void> }>}
+ * @param {string} [options.home] Directory for the mcp token and the trusted
+ *        plugin list. Defaults to WINDEN_TOKENS_HOME, then ~/.winden-tokens.
+ * @param {number} [options.pairingTimeoutMs] How long an unknown plugin waits.
+ * @returns {Promise<{ port:number, url:string, home:string, mcpTokenFile:string, close:() => Promise<void> }>}
  */
-export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } = {}) {
+export function startRelay({
+  port = DEFAULT_PORT,
+  dev = false,
+  uiFile = null,
+  home,
+  pairingTimeoutMs = PAIRING_TIMEOUT_MS,
+} = {}) {
+  const homeDir = resolveHome(home);
+  const tokenFile = join(homeDir, MCP_TOKEN_FILE);
+  const trustedFile = join(homeDir, TRUSTED_PLUGINS_FILE);
+  /** Fresh per start; written to `tokenFile` once the port is ours. */
+  const mcpToken = randomBytes(32).toString('hex');
+  const mcpTokenHash = sha256(mcpToken);
+
   /**
    * Origins a socket may claim `role: 'client'` from.
    * Built per-relay because the relay's own origin depends on --port.
@@ -308,13 +386,54 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
    * @type {Set<import('ws').WebSocket>}
    */
   const mcpSockets = new Set();
+  /**
+   * The one plugin socket waiting for a human to approve its key, or null.
+   * See PROTOCOL (5).
+   * @type {{ ws: import('ws').WebSocket, hash: string, code: string, timer: any } | null}
+   */
+  let pending = null;
 
   let seq = 0; // monotonic socket id, for readable logs
   const counts = { toClients: 0, toPlugin: 0, dropped: 0 };
 
   /** Every socket the relay currently holds, in one place. */
   function allSockets() {
-    return [pluginSocket, ...clientSockets, ...mcpSockets].filter(Boolean);
+    return [pluginSocket, pending?.ws, ...clientSockets, ...mcpSockets].filter(Boolean);
+  }
+
+  // -------------------------------------------------------------------------
+  // Secrets — the mcp token and the trusted plugin list. See threat model (4).
+  // -------------------------------------------------------------------------
+
+  function ensureHome() {
+    mkdirSync(homeDir, { recursive: true, mode: 0o700 });
+    const mode = statSync(homeDir).mode & 0o777;
+    if (mode & 0o077) {
+      warn('SECRETS', `${homeDir} is mode ${mode.toString(8)} — other users can list it. Its files are 0600 regardless; chmod 700 it to be sure.`);
+    }
+  }
+
+  function mcpTokenValid(given) {
+    if (typeof given !== 'string' || given === '') return false;
+    // Equal-length digests, so timingSafeEqual never throws and leaks no length.
+    return timingSafeEqual(sha256(given), mcpTokenHash);
+  }
+
+  function readTrusted() {
+    try {
+      const list = JSON.parse(readFileSync(trustedFile, 'utf8'));
+      return Array.isArray(list) ? list.filter((h) => typeof h === 'string') : [];
+    } catch (err) {
+      if (err.code !== 'ENOENT') warn('PAIR', `could not read ${trustedFile} (${err.message}) — treating it as empty`);
+      return [];
+    }
+  }
+
+  function trust(hash) {
+    const list = readTrusted();
+    if (!list.includes(hash)) list.push(hash);
+    ensureHome();
+    writeSecretFile(trustedFile, JSON.stringify(list, null, 2) + '\n');
   }
 
   // -------------------------------------------------------------------------
@@ -499,6 +618,23 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
         return;
       }
 
+      if (meta.pending) {
+        counts.dropped++;
+        warn('DROP', `plugin  socket #${meta.id} is waiting for pairing — its '${frame.kind}' frame is dropped`);
+        return;
+      }
+
+      // `kind: 'status'` from a peer is addressed to the relay, never forwarded.
+      // The only one it understands is a client's pairing answer.
+      if (frame.kind === 'status' && meta.role !== 'plugin') {
+        if (meta.role === 'client') handlePairingAnswer(ws, frame);
+        else {
+          counts.dropped++;
+          warn('DROP', `${meta.role} #${meta.id} sent a status frame — only a client may answer a pairing request`);
+        }
+        return;
+      }
+
       // Forward the ORIGINAL bytes. The relay does not re-serialise payload.
       // Both non-plugin roles route the same way: towards the plugin, and
       // nowhere else. That is the whole of "an mcp socket cannot reach a tab".
@@ -512,7 +648,10 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
     ws.on('close', (code, reasonBuf) => {
       clearTimeout(helloTimer);
       const reason = reasonBuf?.toString() || 'none';
-      if (meta.role === 'plugin' && pluginSocket === ws) {
+      if (pending && pending.ws === ws) {
+        log('CLOSE', `pending plugin socket #${meta.id} went away before anyone answered (code ${code}, reason: ${reason})`);
+        endPairing(false, 'closed');
+      } else if (meta.role === 'plugin' && pluginSocket === ws) {
         pluginSocket = null;
         log('CLOSE', `plugin  socket #${meta.id} disconnected (code ${code}, reason: ${reason})`);
         log('NOTIFY', `telling ${clientSockets.size} client(s) and ${mcpSockets.size} mcp socket(s): plugin is gone`);
@@ -576,27 +715,41 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
       return;
     }
 
-    clearTimeout(helloTimer);
-    meta.role = claimed;
-
-    if (claimed === 'plugin') {
-      if (pluginSocket && pluginSocket !== ws) {
-        const old = pluginSocket;
-        log('REPLACE', `plugin socket #${old._bridge.id} replaced by #${meta.id} (Figma reloaded the plugin) — closing the old one`);
-        // Clear first: the old socket's 'close' handler must not see itself as
-        // the current plugin, or it would broadcast a spurious plugin-disconnected.
-        pluginSocket = null;
-        closeWith(old, CLOSE_REPLACED, 'replaced by a newer plugin connection');
-      }
-      pluginSocket = ws;
-      log('HELLO', `plugin  socket #${meta.id} identified (Origin: ${meta.originLabel}) — ${clientSockets.size} client(s) attached`);
-      log('NOTIFY', `telling ${clientSockets.size} client(s) and ${mcpSockets.size} mcp socket(s): plugin is here`);
-      broadcastToPeers(status('bridge/plugin-connected'));
-      if (clientSockets.size > 0) {
-        sendToPlugin(status('bridge/client-attached', { clients: clientSockets.size }));
-      }
+    // Authenticate the null-Origin roles. See threat model (4).
+    if (claimed === 'mcp' && !mcpTokenValid(frame.payload?.token)) {
+      warn('REJECT', `socket #${meta.id} claimed 'mcp' without the right token (${tokenFile}) — closing`);
+      closeWith(ws, CLOSE_POLICY, 'mcp token missing or wrong');
       return;
     }
+
+    if (claimed === 'plugin') {
+      const key = frame.payload?.pluginKey;
+      if (typeof key !== 'string' || !PLUGIN_KEY_RE.test(key)) {
+        warn('REJECT', `socket #${meta.id} claimed 'plugin' without a valid pluginKey — closing`);
+        closeWith(ws, CLOSE_POLICY, 'pluginKey missing or malformed');
+        return;
+      }
+      const hash = hashPluginKey(key);
+      if (!readTrusted().includes(hash)) {
+        if (pending) {
+          warn('PAIR', `socket #${meta.id} has an unknown key, but plugin #${pending.ws._bridge.id} is already waiting for pairing — closing`);
+          closeWith(ws, CLOSE_PAIRING_BUSY, 'another plugin is waiting for pairing');
+          return;
+        }
+        clearTimeout(helloTimer);
+        meta.role = 'plugin';
+        meta.pending = true;
+        startPairing(ws, hash, pairingCode(key));
+        return;
+      }
+      clearTimeout(helloTimer);
+      meta.role = 'plugin';
+      promotePlugin(ws);
+      return;
+    }
+
+    clearTimeout(helloTimer);
+    meta.role = claimed;
 
     if (claimed === 'mcp') {
       mcpSockets.add(ws);
@@ -635,6 +788,86 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
     // Tell the new client where things stand, so it can show "lost the document"
     // rather than waiting forever.
     send(ws, status(pluginSocket ? 'bridge/plugin-connected' : 'bridge/plugin-disconnected'));
+    // ...and that a plugin is waiting for someone to approve it.
+    if (pending) send(ws, status('bridge/pairing-request', { code: pending.code }));
+  }
+
+  /** A trusted plugin socket takes over. Figma reloads often: newest wins. */
+  function promotePlugin(ws) {
+    const meta = ws._bridge;
+    if (pluginSocket && pluginSocket !== ws) {
+      const old = pluginSocket;
+      log('REPLACE', `plugin socket #${old._bridge.id} replaced by #${meta.id} (Figma reloaded the plugin) — closing the old one`);
+      // Clear first: the old socket's 'close' handler must not see itself as
+      // the current plugin, or it would broadcast a spurious plugin-disconnected.
+      pluginSocket = null;
+      closeWith(old, CLOSE_REPLACED, 'replaced by a newer plugin connection');
+    }
+    pluginSocket = ws;
+    log('HELLO', `plugin  socket #${meta.id} identified (Origin: ${meta.originLabel}) — ${clientSockets.size} client(s) attached`);
+    log('NOTIFY', `telling ${clientSockets.size} client(s) and ${mcpSockets.size} mcp socket(s): plugin is here`);
+    broadcastToPeers(status('bridge/plugin-connected'));
+    if (clientSockets.size > 0) {
+      sendToPlugin(status('bridge/client-attached', { clients: clientSockets.size }));
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Pairing — PROTOCOL (5)
+  // -------------------------------------------------------------------------
+
+  function startPairing(ws, hash, code) {
+    const meta = ws._bridge;
+    pending = { ws, hash, code, timer: setTimeout(() => endPairing(false, 'timeout'), pairingTimeoutMs) };
+    pending.timer.unref?.();
+    log('PAIR', `plugin  socket #${meta.id} has an unknown key — waiting up to ${pairingTimeoutMs / 1000}s for approval in a browser tab. Code: ${code}`);
+    if (clientSockets.size === 0) warn('PAIR', `no browser tab is open to approve it — open ${HOST}:${port}`);
+    send(ws, status('bridge/pairing-pending', { code }));
+    broadcastToClients(status('bridge/pairing-request', { code }));
+  }
+
+  function handlePairingAnswer(ws, frame) {
+    const meta = ws._bridge;
+    const p = frame.payload;
+    if (!p || p.type !== 'bridge/pairing-answer' || typeof p.approve !== 'boolean') {
+      counts.dropped++;
+      warn('DROP', `client #${meta.id} sent a status frame that is not a pairing answer — ignored`);
+      return;
+    }
+    if (!pending || p.code !== pending.code) {
+      warn('PAIR', `client #${meta.id} answered code ${JSON.stringify(p.code)}, which is not the open request — ignored`);
+      return;
+    }
+    log('PAIR', `client #${meta.id} ${p.approve ? 'APPROVED' : 'DENIED'} plugin #${pending.ws._bridge.id} (code ${pending.code})`);
+    endPairing(p.approve, p.approve ? undefined : 'denied');
+  }
+
+  /** @param {'denied'|'timeout'|'closed'} [reason] when not approved */
+  function endPairing(approved, reason) {
+    const p = pending;
+    if (!p) return;
+    pending = null;
+    clearTimeout(p.timer);
+
+    if (approved) {
+      try {
+        trust(p.hash);
+      } catch (err) {
+        warn('PAIR', `could not save the approval to ${trustedFile} (${err.message}) — trusted for this session only`);
+      }
+      p.ws._bridge.pending = false;
+      send(p.ws, status('bridge/pairing-approved'));
+      promotePlugin(p.ws);
+      broadcastToClients(status('bridge/pairing-resolved', { approved: true }));
+      return;
+    }
+
+    if (reason === 'denied') closeWith(p.ws, CLOSE_PAIRING_DENIED, 'pairing denied');
+    if (reason === 'timeout') {
+      warn('PAIR', `plugin #${p.ws._bridge.id} was not approved within ${pairingTimeoutMs / 1000}s — closing`);
+      closeWith(p.ws, CLOSE_PAIRING_TIMEOUT, 'pairing timed out');
+    }
+    broadcastToClients(status('bridge/pairing-resolved', { approved: false, reason }));
   }
 
   /**
@@ -757,6 +990,14 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
    * of hanging; an MCP server that does not know would answer a tool call by
    * waiting out a timeout instead of saying the window is closed.
    */
+  /** A relay-authored status frame to browser tabs only (pairing is for humans). */
+  function broadcastToClients(frame) {
+    const raw = JSON.stringify(frame);
+    for (const client of clientSockets) {
+      if (client.readyState === client.OPEN) client.send(raw);
+    }
+  }
+
   function broadcastToPeers(frame) {
     const raw = JSON.stringify(frame);
     for (const peer of [...clientSockets, ...mcpSockets]) {
@@ -807,22 +1048,44 @@ export function startRelay({ port = DEFAULT_PORT, dev = false, uiFile = null } =
     });
 
     httpServer.listen(port, HOST, () => {
+      // The token is written only once the port is ours: a second relay that
+      // fails with EADDRINUSE must not rotate the running relay's token.
+      try {
+        ensureHome();
+        writeSecretFile(tokenFile, mcpToken + '\n');
+      } catch (err) {
+        clearInterval(heartbeat);
+        httpServer.close();
+        reject(new Error(`could not write the mcp token to ${tokenFile}: ${err.message}`));
+        return;
+      }
+
       log('READY', `bridge relay listening on http://${HOST}:${port} (loopback only)`);
       log('READY', uiFile ? `serving the browser UI from ${uiFile}` : 'no browser UI bundled — / returns 404');
       log('READY', `client Origins allowed: ${[...clientOrigins].join(', ')}`);
       if (dev) log('READY', 'DEV MODE — the vite dev origin is on the allowlist');
-      log('READY', `plugin role allowed only from a null/absent Origin (the Figma iframe)`);
-      log('READY', `mcp    role allowed only from a null/absent Origin (winden-tokens-mcp) — never becomes the plugin`);
+      log('READY', `plugin role: null/absent Origin + a pluginKey listed in ${trustedFile}, or approved in a tab`);
+      log('READY', `mcp    role: null/absent Origin + the token in ${tokenFile} — never becomes the plugin`);
       log('READY', `bridge protocol v${PROTOCOL_VERSION}`);
 
       resolve({
         port,
         url: `http://${HOST}:${port}/`,
+        home: homeDir,
+        mcpTokenFile: tokenFile,
         close() {
           log('BYE', `shutting down (${counts.toClients} frames to clients, ${counts.toPlugin} to plugin, ${counts.dropped} dropped)`);
           clearInterval(heartbeat);
+          if (pending) clearTimeout(pending.timer);
           for (const ws of allSockets()) {
             closeWith(ws, 1001, 'relay shutting down');
+          }
+          // Remove the token only if it is still ours — another relay on
+          // another port may have written its own since.
+          try {
+            if (readFileSync(tokenFile, 'utf8').trim() === mcpToken) rmSync(tokenFile, { force: true });
+          } catch {
+            /* already gone */
           }
           return new Promise((done) => {
             httpServer.close(() => done());

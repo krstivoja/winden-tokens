@@ -1,25 +1,26 @@
-// Tests for the dev browser bridge transport (src/ui/hooks/useBridge.ts).
+// Tests for the browser-tab bridge client (src/ui/hooks/useBridge.ts).
+// Client role only: the Figma side lives in src/ui/bridge/ (tests/ui/bridge/).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  BRIDGE_ENABLED,
+  BRIDGE_CLIENT_ENABLED,
   BRIDGE_EVENT_TAG,
   BRIDGE_CLOSE_VERSION,
   BRIDGE_URL,
   BridgeClient,
   bridge,
-  decodeEnvelope,
-  encodeEnvelope,
+  isBridgeClient,
   isInsideFigma,
   isSuppressedFromBrowser,
   relayUrlFromLocation,
   sendOverBridge,
   subscribeToBridgeMessages,
 } from '../../../src/ui/hooks/useBridge';
+import { encodeEnvelope } from '../../../src/ui/bridge/protocol';
 
 /** A relay-authored status frame, exactly as bridge/server.mjs sends it. */
 function relayStatus(type: string, extra?: Record<string, unknown>): string {
-  return JSON.stringify({ v: 1, role: 'relay', kind: 'status', payload: { type, ...extra } });
+  return JSON.stringify({ v: 2, role: 'relay', kind: 'status', payload: { type, ...extra } });
 }
 
 class FakeWebSocket {
@@ -87,34 +88,6 @@ function restoreParent(): void {
   }
 }
 
-describe('envelope encoding', () => {
-  it('encodes a hello without a payload key', () => {
-    expect(JSON.parse(encodeEnvelope('plugin', 'hello'))).toEqual({
-      v: 1,
-      role: 'plugin',
-      kind: 'hello',
-    });
-  });
-
-  it('round-trips an application message unchanged', () => {
-    const payload = { type: 'update-variable-value', id: 'VariableID:1:2', value: '#fff' };
-    const decoded = decodeEnvelope(encodeEnvelope('client', 'message', payload));
-
-    expect(decoded).toEqual({ v: 1, role: 'client', kind: 'message', payload });
-    // The existing plugin message object must survive verbatim.
-    expect(decoded!.payload).toEqual(payload);
-  });
-
-  it('rejects anything that is not a v1 envelope', () => {
-    expect(decodeEnvelope('not json')).toBeNull();
-    expect(decodeEnvelope(42)).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 2, role: 'plugin', kind: 'hello' }))).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 1, role: 'relay', kind: 'hello' }))).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 1, role: 'plugin', kind: 'bye' }))).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 1, role: 'plugin', kind: 'message' }))).toBeNull();
-  });
-});
-
 describe('environment detection', () => {
   afterEach(restoreParent);
 
@@ -123,7 +96,7 @@ describe('environment detection', () => {
     expect(isInsideFigma()).toBe(false);
   });
 
-  it('reports the plugin when the document is embedded in another window', () => {
+  it('reports Figma when the document is embedded in another window', () => {
     setParent({ postMessage: vi.fn() });
     expect(isInsideFigma()).toBe(true);
   });
@@ -131,8 +104,9 @@ describe('environment detection', () => {
 
 describe('build-time gate', () => {
   it('is compiled out under test/production, leaving no client and no socket', () => {
-    expect(BRIDGE_ENABLED).toBe(false);
+    expect(BRIDGE_CLIENT_ENABLED).toBe(false);
     expect(bridge).toBeNull();
+    expect(isBridgeClient()).toBe(false);
     expect(sendOverBridge({ type: 'refresh' })).toBe(false);
     expect(typeof subscribeToBridgeMessages(() => undefined)).toBe('function');
   });
@@ -152,19 +126,19 @@ describe('BridgeClient', () => {
   });
 
   it('says hello with its own role on connect', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
 
     const socket = FakeWebSocket.instances[0];
     expect(socket.url).toBe(BRIDGE_URL);
     socket.accept();
 
-    expect(socket.frames()[0]).toEqual({ v: 1, role: 'client', kind: 'hello' });
+    expect(socket.frames()[0]).toEqual({ v: 2, role: 'client', kind: 'hello' });
     client.stop();
   });
 
   it('queues browser messages sent before the relay answers, then flushes them', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
 
     expect(client.send({ type: 'ui-ready' })).toBe(false);
@@ -173,14 +147,14 @@ describe('BridgeClient', () => {
     socket.accept();
 
     expect(socket.frames()).toEqual([
-      { v: 1, role: 'client', kind: 'hello' },
-      { v: 1, role: 'client', kind: 'message', payload: { type: 'ui-ready' } },
+      { v: 2, role: 'client', kind: 'hello' },
+      { v: 2, role: 'client', kind: 'message', payload: { type: 'ui-ready' } },
     ]);
     client.stop();
   });
 
   it('delivers plugin frames to subscribers and re-emits them as tagged window messages', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     const seen: any[] = [];
     client.onPayload((payload) => seen.push(payload));
     const onWindowMessage = vi.fn();
@@ -201,69 +175,14 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  it('gives the browser its data back: a client hello makes the plugin re-request a refresh', () => {
-    const postMessage = vi.fn();
-    setParent({ postMessage });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-    const socket = FakeWebSocket.instances[0];
-    socket.accept();
-    socket.deliver(encodeEnvelope('client', 'hello'));
-
-    expect(postMessage.mock.calls.map((call) => call[0].pluginMessage.type)).toEqual([
-      'ui-ready',
-      'get-history-state',
-    ]);
-    expect(client.getStatus().peerAttached).toBe(true);
-
-    client.stop();
-  });
-
-  it('forwards browser commands into the Figma sandbox unchanged', () => {
-    const postMessage = vi.fn();
-    setParent({ postMessage });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-    const socket = FakeWebSocket.instances[0];
-    socket.accept();
-
-    const command = { type: 'bind-node-property', nodeId: '1:2', target: 'fill', variableId: 'V:1' };
-    socket.deliver(encodeEnvelope('client', 'message', command));
-
-    expect(postMessage).toHaveBeenCalledWith({ pluginMessage: command }, '*');
-    client.stop();
-  });
-
-  it('mirrors everything the sandbox posts to the plugin window', () => {
-    setParent({ postMessage: vi.fn() });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-    const socket = FakeWebSocket.instances[0];
-    socket.accept();
-
-    window.dispatchEvent(new MessageEvent('message', { data: { pluginMessage: { type: 'update-success' } } }));
-
-    expect(socket.frames().at(-1)).toEqual({
-      v: 1,
-      role: 'plugin',
-      kind: 'message',
-      payload: { type: 'update-success' },
-    });
-    client.stop();
-  });
-
-  it('keeps retrying in the plugin when nothing is listening, and stays silent', () => {
-    // The dev order is "open Figma, then start the relay". A plugin that gave
-    // up could only be recovered by reopening the plugin window.
-    setParent({ postMessage: vi.fn() });
+  it('keeps retrying when nothing is listening, and stays silent', () => {
+    // Opening the tab before `npx winden-tokens` is running must attach on its
+    // own once the relay starts, without a reload and without console noise.
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
-    const client = new BridgeClient('plugin');
+    const client = new BridgeClient();
     client.start();
 
     for (let i = 0; i < 10; i += 1) {
@@ -283,34 +202,8 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  it('attaches when the relay appears long after the plugin gave up under the old cap', () => {
-    setParent({ postMessage: vi.fn() });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-
-    // Well past the old 4-attempt / ~15s budget.
-    for (let i = 0; i < 12; i += 1) {
-      FakeWebSocket.instances.at(-1)!.refuse();
-      vi.advanceTimersByTime(60000);
-    }
-
-    // The relay finally starts.
-    FakeWebSocket.instances.at(-1)!.accept();
-
-    expect(client.getStatus().connected).toBe(true);
-    expect(FakeWebSocket.instances.at(-1)!.frames()[0]).toEqual({
-      v: 1,
-      role: 'plugin',
-      kind: 'hello',
-    });
-    client.stop();
-  });
-
   it('caps the cold backoff so retries stay one per 15s, not a storm', () => {
-    setParent({ postMessage: vi.fn() });
-
-    const client = new BridgeClient('plugin');
+    const client = new BridgeClient();
     client.start();
 
     for (let i = 0; i < 8; i += 1) {
@@ -329,24 +222,11 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  it('keeps retrying with backoff in the browser, where the relay is the only transport', () => {
-    const client = new BridgeClient('client');
-    client.start();
-
-    for (let i = 0; i < 8; i += 1) {
-      FakeWebSocket.instances.at(-1)!.refuse();
-      vi.advanceTimersByTime(60000);
-    }
-
-    expect(FakeWebSocket.instances.length).toBe(9);
-    client.stop();
-  });
-
   it('falls back to the browser preview mock when the first connect fails', () => {
     const inject = vi.fn();
     (window as any).__WINDEN_INJECT_MOCK__ = inject;
 
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     expect((window as any).__WINDEN_BRIDGE_ACTIVE__).toBe(true);
 
@@ -359,10 +239,11 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  it('reconnects indefinitely once the relay has been seen at least once', () => {
-    setParent({ postMessage: vi.fn() });
+  it('reconnects indefinitely once the relay has been seen, without falling back to mock data', () => {
+    const inject = vi.fn();
+    (window as any).__WINDEN_INJECT_MOCK__ = inject;
 
-    const client = new BridgeClient('plugin');
+    const client = new BridgeClient();
     client.start();
     FakeWebSocket.instances[0].accept();
     expect(client.getStatus().connected).toBe(true);
@@ -373,11 +254,14 @@ describe('BridgeClient', () => {
     }
 
     expect(FakeWebSocket.instances.length).toBe(7);
+    // The tab showed real data once; a lost relay must not swap in samples.
+    expect(inject).not.toHaveBeenCalled();
+
+    delete (window as any).__WINDEN_INJECT_MOCK__;
     client.stop();
   });
 
   it('never throws when the socket constructor is refused outright', () => {
-    setParent({ postMessage: vi.fn() });
     (globalThis as any).WebSocket = class {
       static readonly OPEN = 1;
       constructor() {
@@ -385,7 +269,7 @@ describe('BridgeClient', () => {
       }
     };
 
-    const client = new BridgeClient('plugin');
+    const client = new BridgeClient();
     expect(() => client.start()).not.toThrow();
     expect(client.send({ type: 'refresh' })).toBe(false);
     client.stop();
@@ -394,7 +278,7 @@ describe('BridgeClient', () => {
   // -- relay status frames (bug: the browser gave no sign the plugin was gone)
 
   it('tells a browser tab the plugin is gone, and that it came back', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
@@ -413,7 +297,7 @@ describe('BridgeClient', () => {
   });
 
   it('does not claim the relay is down before the first attempt resolves', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     expect(client.getStatus().probed).toBe(false);
 
@@ -424,7 +308,7 @@ describe('BridgeClient', () => {
   });
 
   it('marks itself probed as soon as the relay answers', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     FakeWebSocket.instances[0].accept();
 
@@ -432,28 +316,8 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  it('leaves headless mode when the last browser tab detaches', () => {
-    setParent({ postMessage: vi.fn() });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-    const socket = FakeWebSocket.instances[0];
-    socket.accept();
-
-    socket.deliver(relayStatus('bridge/client-attached', { clients: 1 }));
-    expect(client.getStatus().peerAttached).toBe(true);
-
-    socket.deliver(relayStatus('bridge/client-detached', { clients: 1 }));
-    expect(client.getStatus().peerAttached).toBe(true);
-
-    socket.deliver(relayStatus('bridge/client-detached', { clients: 0 }));
-    expect(client.getStatus().peerAttached).toBe(false);
-
-    client.stop();
-  });
-
   it('ignores a peer pretending to be the relay', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
@@ -462,7 +326,7 @@ describe('BridgeClient', () => {
     // Same payload, but claiming the plugin role: not the relay's frame.
     socket.deliver(
       JSON.stringify({
-        v: 1,
+        v: 2,
         role: 'plugin',
         kind: 'status',
         payload: { type: 'bridge/plugin-disconnected' },
@@ -473,73 +337,126 @@ describe('BridgeClient', () => {
     client.stop();
   });
 
-  // -- refresh coalescing (bug: frame amplification)
-
-  it('answers several attach cues with a single full refresh', () => {
-    const postMessage = vi.fn();
-    setParent({ postMessage });
-
-    const client = new BridgeClient('plugin');
+    it('ignores the plugin\'s own hello and anything that is not an app message', () => {
+    const client = new BridgeClient();
+    const seen: any[] = [];
+    client.onPayload((payload) => seen.push(payload));
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
 
-    // One tab attaching produces both cues; a second tab produces two more.
-    socket.deliver(encodeEnvelope('client', 'hello'));
-    socket.deliver(relayStatus('bridge/client-attached', { clients: 1 }));
-    socket.deliver(encodeEnvelope('client', 'hello'));
-    socket.deliver(relayStatus('bridge/client-attached', { clients: 2 }));
+    socket.deliver(encodeEnvelope('plugin', 'hello', { pluginKey: 'a'.repeat(32) }));
+    socket.deliver(encodeEnvelope('client', 'message', { type: 'refresh' }));
 
-    expect(postMessage.mock.calls.map((call) => call[0].pluginMessage.type)).toEqual([
-      'ui-ready',
-      'get-history-state',
-    ]);
-
+    expect(seen).toEqual([]);
     client.stop();
   });
 
-  it('refreshes again once the outstanding refresh has been answered', () => {
-    const postMessage = vi.fn();
-    setParent({ postMessage });
+  // -- pairing: an unknown Figma plugin window waits for approval in a tab
 
-    const client = new BridgeClient('plugin');
+  it('shows the pairing code the relay asks about', () => {
+    const client = new BridgeClient();
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
+    expect(client.getStatus().pairingCode).toBeNull();
 
-    socket.deliver(encodeEnvelope('client', 'hello'));
-    // The sandbox replies; the mirror sees it and clears the in-flight refresh.
-    window.dispatchEvent(
-      new MessageEvent('message', { data: { pluginMessage: { type: 'data-loaded', variables: [] } } })
-    );
-    socket.deliver(encodeEnvelope('client', 'hello'));
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 'K7Q2XD' }));
 
-    expect(postMessage.mock.calls.map((call) => call[0].pluginMessage.type)).toEqual([
-      'ui-ready',
-      'get-history-state',
-      'ui-ready',
-      'get-history-state',
-    ]);
-
+    expect(client.getStatus().pairingCode).toBe('K7Q2XD');
     client.stop();
   });
 
-  it('does not mirror frames the bridge itself re-emitted', () => {
-    setParent({ postMessage: vi.fn() });
+  it('approves with a client status frame naming the code, and hides the prompt', () => {
+    const client = new BridgeClient();
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 'K7Q2XD' }));
 
-    const client = new BridgeClient('plugin');
+    expect(client.answerPairing(true)).toBe(true);
+
+    expect(socket.frames().at(-1)).toEqual({
+      v: 2,
+      role: 'client',
+      kind: 'status',
+      payload: { type: 'bridge/pairing-answer', code: 'K7Q2XD', approve: true },
+    });
+    expect(client.getStatus().pairingCode).toBeNull();
+    client.stop();
+  });
+
+  it('denies with approve: false', () => {
+    const client = new BridgeClient();
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 'ABCDEF' }));
+
+    client.answerPairing(false);
+
+    expect(socket.frames().at(-1)).toEqual({
+      v: 2,
+      role: 'client',
+      kind: 'status',
+      payload: { type: 'bridge/pairing-answer', code: 'ABCDEF', approve: false },
+    });
+    client.stop();
+  });
+
+  it('sends nothing when there is no open request to answer', () => {
+    const client = new BridgeClient();
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
     const before = socket.sent.length;
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: { pluginMessage: { type: 'data-loaded' }, [BRIDGE_EVENT_TAG]: true },
-      })
-    );
+    expect(client.answerPairing(true)).toBe(false);
 
     expect(socket.sent.length).toBe(before);
+    client.stop();
+  });
+
+  it('clears the prompt when the relay resolves the request, whoever answered', () => {
+    const client = new BridgeClient();
+    const statuses: (string | null)[] = [];
+    client.onStatus((status) => statuses.push(status.pairingCode));
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 'K7Q2XD' }));
+    // Another tab approved it (or it timed out): this tab never answered.
+    socket.deliver(relayStatus('bridge/pairing-resolved', { approved: false, reason: 'timeout' }));
+
+    expect(client.getStatus().pairingCode).toBeNull();
+    expect(statuses.at(-1)).toBeNull();
+    client.stop();
+  });
+
+  it('drops a stale prompt when the relay goes away', () => {
+    const client = new BridgeClient();
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 'K7Q2XD' }));
+
+    socket.refuse();
+
+    expect(client.getStatus().pairingCode).toBeNull();
+    client.stop();
+  });
+
+  it('ignores a pairing request without a usable code', () => {
+    const client = new BridgeClient();
+    client.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.accept();
+
+    socket.deliver(relayStatus('bridge/pairing-request'));
+    socket.deliver(relayStatus('bridge/pairing-request', { code: 42 }));
+
+    expect(client.getStatus().pairingCode).toBeNull();
     client.stop();
   });
 });
@@ -617,7 +534,7 @@ describe('protocol version mismatch', () => {
   });
 
   it('stops retrying and surfaces the relay\'s own words', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
 
     const socket = FakeWebSocket.instances[0];
@@ -637,7 +554,7 @@ describe('protocol version mismatch', () => {
   });
 
   it('falls back to its own message when the relay gave no reason', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     FakeWebSocket.instances[0].accept();
     FakeWebSocket.instances[0].rejectWith(BRIDGE_CLOSE_VERSION);
@@ -647,7 +564,7 @@ describe('protocol version mismatch', () => {
   });
 
   it('keeps reconnecting for any other close code', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     FakeWebSocket.instances[0].accept();
     FakeWebSocket.instances[0].rejectWith(4001, 'no hello');
@@ -660,7 +577,7 @@ describe('protocol version mismatch', () => {
   });
 
   it('tells an attached tab that the OTHER half was turned away', () => {
-    const client = new BridgeClient('client');
+    const client = new BridgeClient();
     client.start();
     const socket = FakeWebSocket.instances[0];
     socket.accept();
@@ -681,15 +598,4 @@ describe('protocol version mismatch', () => {
     client.stop();
   });
 
-  it('reaches the plugin role too, not just the browser tab', () => {
-    setParent({ postMessage: vi.fn() });
-
-    const client = new BridgeClient('plugin');
-    client.start();
-    FakeWebSocket.instances[0].accept();
-    FakeWebSocket.instances[0].rejectWith(BRIDGE_CLOSE_VERSION, 'relay v1, you sent v2');
-
-    expect(client.getStatus().error).toBe('relay v1, you sent v2');
-    client.stop();
-  });
 });

@@ -15,13 +15,24 @@
       "name": "Open Winden Tokens"
     }
   ],
-  "ui": "dist/index.html",
+  "ui": {
+    "open": "dist/index.html",
+    "bridge": "dist/bridge.html"
+  },
+  "menu": [
+    {
+      "name": "Open Winden Tokens",
+      "command": "open"
+    },
+    {
+      "name": "Bridge to browser",
+      "command": "bridge"
+    }
+  ],
   "networkAccess": {
     "allowedDomains": [
-      "none"
-    ],
-    "devAllowedDomains": [
       "ws://localhost:9337"
-    ]
+    ],
+    "reasoning": "Optional: connects to the winden-tokens app the user runs on their own machine, to show this file in a browser tab. Loopback only, never a remote host."
   }
 }

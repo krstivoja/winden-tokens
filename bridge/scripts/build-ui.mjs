@@ -11,8 +11,8 @@
  *
  *   - It does not run the repo's `npm run build`. That writes `dist/index.html`,
  *     which is TRACKED and is the file Figma loads for a production plugin.
- *     Overwriting it with a VITE_BRIDGE=1 bundle would quietly put bridge code
- *     into the shipped plugin. This builds to a temp directory instead and
+ *     Overwriting it with a browser-mode bundle would quietly put the bridge
+ *     client into the shipped plugin. This builds to a temp directory instead and
  *     leaves `dist/` exactly as it found it.
  *
  *   - It does not trust the build. It asserts the copied HTML actually contains
@@ -48,18 +48,27 @@ if (!existsSync(VITE_BIN)) {
   die(`vite is not installed at ${VITE_BIN}. Run \`npm install\` in ${REPO_ROOT}.`);
 }
 
+/**
+ * The vite mode that compiles the browser-tab bridge client in. It must match
+ * BRIDGE_CLIENT_BUILD_MODE in src/ui/hooks/useBridge.ts, where
+ * `BRIDGE_CLIENT_ENABLED` is true only in vite dev and in this mode. That one
+ * constant is the whole mechanism: the default `production` build that Figma
+ * loads folds it to false and drops every WebSocket reference, and this build
+ * keeps them. (Not `bridge` — that mode builds the Figma-side bridge window.)
+ */
+const BROWSER_MODE = 'browser';
+
 const outDir = mkdtempSync(join(tmpdir(), 'winden-bridge-ui-'));
 
 try {
-  console.log(`  building the bridge UI (VITE_BRIDGE=1) → ${outDir}`);
+  console.log(`  building the bridge UI (--mode ${BROWSER_MODE}) → ${outDir}`);
 
   const build = spawnSync(
     process.execPath,
-    [VITE_BIN, 'build', '--outDir', outDir, '--emptyOutDir'],
+    [VITE_BIN, 'build', '--mode', BROWSER_MODE, '--outDir', outDir, '--emptyOutDir'],
     {
       cwd: REPO_ROOT,
       stdio: 'inherit',
-      env: { ...process.env, VITE_BRIDGE: '1' },
     }
   );
 
@@ -77,7 +86,7 @@ try {
   // The guarantee this whole script exists for.
   if (!html.includes('WebSocket')) {
     die(
-      'the built UI contains no WebSocket code, so VITE_BRIDGE did not take effect.\n' +
+      `the built UI contains no WebSocket code, so --mode ${BROWSER_MODE} did not compile the client in.\n` +
         '  Shipping it would serve a page that can never reach the relay.'
     );
   }

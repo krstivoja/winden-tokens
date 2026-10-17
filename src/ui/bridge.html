@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Winden Tokens Bridge</title>
+  <!--
+    The "Bridge to browser" window (src/ui/bridge/). Deliberately not Tailwind:
+    the whole window is one status line, and pulling in the app's stylesheet
+    would cost more than everything else here. Every color is a Figma theme
+    variable (the window opens with themeColors: true).
+  -->
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--figma-color-bg);
+      color: var(--figma-color-text);
+      font: 11px/16px Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    }
+    .bridge {
+      box-sizing: border-box;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+    }
+    .bridge-dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--figma-color-icon-tertiary);
+    }
+    .bridge[data-tone="ok"] .bridge-dot { background: var(--figma-color-icon-success); }
+    .bridge[data-tone="warn"] .bridge-dot { background: var(--figma-color-icon-warning); }
+    .bridge[data-tone="error"] .bridge-dot { background: var(--figma-color-icon-danger); }
+    .bridge[data-tone="pending"] .bridge-dot { background: var(--figma-color-icon-brand); animation: bridge-pulse 1.2s ease-in-out infinite; }
+    @keyframes bridge-pulse { 50% { opacity: 0.3; } }
+    @media (prefers-reduced-motion: reduce) {
+      .bridge[data-tone="pending"] .bridge-dot { animation: none; }
+    }
+    .bridge-text { flex: 1; min-width: 0; }
+    .bridge-title { margin: 0; font-weight: 600; }
+    .bridge-detail { margin: 2px 0 0; color: var(--figma-color-text-secondary); }
+    .bridge-detail code {
+      font: 600 11px/16px 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--figma-color-text);
+      padding: 0 4px;
+      border-radius: 2px;
+      background: var(--figma-color-bg-secondary);
+      white-space: nowrap;
+      user-select: all;
+    }
+    .bridge-retry {
+      flex: none;
+      font: inherit;
+      font-weight: 500;
+      height: 24px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      color: var(--figma-color-text-onbrand);
+      background: var(--figma-color-bg-brand);
+    }
+    .bridge-retry:hover { background: var(--figma-color-bg-brand-hover); }
+    .bridge-retry:focus-visible { outline: 2px solid var(--figma-color-border-selected); outline-offset: 1px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="bridge" class="bridge" data-tone="pending" role="status" aria-live="polite">
+    <span class="bridge-dot" aria-hidden="true"></span>
+    <div class="bridge-text">
+      <p id="bridge-title" class="bridge-title">Connecting…</p>
+      <p id="bridge-detail" class="bridge-detail" hidden>
+        <span id="bridge-detail-text"></span>
+        <code id="bridge-detail-code" hidden></code>
+      </p>
+    </div>
+    <button id="bridge-retry" class="bridge-retry" type="button" hidden>Retry</button>
+  </div>
+  <script type="module" src="./bridge/main.ts"></script>
+</body>
+</html>

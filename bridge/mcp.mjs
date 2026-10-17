@@ -67,11 +67,13 @@
  * ---------------------------------------------------------------------------
  *
  * - It never claims the `plugin` role. It says hello as `mcp`, a role the relay
- *   routes exactly like a browser tab and never promotes. See the PROTOCOL and
- *   THREAT MODEL blocks in ./server.mjs, which also record why `mcp` is allowed
- *   from the same null Origin as `plugin`.
- * - It labels its command frames `role: 'client'`. The plugin half speaks v1 and
- *   drops envelopes whose role it does not know, so an `mcp`-labelled command
+ *   routes exactly like a browser tab and never promotes. Its hello carries the
+ *   token the relay wrote to ~/.winden-tokens/mcp-token (WINDEN_TOKENS_HOME
+ *   overrides the directory), re-read on every connect because the relay
+ *   rotates it on every start. See the PROTOCOL and THREAT MODEL blocks in
+ *   ./server.mjs.
+ * - It labels its command frames `role: 'client'`. The plugin half knows only
+ *   the `plugin` and `client` roles and drops envelopes with any other, so an `mcp`-labelled command
  *   would be silently discarded by every plugin build in existence. The relay
  *   decides policy on the hello role, not on this label. See PROTOCOL (2b).
  * - No node binding (`bind-node-property`) and no `rename-group`. Both are
@@ -90,7 +92,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import { DEFAULT_PORT, HOST, PROTOCOL_VERSION } from './server.mjs';
+import { CLOSE_POLICY, DEFAULT_PORT, HOST, PROTOCOL_VERSION, mcpTokenPath, readMcpToken } from './server.mjs';
 import {
   collectionsOverview,
   deletionImpact,
@@ -155,6 +157,8 @@ const HELP = `
 
   Environment
     WINDEN_BRIDGE_PORT   same as --port
+    WINDEN_TOKENS_HOME   where to read the relay's token (default ~/.winden-tokens);
+                         must match the relay's
 
   Client config (Claude Desktop / Claude Code), one line:
 
@@ -261,6 +265,10 @@ async function preflight(port) {
     );
   }
 
+  if (!readMcpToken()) {
+    fail(missingTokenMessage(port));
+  }
+
   if (health.json.plugin !== true) {
     fail(
       `  winden-tokens-mcp cannot start: the bridge relay is running on ${HOST}:${port}, but no\n` +
@@ -273,6 +281,18 @@ async function preflight(port) {
   }
 
   return health.json;
+}
+
+function missingTokenMessage(port) {
+  return (
+    `  winden-tokens-mcp cannot start: there is no relay token at ${mcpTokenPath()}.\n\n` +
+    `  The relay writes that file every time it starts, and this server must send it.\n` +
+    `  Either the relay on ${HOST}:${port} is not running, it is an older version that\n` +
+    `  writes no token, or it runs with a different WINDEN_TOKENS_HOME. Start (or update)\n` +
+    `  the relay with the same environment:\n\n` +
+    `      winden-tokens --no-open\n\n` +
+    `  then start this server again.`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +323,20 @@ class RelayLink {
 
   connect() {
     return new Promise((resolve, reject) => {
+      // Re-read every time: the relay writes a fresh token on every start, so
+      // a reconnect after a relay restart needs the new one.
+      let token;
+      try {
+        token = readMcpToken();
+      } catch (err) {
+        reject(new Error(`could not read the relay token at ${mcpTokenPath()}: ${err.message}`));
+        return;
+      }
+      if (!token) {
+        reject(new Error(`no relay token at ${mcpTokenPath()} — is \`winden-tokens\` running?`));
+        return;
+      }
+
       // No Origin header: a Node client sends none, which is the condition the
       // relay reads as "not a browser" and the only one from which `mcp` may
       // be claimed at all.
@@ -322,7 +356,7 @@ class RelayLink {
             v: PROTOCOL_VERSION,
             role: 'mcp',
             kind: 'hello',
-            payload: { client: 'winden-tokens-mcp' },
+            payload: { client: 'winden-tokens-mcp', token },
           })
         );
         note(`attached to the relay at ws://${HOST}:${this.port} as role 'mcp'`);
@@ -343,6 +377,18 @@ class RelayLink {
         this.connected = false;
         this.pluginAttached = false;
         this.socket = null;
+
+        if (code === CLOSE_POLICY) {
+          // The relay refused our token. Retrying with the same file cannot
+          // help; the user has to line the two processes up.
+          this.fatal =
+            `The relay refused this server (${reason || 'policy'}). The token in ${mcpTokenPath()} is not the one ` +
+            `the running relay wrote — two relays, or a different WINDEN_TOKENS_HOME? Restart the relay, then this server.`;
+          note(this.fatal);
+          this.failWaiters(this.fatal);
+          if (!wasConnected) reject(new Error(this.fatal));
+          return;
+        }
 
         if (code === CLOSE_VERSION) {
           this.fatal =
@@ -1019,9 +1065,10 @@ async function main() {
   // /healthz already said the plugin is there; the relay confirms it on our
   // hello. Wait briefly for that frame so the first tool call does not race it.
   const deadline = Date.now() + 2_000;
-  while (!link.pluginAttached && Date.now() < deadline) {
+  while (!link.pluginAttached && !link.fatal && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 25));
   }
+  if (link.fatal) fail(`  winden-tokens-mcp cannot start: ${link.fatal}`);
   if (!link.pluginAttached) {
     fail(
       `  winden-tokens-mcp cannot start: the relay accepted this server, but then reported that no Figma\n` +

@@ -118,6 +118,8 @@ winden-tokens/
 │   │   ├── styles/                  # Styles
 │   │   │   └── main.css             # Tailwind @theme and base styles
 │   │   │
+│   │   ├── bridge.html              # Entry for the "Bridge to browser" window
+│   │   ├── bridge/                  # Bridge window (vanilla TS, no React): relay client, pairing, status
 │   │   ├── tailwind.plugin.css      # Plugin-specific Tailwind classes
 │   │   └── ui.tsx                   # React app entry point
 │   │
@@ -125,7 +127,8 @@ winden-tokens/
 │       └── (type files here)
 │
 ├── dist/                            # Build output (gitignored)
-│   ├── index.html                   # Bundled UI (single file)
+│   ├── index.html                   # Bundled app UI (single file, no network code)
+│   ├── bridge.html                  # Bundled bridge window (single file)
 │   └── code.js                      # Compiled plugin code
 │
 ├── node_modules/                    # Dependencies (gitignored)
@@ -229,6 +232,17 @@ ComponentName/
 └── index.ts                # Barrel export
 ```
 
+### `src/ui/bridge/`
+The "Bridge to browser" window, built from `src/ui/bridge.html` as a second vite entry (`vite build --mode bridge`).
+Vanilla TypeScript, no React.
+
+**Files:**
+- `main.ts` - Entry: wires the sandbox, the relay client and the status view
+- `client.ts` - WebSocket to the relay, retry with capped backoff
+- `key.ts` - Random plugin key kept in `figma.clientStorage`
+- `protocol.ts` - Wire envelope, roles, close codes, `BRIDGE_PROTOCOL_VERSION`
+- `state.ts` - Window phases, close-code handling, status text
+
 ### `src/ui/styles/`
 Tailwind configuration and base styles.
 
@@ -238,10 +252,11 @@ Tailwind configuration and base styles.
 ### `dist/`
 Build output (created by `npm run build`).
 
-**Gitignored:** Never commit these files.
+**Not tracked in git:** Never commit these files. Build locally (`npm run build`) before importing `manifest.json` into Figma.
 
 **Contents:**
-- `index.html` - Bundled UI (single file with inline CSS/JS)
+- `index.html` - Bundled app UI (single file with inline CSS/JS, no network code)
+- `bridge.html` - Bundled bridge window (single file, talks to the local relay)
 - `code.js` - Compiled plugin code
 
 ---
@@ -306,7 +321,9 @@ Figma plugin manifest (defines plugin metadata).
 - `name` - Plugin name
 - `id` - Unique plugin ID
 - `main` - Entry point (`dist/code.js`)
-- `ui` - UI file path (`dist/index.html`)
+- `ui` - UI file paths: `open` (`dist/index.html`) and `bridge` (`dist/bridge.html`)
+- `menu` - "Open Winden Tokens" and "Bridge to browser" commands
+- `networkAccess` - allows `ws://localhost:9337` for the bridge
 - `editorType` - `["figma"]`
 
 **Important:** Version must match `package.json`.
