@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -9,6 +9,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/ui/test/setup.ts'],
     css: true,
+    // Agent worktrees hold full copies of the repo; never run their tests here.
+    exclude: [...configDefaults.exclude, '.claude/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

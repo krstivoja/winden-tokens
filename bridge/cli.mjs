@@ -44,13 +44,17 @@ const HELP = `
   Environment
     WINDEN_BRIDGE_PORT   same as --port
     WINDEN_BRIDGE_DEV=1  same as --dev
+    WINDEN_TOKENS_HOME   where the mcp token and trusted plugins live
+                         (default ~/.winden-tokens)
 
   How to use it
     1. Run this command. It prints a URL and opens it.
-    2. Open the Winden Tokens plugin in Figma, on the file you want to work on.
-       The plugin window must stay open: it is the only thing that can talk to
-       the Figma API. It collapses to a status strip while the tab has the wheel.
-    3. The browser tab now shows that file, full size.
+    2. In Figma, on the file you want to work on, run the Winden Tokens
+       plugin's "Bridge to browser" command. Its small window must stay open:
+       it is the only thing that can talk to the Figma API.
+    3. The first time, the tab asks you to approve the plugin: check that the
+       6-character code matches the one in the plugin window, then Approve.
+    4. The browser tab now shows that file, full size.
 
   About --port
     The port is part of the contract, not a free choice. The Figma plugin can
@@ -68,8 +72,10 @@ const HELP = `
   Security
     The relay binds 127.0.0.1 only, and refuses any WebSocket whose Origin is
     not the page it served itself. A WebSocket handshake is not subject to
-    CORS, so that check is the only thing between a hostile page and your
-    Figma file. Do not widen it.
+    CORS, and any page can fake the Figma plugin's null Origin, so a plugin
+    must be paired once (approve its code in the tab) and the MCP server must
+    present the token the relay writes to ~/.winden-tokens/mcp-token.
+    Never approve a code you did not see in your own plugin window.
 `;
 
 function parseArgs(argv) {
@@ -204,10 +210,11 @@ async function main() {
   console.log(`\n  Winden Tokens bridge — protocol v${PROTOCOL_VERSION}`);
   console.log(`  UI:    ${relay.url}`);
   console.log(`  Relay: ws://${HOST}:${port}`);
+  console.log(`  MCP token: ${relay.mcpTokenFile} (read by winden-tokens-mcp; rotated each start)`);
   if (!uiFile) {
     console.log('\n  NOTE: no browser UI is bundled with this relay, so the URL above is empty.');
   }
-  console.log('\n  Now open the Winden Tokens plugin in Figma and leave that window open.');
+  console.log('\n  Now run "Bridge to browser" from the Winden Tokens plugin in Figma and leave that window open.');
   console.log('  Ctrl-C to stop.\n');
 
   if (opts.open && uiFile) openBrowser(relay.url);

@@ -135,43 +135,10 @@ Supports all Figma variable types:
 The same UI can run full-size in a browser tab, driving the Figma file you have open.
 Handy for the Relationships graph, which is cramped inside the plugin window.
 
-A small local relay (`winden-tokens`, in [bridge/](bridge/)) pairs the Figma plugin window with the browser tab and forwards messages between them.
-The plugin window must stay open: it is the only thing that can talk to the Figma API.
-While the tab is connected, the plugin window collapses to a status strip.
+A small local relay (`winden-tokens`, in [bridge/](bridge/)) pairs a small Figma plugin window with the browser tab and forwards messages between them.
+It is available in the Figma Community version, no dev build needed.
 
-> **Dev plugin only, for now.**
-> The manifest allows `ws://localhost:9337` only under `devAllowedDomains`, so only a plugin imported from `manifest.json` can reach the relay.
-> The Figma Community version cannot connect yet.
-
-### 1. Build a bridge-enabled plugin
-
-A plain `npm run build` contains no bridge code at all, so build with `VITE_BRIDGE=1`:
-
-```bash
-npm install
-VITE_BRIDGE=1 npm run build
-```
-
-On Windows PowerShell:
-
-```powershell
-$env:VITE_BRIDGE=1; npm run build
-```
-
-Then import `manifest.json` into Figma Desktop (see [Development / Local Install](#development--local-install)).
-
-`dist/index.html` is tracked in git.
-Do not commit a `VITE_BRIDGE=1` bundle; run a plain `npm run build` before committing.
-
-### 2. Start the relay
-
-From this checkout:
-
-```bash
-node bridge/cli.mjs
-```
-
-Or the published package, which works without the repo:
+### 1. Start the relay
 
 ```bash
 npx winden-tokens
@@ -179,27 +146,64 @@ npx winden-tokens
 
 It serves the UI at `http://127.0.0.1:9337/` and opens the browser there.
 Pass `--no-open` to skip opening the browser, or `--help` for all options.
-Do not change `--port` unless you also change `devAllowedDomains` in `manifest.json` and rebuild.
+From a checkout of this repo, `node bridge/cli.mjs` does the same.
+Do not change `--port` unless you also change `allowedDomains` in `manifest.json` and rebuild.
 
-### 3. Open the plugin in Figma
+### 2. Bridge from Figma
 
-Run Winden Tokens in Figma on the file you want.
-The browser tab fills with that file's variables.
+In Figma, on the file you want to work on, run **Plugins > Winden Tokens > Bridge to browser**.
+This opens a small status window.
+The full app is still **Open Winden Tokens**.
+
+Keep the bridge window open: it is the only thing that can talk to the Figma API.
 Order does not matter, both sides reconnect on their own.
 
-### Developing the UI against live Figma
+### 3. Approve the pairing (first time only)
+
+The first time, the browser tab shows a pairing request with a 6-character code.
+Check that it matches the code in the Figma bridge window, then click **Approve**.
+Only approve a code you see in your own Figma window.
+
+After that the plugin is trusted and the tab fills with that file's variables.
+Trusted plugins are stored as hashes in `~/.winden-tokens/trusted-plugins.json`.
+Delete an entry from that file to revoke it.
+
+### Troubleshooting
+
+- **"winden-tokens is not running"** in the bridge window: start `npx winden-tokens`.
+- **"Update winden-tokens"**: the plugin and the relay speak different protocol versions (the current one is v2).
+  Run `npx winden-tokens@latest`, or update the plugin in Figma.
+
+### Security
+
+The relay listens on `127.0.0.1` only.
+Web pages are blocked from acting as the browser tab by an Origin check.
+The Figma plugin and the MCP server connect with a null Origin, which any sandboxed iframe on any website can also send, so they cannot be told apart by Origin alone.
+That is why the plugin must be paired once, and the MCP server must present a token.
+
+### Developing the bridge from a checkout
+
+`dist/` is not tracked in git, so build it before importing `manifest.json` in Figma (see [Development / Local Install](#development--local-install)):
+
+```bash
+npm install
+npm run build
+```
+
+A plain `npm run build` emits two files from two vite builds (`--mode bridge` for the second): `dist/index.html` (the app, no network code) and `dist/bridge.html` (the bridge window).
+
+To work on the UI against live Figma:
 
 ```bash
 npm run dev:bridge
 ```
 
-Runs the relay in dev mode alongside vite.
+This runs the relay in dev mode alongside vite.
 Open `http://localhost:5173` (not port 9337) for hot reload against the open Figma file.
-The plugin in Figma still needs the `VITE_BRIDGE=1` build from step 1.
 
 ### Manage tokens from Claude (MCP)
 
-With the relay running and the plugin open, add the MCP server:
+With the relay running and the bridge window open in Figma, add the MCP server:
 
 ```bash
 npm install --prefix bridge
@@ -207,6 +211,8 @@ claude mcp add winden-tokens -- node "$(pwd)/bridge/mcp.mjs"
 ```
 
 With the published package, it is `claude mcp add winden-tokens -- npx -y -p winden-tokens winden-tokens-mcp`.
+The MCP server authenticates with a token the relay writes to `~/.winden-tokens/mcp-token` (mode 0600), so start the relay first.
+Set `WINDEN_TOKENS_HOME` to use another directory than `~/.winden-tokens`.
 See [specs/devnotes.md](specs/devnotes.md) for the tools it offers and the relay's security model.
 
 ## Usage

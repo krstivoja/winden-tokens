@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import {
-  BRIDGE_ENABLED,
   BRIDGE_EVENT_TAG,
+  isBridgeClient,
   isInsideFigma,
   isSuppressedFromBrowser,
   sendOverBridge,
@@ -44,12 +44,10 @@ export function usePluginMessages(handlers: MessageHandlers) {
 
 // Helper to send messages to the plugin
 export function post(msg: Record<string, unknown>): void {
-  if (isInsideFigma()) {
-    // Unchanged path: this is the only transport the shipped plugin uses.
+  // Inside Figma, or a bundle without the bridge client (a production build
+  // opened directly in a browser): the one and only pre-bridge transport.
+  if (isInsideFigma() || !isBridgeClient()) {
     parent.postMessage({ pluginMessage: msg }, '*');
-    // Mirrored so an attached browser tab sees what the plugin UI did.
-    // No-op when no relay is connected.
-    sendOverBridge(msg);
     return;
   }
 
@@ -60,13 +58,7 @@ export function post(msg: Record<string, unknown>): void {
   // `BROWSER_SUPPRESSED_MESSAGES` in useBridge.ts states the rule and lists
   // what it covers. Dropped before the queue, so a message held while the relay
   // is down cannot be delivered later either.
-  if (BRIDGE_ENABLED && isSuppressedFromBrowser(msg.type)) return;
+  if (isSuppressedFromBrowser(msg.type)) return;
 
-  if (sendOverBridge(msg)) return;
-
-  // Bridge compiled out (a production bundle opened directly in a browser):
-  // keep the exact pre-bridge behaviour.
-  if (!BRIDGE_ENABLED) {
-    parent.postMessage({ pluginMessage: msg }, '*');
-  }
+  sendOverBridge(msg);
 }

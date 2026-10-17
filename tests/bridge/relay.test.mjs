@@ -1,6 +1,7 @@
 // Tests for the bridge relay (bridge/server.mjs) as the `winden-tokens`
-// package runs it: serving the browser UI, and the Origin/Host/version checks
-// that are the only thing between a hostile page and the user's Figma file.
+// package runs it: serving the browser UI, and the Origin/Host/version checks,
+// the mcp token and plugin pairing that stand between a hostile page and the
+// user's Figma file.
 //
 // Real sockets on a real loopback port. The relay's whole job is the handshake,
 // and a mock of the handshake would test nothing.
@@ -8,14 +9,47 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { request } from 'node:http';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocket } from 'ws';
 
-import { startRelay, CLOSE_VERSION, PROTOCOL_VERSION } from '../../bridge/server.mjs';
+import {
+  startRelay,
+  CLOSE_VERSION,
+  CLOSE_POLICY,
+  CLOSE_PAIRING_DENIED,
+  CLOSE_PAIRING_TIMEOUT,
+  CLOSE_PAIRING_BUSY,
+  PROTOCOL_VERSION,
+  hashPluginKey,
+  pairingCode,
+  readMcpToken,
+} from '../../bridge/server.mjs';
 
 const UI_MARKER = '<html><body>winden tokens ui</body></html>';
+
+/** A plugin key the test relays already trust, and two they do not. */
+const TRUSTED_KEY = 'a'.repeat(32);
+const UNKNOWN_KEY = 'b'.repeat(32);
+const OTHER_UNKNOWN_KEY = 'c'.repeat(40);
+
+const homes = [];
+afterAll(() => homes.forEach((h) => rmSync(h, { recursive: true, force: true })));
+
+/** A fresh secrets dir per relay, so no test ever touches ~/.winden-tokens. */
+function tempHome({ trusted = [TRUSTED_KEY] } = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'winden-home-test-'));
+  homes.push(home);
+  if (trusted.length) {
+    writeFileSync(join(home, 'trusted-plugins.json'), JSON.stringify(trusted.map(hashPluginKey)));
+  }
+  return home;
+}
+
+const pluginHello = (pluginKey = TRUSTED_KEY) => ({ v: PROTOCOL_VERSION, role: 'plugin', kind: 'hello', payload: { pluginKey } });
+const mcpHello = (home) => ({ v: PROTOCOL_VERSION, role: 'mcp', kind: 'hello', payload: { token: readMcpToken(home) } });
+const statusOf = (frames) => frames.filter((f) => f.role === 'relay' && f.kind === 'status').map((f) => f.payload);
 
 /** An unused loopback port, so this suite never touches the dev relay's 9337. */
 function freePort() {
@@ -91,7 +125,7 @@ describe('bridge relay', () => {
 
     beforeAll(async () => {
       port = await freePort();
-      relay = await startRelay({ port, uiFile });
+      relay = await startRelay({ port, uiFile, home: tempHome() });
     });
     afterAll(() => relay.close());
 
@@ -128,7 +162,7 @@ describe('bridge relay', () => {
 
     beforeAll(async () => {
       port = await freePort();
-      relay = await startRelay({ port, uiFile });
+      relay = await startRelay({ port, uiFile, home: tempHome() });
     });
     afterAll(() => relay.close());
 
@@ -157,7 +191,7 @@ describe('bridge relay', () => {
     it("refuses a browser origin that claims role 'plugin'", async () => {
       const result = await handshake(port, {
         origin: `http://127.0.0.1:${port}`,
-        hello: { v: PROTOCOL_VERSION, role: 'plugin', kind: 'hello' },
+        hello: pluginHello(),
       });
       expect(result.closeCode).toBe(4001);
     });
@@ -176,7 +210,7 @@ describe('bridge relay', () => {
 
     beforeAll(async () => {
       port = await freePort();
-      relay = await startRelay({ port, uiFile, dev: true });
+      relay = await startRelay({ port, uiFile, dev: true, home: tempHome() });
     });
     afterAll(() => relay.close());
 
@@ -201,7 +235,7 @@ describe('bridge relay', () => {
 
     beforeAll(async () => {
       port = await freePort();
-      relay = await startRelay({ port, uiFile });
+      relay = await startRelay({ port, uiFile, home: tempHome() });
     });
     afterAll(() => relay.close());
 
@@ -256,10 +290,12 @@ describe('bridge relay', () => {
   describe('the mcp role', () => {
     let relay;
     let port;
+    let home;
 
     beforeAll(async () => {
       port = await freePort();
-      relay = await startRelay({ port, uiFile });
+      home = tempHome();
+      relay = await startRelay({ port, uiFile, home });
     });
     afterAll(() => relay.close());
 
@@ -269,14 +305,16 @@ describe('bridge relay', () => {
       const frames = [];
       ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
       await new Promise((resolve) => ws.on('open', resolve));
-      ws.send(JSON.stringify({ v: PROTOCOL_VERSION, role, kind: 'hello' }));
+      const hello =
+        role === 'plugin' ? pluginHello() : role === 'mcp' ? mcpHello(home) : { v: PROTOCOL_VERSION, role, kind: 'hello' };
+      ws.send(JSON.stringify(hello));
       await new Promise((r) => setTimeout(r, 120));
       return { ws, frames };
     }
 
     const settle = () => new Promise((r) => setTimeout(r, 120));
 
-    it("accepts 'mcp' from a null Origin, and tells it whether the plugin is there", async () => {
+    it("accepts 'mcp' with the relay's token, and tells it whether the plugin is there", async () => {
       const mcp = await attach('mcp');
       expect(mcp.ws.readyState).toBe(WebSocket.OPEN);
       expect(mcp.frames.at(-1)).toMatchObject({
@@ -290,7 +328,7 @@ describe('bridge relay', () => {
     it("refuses 'mcp' from a browser Origin — only a non-browser peer may claim it", async () => {
       const result = await handshake(port, {
         origin: `http://127.0.0.1:${port}`,
-        hello: { v: PROTOCOL_VERSION, role: 'mcp', kind: 'hello' },
+        hello: mcpHello(home),
       });
       expect(result.closeCode).toBe(4001);
       expect(result.closeReason).toContain("may only claim role 'client'");
@@ -372,6 +410,362 @@ describe('bridge relay', () => {
 
       mcp.ws.close();
       plugin.ws.close();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A null Origin proves nothing: any page can send it from
+  // <iframe sandbox="allow-scripts">. These are the regression tests for that
+  // hole — on protocol v1 both a token-less `mcp` and a key-less `plugin` from
+  // `Origin: null` were accepted. See THREAT MODEL (4) in bridge/server.mjs.
+  // -------------------------------------------------------------------------
+
+  describe('null Origin is authenticated (sandboxed-iframe hole)', () => {
+    let relay;
+    let port;
+    let home;
+
+    beforeAll(async () => {
+      port = await freePort();
+      home = tempHome();
+      relay = await startRelay({ port, uiFile, home });
+    });
+    afterAll(() => relay.close());
+
+    const health = async () => JSON.parse((await get(port, '/healthz')).body);
+
+    it("refuses 'mcp' from Origin: null with no token", async () => {
+      const result = await handshake(port, { origin: 'null', hello: { v: PROTOCOL_VERSION, role: 'mcp', kind: 'hello' } });
+      expect(result.closeCode).toBe(CLOSE_POLICY);
+      expect(result.closeReason).toBe('mcp token missing or wrong');
+    });
+
+    it("refuses 'mcp' with a wrong token, including one of the right length", async () => {
+      for (const token of ['nope', 'f'.repeat(64), 42]) {
+        const result = await handshake(port, { hello: { v: PROTOCOL_VERSION, role: 'mcp', kind: 'hello', payload: { token } } });
+        expect(result.closeCode).toBe(CLOSE_POLICY);
+      }
+      expect((await health()).mcp).toBe(0);
+    });
+
+    it("refuses 'plugin' from Origin: null with no key or a malformed one", async () => {
+      for (const payload of [undefined, {}, { pluginKey: 'abc' }, { pluginKey: 'z'.repeat(32) }, { pluginKey: 'a'.repeat(129) }]) {
+        const result = await handshake(port, { origin: 'null', hello: { v: PROTOCOL_VERSION, role: 'plugin', kind: 'hello', payload } });
+        expect(result.closeCode).toBe(CLOSE_POLICY);
+        expect(result.closeReason).toBe('pluginKey missing or malformed');
+      }
+      expect((await health()).plugin).toBe(false);
+    });
+
+    it('promotes a plugin whose key is trusted, with no prompt', async () => {
+      const result = await handshake(port, { origin: 'null', hello: pluginHello(TRUSTED_KEY.toUpperCase()) });
+      expect(result.stillOpen).toBe(true);
+      expect(statusOf(result.frames).map((p) => p.type)).not.toContain('bridge/pairing-pending');
+      expect((await health()).plugin).toBe(true);
+      result.ws.close();
+    });
+  });
+
+  describe('secrets on disk', () => {
+    it('writes a fresh 64-hex mcp token, 0600, in a 0700 dir it creates, and removes it on close', async () => {
+      const parent = tempHome({ trusted: [] });
+      const home = join(parent, 'nested', '.winden-tokens');
+      const port = await freePort();
+      const relay = await startRelay({ port, home });
+
+      const tokenFile = join(home, 'mcp-token');
+      expect(relay.mcpTokenFile).toBe(tokenFile);
+      expect(readMcpToken(home)).toMatch(/^[0-9a-f]{64}$/);
+      expect(statSync(tokenFile).mode & 0o777).toBe(0o600);
+      expect(statSync(home).mode & 0o777).toBe(0o700);
+
+      const first = readMcpToken(home);
+      await relay.close();
+      expect(existsSync(tokenFile)).toBe(false);
+
+      const again = await startRelay({ port: await freePort(), home });
+      expect(readMcpToken(home)).not.toBe(first);
+      await again.close();
+    });
+
+    it('takes its directory from WINDEN_TOKENS_HOME when no option is given', async () => {
+      const home = tempHome({ trusted: [] });
+      const before = process.env.WINDEN_TOKENS_HOME;
+      process.env.WINDEN_TOKENS_HOME = home;
+      try {
+        const relay = await startRelay({ port: await freePort() });
+        expect(relay.home).toBe(home);
+        expect(readMcpToken()).toBe(readMcpToken(home));
+        await relay.close();
+      } finally {
+        if (before === undefined) delete process.env.WINDEN_TOKENS_HOME;
+        else process.env.WINDEN_TOKENS_HOME = before;
+      }
+    });
+
+    it('does not rotate the running relay\'s token when a second one fails to bind', async () => {
+      const home = tempHome({ trusted: [] });
+      const port = await freePort();
+      const relay = await startRelay({ port, home });
+      const token = readMcpToken(home);
+      await expect(startRelay({ port, home })).rejects.toMatchObject({ code: 'EADDRINUSE' });
+      expect(readMcpToken(home)).toBe(token);
+      await relay.close();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Pairing — PROTOCOL (5). An unknown key waits for a browser tab (a role a
+  // hostile page cannot hold) to approve it.
+  // -------------------------------------------------------------------------
+
+  describe('plugin pairing', () => {
+    const settle = (ms = 120) => new Promise((r) => setTimeout(r, ms));
+
+    async function boot({ pairingTimeoutMs } = {}) {
+      const port = await freePort();
+      const home = tempHome();
+      const relay = await startRelay({ port, uiFile, home, pairingTimeoutMs });
+      return { port, home, relay };
+    }
+
+    /** An open socket with everything it received and how it closed. */
+    async function attach(port, hello, { origin } = {}) {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, origin ? { origin } : {});
+      const peer = { ws, frames: [], closed: null };
+      ws.on('message', (data) => peer.frames.push(JSON.parse(data.toString())));
+      ws.on('close', (code, reason) => (peer.closed = { code, reason: reason.toString() }));
+      ws.on('error', () => {});
+      await new Promise((resolve) => ws.on('open', resolve));
+      ws.send(JSON.stringify(hello));
+      await settle();
+      return peer;
+    }
+
+    const clientHello = { v: PROTOCOL_VERSION, role: 'client', kind: 'hello' };
+    const attachClient = (port) => attach(port, clientHello, { origin: `http://127.0.0.1:${port}` });
+    const answer = (client, code, approve) =>
+      client.ws.send(
+        JSON.stringify({ v: PROTOCOL_VERSION, role: 'client', kind: 'status', payload: { type: 'bridge/pairing-answer', code, approve } })
+      );
+    const health = async (port) => JSON.parse((await get(port, '/healthz')).body);
+    const trustedOnDisk = (home) => JSON.parse(readFileSync(join(home, 'trusted-plugins.json'), 'utf8'));
+
+    it('holds an unknown key PENDING: it is shown a code, tabs are asked, nothing else happens', async () => {
+      const { port, relay } = await boot();
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      const code = pairingCode(UNKNOWN_KEY);
+
+      expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{6}$/);
+      expect(pending.closed).toBeNull();
+      expect(pending.frames).toEqual([
+        { v: PROTOCOL_VERSION, role: 'relay', kind: 'status', payload: { type: 'bridge/pairing-pending', code } },
+      ]);
+      expect(statusOf(client.frames)).toContainEqual({ type: 'bridge/pairing-request', code });
+      expect(await health(port)).toMatchObject({ plugin: false });
+
+      // Its frames reach no tab: no forged `data-loaded`.
+      const seen = client.frames.length;
+      pending.ws.send(JSON.stringify({ v: PROTOCOL_VERSION, role: 'plugin', kind: 'message', payload: { type: 'data-loaded', variables: [] } }));
+      await settle();
+      expect(client.frames.slice(seen)).toEqual([]);
+
+      pending.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('cannot replace the real plugin, which keeps receiving tab commands', async () => {
+      const { port, relay } = await boot();
+      const real = await attach(port, pluginHello(TRUSTED_KEY), { origin: 'null' });
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+
+      expect(real.closed).toBeNull();
+      expect(await health(port)).toMatchObject({ plugin: true });
+
+      const seenReal = real.frames.length;
+      const seenPending = pending.frames.length;
+      client.ws.send(JSON.stringify({ v: PROTOCOL_VERSION, role: 'client', kind: 'message', payload: { type: 'refresh' } }));
+      await settle();
+      expect(real.frames.slice(seenReal).map((f) => f.payload?.type)).toEqual(['refresh']);
+      expect(pending.frames.slice(seenPending)).toEqual([]);
+
+      pending.ws.close();
+      real.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('tells a tab that attaches later about the open request', async () => {
+      const { port, relay } = await boot();
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      const client = await attachClient(port);
+      expect(statusOf(client.frames)).toEqual([
+        { type: 'bridge/plugin-disconnected' },
+        { type: 'bridge/pairing-request', code: pairingCode(UNKNOWN_KEY) },
+      ]);
+      pending.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('rejects a second unknown key while one is pending', async () => {
+      const { port, relay } = await boot();
+      const client = await attachClient(port);
+      const first = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      const second = await attach(port, pluginHello(OTHER_UNKNOWN_KEY), { origin: 'null' });
+
+      expect(second.closed).toEqual({ code: CLOSE_PAIRING_BUSY, reason: 'another plugin is waiting for pairing' });
+      expect(first.closed).toBeNull();
+      // Only one prompt ever reached the tab.
+      expect(statusOf(client.frames).filter((p) => p.type === 'bridge/pairing-request')).toHaveLength(1);
+
+      first.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('approve: persists the hash (0600, never the key), promotes the plugin, and a reconnect skips the prompt', async () => {
+      const { port, home, relay } = await boot();
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      const code = pairingCode(UNKNOWN_KEY);
+      const seenClient = client.frames.length;
+
+      answer(client, code, true);
+      await settle();
+
+      // The plugin: approved, then the normal flow — the tab is already here.
+      expect(statusOf(pending.frames).map((p) => p.type)).toEqual([
+        'bridge/pairing-pending',
+        'bridge/pairing-approved',
+        'bridge/client-attached',
+      ]);
+      expect(statusOf(client.frames.slice(seenClient))).toEqual([
+        { type: 'bridge/plugin-connected' },
+        { type: 'bridge/pairing-resolved', approved: true },
+      ]);
+      expect(await health(port)).toMatchObject({ plugin: true });
+
+      // Now a real plugin: its frames reach the tab, and the tab's reach it.
+      pending.ws.send(JSON.stringify({ v: PROTOCOL_VERSION, role: 'plugin', kind: 'message', payload: { type: 'data-loaded' } }));
+      await settle();
+      expect(client.frames.at(-1).payload).toEqual({ type: 'data-loaded' });
+
+      const file = join(home, 'trusted-plugins.json');
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+      expect(trustedOnDisk(home)).toContain(hashPluginKey(UNKNOWN_KEY));
+      expect(readFileSync(file, 'utf8')).not.toContain(UNKNOWN_KEY);
+
+      pending.ws.close();
+      await settle();
+      const again = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      expect(statusOf(again.frames).map((p) => p.type)).not.toContain('bridge/pairing-pending');
+      expect(await health(port)).toMatchObject({ plugin: true });
+
+      again.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('deny: closes the plugin with 4003, tells the tabs, trusts nothing', async () => {
+      const { port, home, relay } = await boot();
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+
+      answer(client, pairingCode(UNKNOWN_KEY), false);
+      await settle();
+
+      expect(pending.closed).toEqual({ code: CLOSE_PAIRING_DENIED, reason: 'pairing denied' });
+      expect(statusOf(client.frames).at(-1)).toEqual({ type: 'bridge/pairing-resolved', approved: false, reason: 'denied' });
+      expect(trustedOnDisk(home)).not.toContain(hashPluginKey(UNKNOWN_KEY));
+
+      // The slot is free again for the next request.
+      const next = await attach(port, pluginHello(OTHER_UNKNOWN_KEY), { origin: 'null' });
+      expect(next.closed).toBeNull();
+      next.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('timeout: closes the plugin with 4004 and tells the tabs', async () => {
+      const { port, relay } = await boot({ pairingTimeoutMs: 150 });
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      await settle(250);
+
+      expect(pending.closed).toEqual({ code: CLOSE_PAIRING_TIMEOUT, reason: 'pairing timed out' });
+      expect(statusOf(client.frames).at(-1)).toEqual({ type: 'bridge/pairing-resolved', approved: false, reason: 'timeout' });
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('a pending plugin that leaves resolves the request as not approved', async () => {
+      const { port, relay } = await boot();
+      const client = await attachClient(port);
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      pending.ws.close();
+      await settle();
+      expect(statusOf(client.frames).at(-1)).toEqual({ type: 'bridge/pairing-resolved', approved: false, reason: 'closed' });
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('ignores an answer with the wrong code, from a non-client, or with no request open', async () => {
+      const { port, home, relay } = await boot();
+      const client = await attachClient(port);
+
+      answer(client, 'ABCDEF', true); // nothing pending: must not pre-approve the next one
+      await settle();
+
+      const pending = await attach(port, pluginHello(UNKNOWN_KEY), { origin: 'null' });
+      answer(client, pairingCode(OTHER_UNKNOWN_KEY), true); // stale code
+      await settle();
+
+      // mcp sockets cannot answer — approving is a human's job in a tab.
+      const mcp = await attach(port, mcpHello(home));
+      mcp.ws.send(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          role: 'client',
+          kind: 'status',
+          payload: { type: 'bridge/pairing-answer', code: pairingCode(UNKNOWN_KEY), approve: true },
+        })
+      );
+      // Nor the pending plugin itself.
+      pending.ws.send(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          role: 'client',
+          kind: 'status',
+          payload: { type: 'bridge/pairing-answer', code: pairingCode(UNKNOWN_KEY), approve: true },
+        })
+      );
+      await settle();
+
+      expect(pending.closed).toBeNull();
+      expect(statusOf(pending.frames).map((p) => p.type)).toEqual(['bridge/pairing-pending']);
+      expect(await health(port)).toMatchObject({ plugin: false });
+
+      mcp.ws.close();
+      pending.ws.close();
+      client.ws.close();
+      await relay.close();
+    });
+
+    it('never forwards a client status frame to the plugin', async () => {
+      const { port, relay } = await boot();
+      const plugin = await attach(port, pluginHello(TRUSTED_KEY), { origin: 'null' });
+      const client = await attachClient(port);
+      const seen = plugin.frames.length;
+      answer(client, 'ABCDEF', true);
+      await settle();
+      expect(plugin.frames.slice(seen)).toEqual([]);
+      plugin.ws.close();
+      client.ws.close();
+      await relay.close();
     });
   });
 });
