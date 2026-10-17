@@ -105,6 +105,12 @@
 - Visualize variable aliases
 - Show reference chains
 - Detect circular dependencies
+- "Hide unused" toolbar toggle (persisted, `graph-hide-unused`): while a card or row is highlighted, hides every card, wire and tier caption not on its path and fits the view to what is left; filtered cards stay hidden, and Arrange Grid is disabled while it hides
+- Hide unused unchecks the off-path groups for real in the sidebar Collections tree (shared with the Table view, so their rows hide there too), at group level; a collection goes only when nothing of it is on the path
+- The uncheck is one write per activation (toggle on with a highlight, card menu, or the highlight moving while on); re-ticking a group while hiding shows it again, and "Show all" re-checks nothing
+- A later activation re-checks only groups Hide unused itself unchecked that are now on the path; groups the user unchecked are never re-checked
+- What the tree cannot express stays hidden by Hide unused itself: library cards, a collection root card next to an on-path group, a card sharing its group with an on-path card; off-path wires stay hidden too
+- Card menu "Hide unused" (just above Delete): highlights that card's path and turns hiding on in one step; reads "Show all" while hiding is active
 
 **Selection card:**
 - The selected Figma node appears as a card; bound tokens are connected to its property rows

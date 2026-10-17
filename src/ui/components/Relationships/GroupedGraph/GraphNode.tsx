@@ -80,6 +80,8 @@ export function CardHeaderActions({
   const {
     group,
     onHighlightPath,
+    onHideUnused,
+    isHidingUnused,
     onAddVariable,
     onRenameGroup,
     onDuplicateGroup,
@@ -161,6 +163,9 @@ export function CardHeaderActions({
             Edit as Text
           </Dropdown.Item>
           <Dropdown.Divider />
+          <Dropdown.Item onClick={() => onHideUnused(group)}>
+            {isHidingUnused ? 'Show all' : 'Hide unused'}
+          </Dropdown.Item>
           <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
             Delete
           </Dropdown.Item>

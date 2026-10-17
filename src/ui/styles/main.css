@@ -99,6 +99,14 @@
     }
 }
 
+/*
+ * A card's open menu overflows into the cards below it. React Flow stacks
+ * nodes with an inline z-index, so lift the node that holds the open menu.
+ */
+.react-flow__node:has([data-dropdown-open]) {
+    z-index: 1000 !important;
+}
+
 /* React Flow chrome (dots, MiniMap, Controls) on theme tokens */
 .react-flow {
     --xy-background-pattern-color-default: var(--color-border);

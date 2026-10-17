@@ -131,6 +131,9 @@ export type GroupNodeData = {
   // Variable name whose row is the highlight seed (row-level selection).
   highlightedVarSeed?: string | null;
   onHighlightPath: (group: GroupData) => void;
+  // Card menu "Hide unused" / "Show all"; isHidingUnused picks the label.
+  onHideUnused: (group: GroupData) => void;
+  isHidingUnused?: boolean;
   onHighlightVariable: (group: GroupData, node: VariableNode) => void;
   onGeneratorOpen: (group: GroupData, node: VariableNode) => void;
   onShowColorMenu: (event: React.MouseEvent, node: VariableNode) => void;

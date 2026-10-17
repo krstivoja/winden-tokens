@@ -107,6 +107,16 @@ import {
   isAbsorbedCard,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
+import {
+  computeHighlightPath,
+  getHidingPath,
+  isCardHiddenByHideUnused,
+  isEdgeOffPath,
+  isTierLabelHidden,
+  planSidebarUncheck,
+  applySidebarUncheck,
+} from './GroupedGraph/hideUnused';
+import type { SidebarSelection } from './GroupedGraph/hideUnused';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -213,6 +223,11 @@ function GroupedGraphInner() {
   const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
   const highlightedGroupKey = highlightTarget?.groupKey ?? null;
   const highlightedVarName = highlightTarget?.varName ?? null;
+  // "Hide unused": while something is highlighted, hide every card and wire
+  // that is not on its path. A preference, not a mode — with no highlight it
+  // hides nothing. Persisted under `graph-hide-unused`.
+  const [hideUnused, setHideUnused] = useState(false);
+  const isHidingUnused = hideUnused && highlightedGroupKey !== null;
   // Frames the user has wrapped, as `<collectionId>::<path>` keys (see
   // getWrapperKey). Empty = flat leaf cards. A key here draws a wrapper
   // around every card of THAT collection at or below that path; the empty
@@ -259,6 +274,8 @@ function GroupedGraphInner() {
     toggleVariableType,
     toggleCollection,
     toggleSelectedGroup,
+    setSelectedCollectionIds,
+    setSelectedGroups,
   } = useAppContext();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -371,6 +388,30 @@ function GroupedGraphInner() {
     window.addEventListener('message', handleStorage);
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
+
+  useEffect(() => {
+    const storageKey = `graph-hide-unused`;
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        setHideUnused(msg.value === true);
+      }
+    };
+
+    window.addEventListener('message', handleStorage);
+    return () => window.removeEventListener('message', handleStorage);
+  }, []);
+
+  const persistHideUnused = useCallback((next: boolean) => {
+    setHideUnused(next);
+    post({ type: 'set-client-storage', key: `graph-hide-unused`, value: next });
+  }, []);
+
+  const handleToggleHideUnused = useCallback(() => {
+    persistHideUnused(!hideUnused);
+  }, [hideUnused, persistHideUnused]);
 
   // Load grouped-path state (per variable type)
   useEffect(() => {
@@ -652,6 +693,17 @@ function GroupedGraphInner() {
         : { groupKey: group.key, varName: null }
     ));
   }, []);
+
+  // Card menu "Hide unused": highlight this card's chain and hide the rest in
+  // one step. While hiding is active the same item reads "Show all".
+  const handleHideUnusedFromCard = useCallback((group: GroupData) => {
+    if (hidingPathRef.current) {
+      persistHideUnused(false);
+      return;
+    }
+    setHighlightTarget({ groupKey: group.key, varName: null });
+    persistHideUnused(true);
+  }, [persistHideUnused]);
 
   // Highlight only one variable row's chain (toggle off if re-selected).
   const handleHighlightVariable = useCallback((group: GroupData, node: VariableNode) => {
@@ -1133,6 +1185,66 @@ function GroupedGraphInner() {
     return connected;
   }, [connectionData]);
 
+  // The highlighted path, outside the layout effect because the handle
+  // signature below needs it too (hide-unused can hide a container's own
+  // card, which changes handles under a mounted node). Null = no highlight.
+  const highlightPath = useMemo(
+    () => computeHighlightPath(highlightedGroupKey, highlightedVarName, groupsData, connectionData, variableMap),
+    [highlightedGroupKey, highlightedVarName, groupsData, connectionData, variableMap]
+  );
+  // What hide-unused hides against: the path while the toggle is on, else
+  // null — and null hides nothing.
+  const hidingPath = useMemo(() => getHidingPath(hideUnused, highlightPath), [hideUnused, highlightPath]);
+  const hidingPathRef = useRef(hidingPath);
+  hidingPathRef.current = hidingPath;
+
+  // Hide-unused unchecks the off-path groups in the sidebar for real, so the
+  // Collections tree (shared with the Table view) says what the canvas shows.
+  // `coveredCards` are then the filter's to hide; the rest hide-unused still
+  // hides itself (see isCardHiddenByHideUnused).
+  const sidebarUncheck = useMemo(() => planSidebarUncheck(groupsData, hidingPath), [groupsData, hidingPath]);
+  // What hide-unused unchecked and is still unchecked. Only these may come
+  // back, when a later activation puts them on the path again; anything the
+  // user unchecked never does. Kept across "Show all": turning hiding off
+  // re-checks nothing, but the next path must not be left hidden by an old
+  // one's write.
+  const hideUnusedOwnRef = useRef<SidebarSelection>({ groups: new Set(), collections: new Set() });
+  // A key the user re-ticks is theirs from then on: unticking it again later
+  // is their uncheck, not ours to undo. Declared before the write below so it
+  // never sees that write's own result mid-commit.
+  useEffect(() => {
+    const own = hideUnusedOwnRef.current;
+    const stillUnchecked = (owned: Set<string>, selected: Set<string>) =>
+      new Set(Array.from(owned).filter(k => !selected.has(k)));
+    hideUnusedOwnRef.current = {
+      groups: stillUnchecked(own.groups, selectedGroups),
+      collections: stillUnchecked(own.collections, localSelectedCollections),
+    };
+  }, [selectedGroups, localSelectedCollections]);
+  // One write per activation — toggled on with a highlight, card menu "Hide
+  // unused", or the highlight moving while on — never a running override, so
+  // re-ticking a group while hiding stays on simply shows it. Turning hiding
+  // off re-checks nothing; the user re-ticks by hand. Keyed on the highlight
+  // target, not the path, so a data edit mid-hide does not write again.
+  const hidingActivation = hidingPath ? JSON.stringify([highlightedGroupKey, highlightedVarName]) : null;
+  const lastHidingActivationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (hidingActivation === lastHidingActivationRef.current) return;
+    lastHidingActivationRef.current = hidingActivation;
+    if (hidingActivation === null) return;
+    const result = applySidebarUncheck(
+      sidebarUncheck,
+      { groups: selectedGroups, collections: localSelectedCollections },
+      hideUnusedOwnRef.current
+    );
+    hideUnusedOwnRef.current = result.own;
+    if (result.selection.groups !== selectedGroups) setSelectedGroups(result.selection.groups);
+    if (result.selection.collections !== localSelectedCollections) {
+      setSelectedCollectionIds(result.selection.collections);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hidingActivation]);
+
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
   // ── Quick search (Cmd+K / Ctrl+K) ────────────────────────────────
@@ -1289,62 +1401,14 @@ function GroupedGraphInner() {
     // Read through the ref: see savedPositionsRef above.
     const savedPositions = savedPositionsRef.current;
 
-    // Resolve the highlighted lineage of the selected card. References are
-    // per-variable (row), so we trace the chain at the VARIABLE level using
-    // fromVar/toVar — otherwise passing through an intermediate card would fan
-    // out to every row's provider instead of staying on the one chain.
-    // Walk upstream (providers, follow edges backward) and downstream
-    // (dependents, forward) independently so siblings are never picked up.
-    const highlightedGroups = new Set<string>();
-    const highlightedVars = new Set<string>();
-    const highlightedEdgeIds = new Set<string>();
+    // The highlighted lineage — see computeHighlightPath. Empty sets when
+    // nothing is highlighted, so the rest of the effect reads them freely.
+    const highlightedGroups = highlightPath?.groups ?? new Set<string>();
+    const highlightedVars = highlightPath?.vars ?? new Set<string>();
+    const highlightedEdgeIds = highlightPath?.edgeIds ?? new Set<string>();
     // All variables in the selected card — used to tint its off-chain edges
     // in a faded highlight color (group membership vs. actual selection).
-    const selectedCardVars = new Set<string>();
-    if (highlightedGroupKey) {
-      const varOutgoing = new Map<string, Array<{ edgeId: string; varName: string }>>();
-      const varIncoming = new Map<string, Array<{ edgeId: string; varName: string }>>();
-      connectionData.forEach(conn => {
-        if (!varOutgoing.has(conn.fromVar)) varOutgoing.set(conn.fromVar, []);
-        varOutgoing.get(conn.fromVar)!.push({ edgeId: conn.id, varName: conn.toVar });
-        if (!varIncoming.has(conn.toVar)) varIncoming.set(conn.toVar, []);
-        varIncoming.get(conn.toVar)!.push({ edgeId: conn.id, varName: conn.fromVar });
-      });
-
-      // Seed with the single selected row, or every variable in the card.
-      const selectedGroup = groupsData.find(g => g.key === highlightedGroupKey);
-      selectedGroup?.variables.forEach(v => selectedCardVars.add(v.name));
-      const seedVars = highlightedVarName
-        ? [highlightedVarName]
-        : (selectedGroup?.variables || []).map(v => v.name);
-      seedVars.forEach(v => highlightedVars.add(v));
-
-      const walk = (adjacency: Map<string, Array<{ edgeId: string; varName: string }>>) => {
-        const visited = new Set<string>(seedVars);
-        const stack = [...seedVars];
-        while (stack.length > 0) {
-          const current = stack.pop()!;
-          (adjacency.get(current) || []).forEach(({ edgeId, varName }) => {
-            highlightedEdgeIds.add(edgeId);
-            highlightedVars.add(varName);
-            if (!visited.has(varName)) {
-              visited.add(varName);
-              stack.push(varName);
-            }
-          });
-        }
-      };
-
-      walk(varIncoming); // upstream providers (where it comes from)
-      walk(varOutgoing); // downstream dependents (what uses it)
-
-      // Cards containing any highlighted variable get emphasized.
-      highlightedVars.forEach(varName => {
-        const info = variableMap.get(varName);
-        if (info) highlightedGroups.add(info.group);
-      });
-      highlightedGroups.add(highlightedGroupKey);
-    }
+    const selectedCardVars = highlightPath?.selectedCardVars ?? new Set<string>();
     const hasHighlight = highlightedGroupKey !== null;
 
     // Resolve the selected node's bound tokens against the local token cards.
@@ -1404,7 +1468,14 @@ function GroupedGraphInner() {
 
     // Visibility comes from the shared predicate (GroupedGraph/utils) so that
     // Arrange Grid applies exactly the same rule — see cardVisibilityFilters.
-    const cardHidden = (group: GroupData) => isCardHidden(group, cardVisibilityFilters);
+    // Hide-unused is OR'd on top for what the sidebar uncheck cannot cover: it
+    // can hide an on-filter card, never show a filtered one. Arrange is
+    // disabled while it hides, so the two never disagree about which cards
+    // get a grid slot.
+    const cardHidden = (group: GroupData) => (
+      isCardHidden(group, cardVisibilityFilters)
+      || isCardHiddenByHideUnused(group.key, hidingPath, sidebarUncheck.coveredCards)
+    );
 
     // One card's worth of node data. Shared, because a CONTAINER renders the
     // card it absorbed from exactly this object — same header, same rows,
@@ -1424,6 +1495,8 @@ function GroupedGraphInner() {
         highlightedVars,
         highlightedVarSeed: highlightedVarName,
         onHighlightPath: handleHighlightPath,
+        onHideUnused: handleHideUnusedFromCard,
+        isHidingUnused: hidingPath !== null,
         onHighlightVariable: handleHighlightVariable,
         onGeneratorOpen: handleGeneratorOpen,
         onShowColorMenu: handleShowColorMenu,
@@ -1586,7 +1659,9 @@ function GroupedGraphInner() {
           id: cardKey,
           type: 'groupNode',
           position,
-          hidden: false,
+          // Filters never hide a library card; hide-unused does, unless the
+          // path runs through it.
+          hidden: isCardHiddenByHideUnused(cardKey, hidingPath, sidebarUncheck.coveredCards),
           data: {
             group,
             isColorType: bucket.nodes.every(n => n.resolvedType === 'COLOR'),
@@ -1598,6 +1673,8 @@ function GroupedGraphInner() {
             highlightedVars,
             highlightedVarSeed: highlightedVarName,
             onHighlightPath: handleHighlightPath,
+            onHideUnused: handleHideUnusedFromCard,
+            isHidingUnused: hidingPath !== null,
             onHighlightVariable: handleHighlightVariable,
             onGeneratorOpen: handleGeneratorOpen,
             onShowColorMenu: handleShowColorMenu,
@@ -1660,7 +1737,7 @@ function GroupedGraphInner() {
         const toVarInfo = variableMap.get(conn.toVar);
         const sourceVisible = groupVisibility.get(conn.fromGroup) ?? false;
         const targetVisible = groupVisibility.get(conn.toGroup) ?? false;
-        const edgeHidden = !sourceVisible || !targetVisible;
+        const edgeHidden = !sourceVisible || !targetVisible || isEdgeOffPath(conn.id, hidingPath);
 
         return {
           id: conn.id,
@@ -1726,6 +1803,25 @@ function GroupedGraphInner() {
       }));
     }
 
+    // Tier captions over a column hide-unused emptied go with it. Only while
+    // hiding: a filter-emptied column keeps its caption, as it always has.
+    if (hidingPath) {
+      const visibleBoxes: Array<{ x: number; width: number }> = [];
+      newNodes.forEach(node => {
+        if (node.hidden || node.parentId) return;
+        if (node.type === 'groupNode') {
+          visibleBoxes.push({ x: node.position.x, width: GROUP_WIDTH });
+        } else if (node.type === 'groupWrapper') {
+          const width = typeof node.style?.width === 'number' ? node.style.width : GROUP_WIDTH;
+          visibleBoxes.push({ x: node.position.x, width });
+        }
+      });
+      newNodes.forEach(node => {
+        if (node.type !== 'tierLabel') return;
+        node.hidden = isTierLabelHidden(node.data as TierPlacement, visibleBoxes);
+      });
+    }
+
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
@@ -1734,7 +1830,8 @@ function GroupedGraphInner() {
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
-      handleHighlightVariable, highlightedGroupKey, highlightedVarName, setNodes, setEdges]);
+      handleHideUnusedFromCard, handleHighlightVariable, highlightedGroupKey, highlightedVarName, highlightPath, hidingPath,
+      sidebarUncheck, setNodes, setEdges]);
 
   // Everything that can add, remove or move a handle *under an existing node
   // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
@@ -1747,7 +1844,8 @@ function GroupedGraphInner() {
         .map(v => `${v.name}|${v.connectionsDisabled ? 1 : 0}|${v.virtualType || ''}`)
         .join(',')}]`)
       .join(';');
-    // A container withholds its rows while its own card is filtered out. That
+    // A container withholds its rows while its own card is filtered out (or
+    // hidden by hide-unused). That
     // adds and removes handles under a node id that STAYS MOUNTED — unlike a
     // hidden card node, which xyflow removes wholesale — so the handle bounds
     // would go stale without a re-measure. A leaf card's visibility is
@@ -1755,7 +1853,8 @@ function GroupedGraphInner() {
     // with it.
     const containers = groupsData
       .filter(g => isAbsorbedCard(g, groupedPaths))
-      .map(g => `${g.key}|${isCardHidden(g, cardVisibilityFilters) ? 0 : 1}`)
+      .map(g => `${g.key}|${isCardHidden(g, cardVisibilityFilters)
+        || isCardHiddenByHideUnused(g.key, hidingPath, sidebarUncheck.coveredCards) ? 0 : 1}`)
       .join(',');
     const selection = selectedNode
       ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
@@ -1765,7 +1864,7 @@ function GroupedGraphInner() {
         .join(';')}]`
       : '';
     return `${cards}#${containers}#${selection}`;
-  }, [groupsData, selectedNode, selectedLayers, groupedPaths, cardVisibilityFilters]);
+  }, [groupsData, selectedNode, selectedLayers, groupedPaths, cardVisibilityFilters, hidingPath, sidebarUncheck]);
 
   const lastHandleSignatureRef = useRef<string | null>(null);
   const pendingMeasureNodesRef = useRef<Node[] | null>(null);
@@ -1881,6 +1980,9 @@ function GroupedGraphInner() {
   }, [collections, selectedModeId, variableMap, variablesById, selectedLayers]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
+    // Hide-unused would park every off-path card below the grid. The button
+    // is disabled meanwhile; this also covers Grid Settings' Apply.
+    if (isHidingUnused) return;
     const settings = overrideSettings || gridLayoutSettings;
     const currentNodes = reactFlowInstance.getNodes();
     const currentGroups = groupsData.map(group => {
@@ -2001,7 +2103,7 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels, nodeIdForCard]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels, nodeIdForCard, isHidingUnused]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;
@@ -2080,6 +2182,21 @@ function GroupedGraphInner() {
     return () => clearTimeout(timer);
   }, [selectionId, handleFocusSelection]);
 
+  // Hide-unused just took cards away (toggled on with a highlight, or the
+  // highlight moved while on): frame what is left. Plain fitView skips hidden
+  // nodes. Deferred like Arrange Grid's fit, so the rebuilt nodes are
+  // committed before we measure; it also lands after a search jump's own
+  // zoom, which is fine — the jumped-to card is on the path it fits.
+  // maxZoom 1: a short path (one card) would otherwise blow up to fill the
+  // canvas.
+  useEffect(() => {
+    if (!isHidingUnused) return;
+    const timer = setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.15, duration: 400, maxZoom: 1 });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isHidingUnused, highlightedGroupKey, highlightedVarName, reactFlowInstance]);
+
   const handleApplyGridSettings = useCallback(() => {
     const settings = normalizeGridLayoutSettings({
       gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
@@ -2106,7 +2223,7 @@ function GroupedGraphInner() {
           >
             New Group
           </TextButton>
-          <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
+          <TextButton variant="secondary" onClick={() => handleArrangeGrid()} disabled={isHidingUnused}>
             Arrange Grid
           </TextButton>
           {hasArrangeUndo && (
@@ -2119,6 +2236,14 @@ function GroupedGraphInner() {
               Focus Selection
             </TextButton>
           )}
+          <TextButton
+            variant="secondary"
+            onClick={handleToggleHideUnused}
+            title="Hides cards and wires not on the highlighted path"
+            aria-pressed={hideUnused}
+          >
+            {hideUnused ? 'Show all' : 'Hide unused'}
+          </TextButton>
           <Dropdown
             position="bottom-right"
             onOpenChange={(open) => {
