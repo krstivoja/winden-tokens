@@ -516,7 +516,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
       </div>
       <div class="space-y-4 text-[17px] leading-relaxed text-ink-muted lg:col-span-5">
         <p>The <code class="rounded-md bg-panel px-1.5 py-0.5 font-mono text-[0.88em] text-ink">winden-tokens</code> command serves the same interface full-size on your machine and drives the Figma file you have open. Edits land in Figma right away, and selecting a component in Figma shows its card in the tab.</p>
-        <p>Keep the plugin window open in Figma. It is the only thing that can reach the Figma API.</p>
+        <p>In Figma, run <span class="font-medium text-ink">Bridge to browser</span> from the plugin's menu and approve it once in the tab. Keep that small window open. It is the only thing that can reach the Figma API.</p>
         <p class="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm">
           <a href="https://www.npmjs.com/package/winden-tokens" target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-medium text-ink underline decoration-ink/25 underline-offset-4 transition-colors hover:decoration-ink">winden-tokens on npm{{ icon_external }}</a>
           <span>Node.js 18+</span>
@@ -548,11 +548,12 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
           </div>
           <pre class="whitespace-pre-wrap p-4 font-mono text-[12.5px] leading-[1.75] text-canvas/80 sm:p-5"><code><span class="text-canvas/50">$</span> <span class="text-canvas">npx winden-tokens</span>
 
-  <span class="text-canvas">Winden Tokens bridge — protocol v1</span>
+  <span class="text-canvas">Winden Tokens bridge — protocol v2</span>
   <span class="text-canvas/60">UI:</span>    <span class="text-select">http://127.0.0.1:9337/</span>
   <span class="text-canvas/60">Relay:</span> <span class="text-select">ws://127.0.0.1:9337</span>
 
-  Now open the Winden Tokens plugin in Figma and leave that window open.
+  Now run "Bridge to browser" from the Winden Tokens plugin in Figma
+  and leave that window open.
   Ctrl-C to stop.</code></pre>
         </div>
       </div>
@@ -573,8 +574,8 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
         </span>
         <div>
-          <h3 class="text-[15px] font-semibold">Origin-checked</h3>
-          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">A web page you happen to have open cannot connect to it.</p>
+          <h3 class="text-[15px] font-semibold">Paired, not trusted blindly</h3>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">A Figma window connects only after you approve its code in the tab. Other web pages cannot get in.</p>
         </div>
       </li>
       <li class="flex gap-4">
@@ -582,8 +583,8 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
         </span>
         <div>
-          <h3 class="text-[15px] font-semibold">Stores nothing</h3>
-          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">It forwards messages between the tab and Figma, and forgets them.</p>
+          <h3 class="text-[15px] font-semibold">Stores no file data</h3>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">It forwards messages between the tab and Figma, and forgets them. It keeps only which Figma windows you approved.</p>
         </div>
       </li>
     </ul>
@@ -632,7 +633,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
             <li class="rounded-[20px] bg-canvas/70 p-4 ring-1 ring-on-peach-line sm:p-5">
               <div class="flex items-center gap-3">
                 <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-on-peach-muted text-[13px] font-semibold text-canvas">3</span>
-                <p class="text-[15px] font-medium">Run it, then open the plugin in Figma</p>
+                <p class="text-[15px] font-medium">Run it, then "Bridge to browser" in Figma</p>
               </div>
               <div class="mt-3 flex items-center gap-2 rounded-xl bg-canvas py-1 pl-3.5 pr-1 ring-1 ring-on-peach-line">
                 <code class="min-w-0 flex-1 py-2 font-mono text-[13px]"><span class="whitespace-nowrap">winden-tokens</span></code>
