@@ -329,7 +329,7 @@ description: "Free, open-source Figma plugin for design tokens. Edit variables l
       <article class="flex flex-col overflow-hidden rounded-[20px] bg-panel lg:col-span-3">
         <div class="px-6 pt-6 sm:px-8 sm:pt-8">
           <h3 class="text-lg font-semibold tracking-[-0.015em]">Contrast checker</h3>
-          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">WCAG 2.1 AA and AAA results for every color pair.</p>
+          <p class="mt-1.5 text-pretty text-[15px] leading-relaxed text-ink-muted">WCAG 2.1 AA and AAA results for any color against the contrast color you pick.</p>
         </div>
         <div class="mt-auto overflow-hidden p-2 pt-4 sm:p-3 sm:pt-5">
           <img src="{{ screens }}contrast.webp" width="1977" height="1318" alt="Brand blue shades 10 to 100 with their contrast ratios against white and AA and AAA results" loading="lazy" class="aspect-[3/2] w-full scale-[1.25] object-contain" />
@@ -351,7 +351,7 @@ description: "Free, open-source Figma plugin for design tokens. Edit variables l
       <article class="flex flex-col overflow-hidden rounded-[20px] bg-tint-lime md:col-span-2 lg:col-span-4 lg:flex-row">
         <div class="px-6 pt-6 sm:px-8 sm:pt-8 lg:w-1/2 lg:shrink-0 lg:pb-8 lg:pr-0">
           <h3 class="text-lg font-semibold tracking-[-0.015em]">Move without breaking</h3>
-          <p class="mt-1.5 text-pretty max-w-[52ch] text-[15px] leading-relaxed text-on-lime-muted">Move a variable or a whole group to another collection. Every mode’s value comes along, aliases are rewired, and canvas fills, strokes and effects stay bound.</p>
+          <p class="mt-1.5 text-pretty max-w-[52ch] text-[15px] leading-relaxed text-on-lime-muted">Move a variable or a whole group to another collection. Values carry over mode by mode, aliases are rewired, and canvas fills, strokes and effects stay bound.</p>
         </div>
         <div class="flex flex-1 flex-col items-center justify-center gap-2.5 px-6 pb-8 pt-8 sm:flex-row sm:gap-3 sm:px-8 lg:flex-col" aria-hidden="true">
           <div class="w-full max-w-[220px] rounded-xl bg-canvas p-1.5 shadow-float ring-1 ring-on-lime-line sm:w-[200px]">
@@ -551,6 +551,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
   <span class="text-canvas">Winden Tokens bridge — protocol v2</span>
   <span class="text-canvas/60">UI:</span>    <span class="text-select">http://127.0.0.1:9337/</span>
   <span class="text-canvas/60">Relay:</span> <span class="text-select">ws://127.0.0.1:9337</span>
+  <span class="text-canvas/60">MCP token:</span> ~/.winden-tokens/mcp-token <span class="text-canvas/50">(read by winden-tokens-mcp; rotated each start)</span>
 
   Now run "Bridge to browser" from the Winden Tokens plugin in Figma
   and leave that window open.
@@ -575,7 +576,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
         </span>
         <div>
           <h3 class="text-[15px] font-semibold">Paired, not trusted blindly</h3>
-          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">A Figma window connects only after you approve its code in the tab. Other web pages cannot get in.</p>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">A Figma window connects only after you approve its code in the tab, once; approved windows are remembered. Other web pages cannot get in.</p>
         </div>
       </li>
       <li class="flex gap-4">
@@ -584,7 +585,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
         </span>
         <div>
           <h3 class="text-[15px] font-semibold">Stores no file data</h3>
-          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">It forwards messages between the tab and Figma, and forgets them. It keeps only which Figma windows you approved.</p>
+          <p class="mt-1 text-[15px] leading-relaxed text-ink-muted">It forwards messages between the tab and Figma, and forgets them. It keeps only hashes of the Figma windows you approved, and a fresh MCP token each start.</p>
         </div>
       </li>
     </ul>
@@ -639,6 +640,7 @@ Modes|modes.webp|1502|1126|detail|The mode picker: collection tags, with desktop
                 <code class="min-w-0 flex-1 py-2 font-mono text-[13px]"><span class="whitespace-nowrap">winden-tokens</span></code>
                 <button type="button" data-copy="winden-tokens" aria-label="Copy command: winden-tokens" class="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-on-peach-muted transition-colors hover:bg-tint-peach hover:text-ink">{{ icon_copy }}</button>
               </div>
+              <p class="mt-3 text-sm leading-relaxed text-on-peach-muted">Keep both running while Claude works. The MCP server reads its token from <code class="font-mono text-[0.92em]">~/.winden-tokens/mcp-token</code>, which the relay writes.</p>
             </li>
           </ol>
           <p class="sr-only" aria-live="polite" data-copy-status></p>
