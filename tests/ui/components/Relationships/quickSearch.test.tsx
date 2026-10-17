@@ -108,6 +108,31 @@ describe('matchGraphSearchItems', () => {
     expect(results.map(item => item.label)).toEqual(['brand', 'brand/primary', 'color/brand']);
   });
 
+  it('ranks whole-segment matches over a longer name that shares the prefix, shallower first', () => {
+    const items = [
+      card('group:c1::a', 'button-group/color', 'Components'),
+      card('group:c1::b', 'button/color/primary', 'Components'),
+      card('group:c1::c', 'button/color', 'Components'),
+      card('group:c1::d', 'button-group', 'Components'),
+    ];
+    const { results } = matchGraphSearchItems(items, 'button');
+    expect(results.map(item => item.label)).toEqual([
+      'button/color',
+      'button/color/primary',
+      'button-group',
+      'button-group/color',
+    ]);
+  });
+
+  it('treats a trailing slash in the query as the same segment match', () => {
+    const items = [
+      card('group:c1::a', 'button-group/color', 'Components'),
+      card('group:c1::b', 'button/color', 'Components'),
+    ];
+    const { results } = matchGraphSearchItems(items, 'button/');
+    expect(results.map(item => item.label)).toEqual(['button/color']);
+  });
+
   it('matches the secondary text too, but below any label match', () => {
     const items = [
       card('group:c1::x', 'spacing', 'Brand'),

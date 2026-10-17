@@ -120,17 +120,22 @@ export function isQuickSearchShortcut(event: KeyboardEvent): boolean {
 // ── Matching ───────────────────────────────────────────────────────
 
 /**
- * 0 exact, 1 prefix, 2 substring of the label, 3 substring of the secondary
- * text (typing a collection name lists what is in it), -1 no match.
+ * 0 exact, 1 whole-segment prefix (`button` → `button/…`), 2 plain prefix
+ * (`button` → `button-group/…`), 3 substring of the label, 4 substring of the
+ * secondary text (typing a collection name lists what is in it), -1 no match.
  */
 function scoreItem(item: GraphSearchItem, query: string): number {
   const label = item.label.toLowerCase();
   if (label === query) return 0;
-  if (label.startsWith(query)) return 1;
-  if (label.includes(query)) return 2;
-  if (item.context.toLowerCase().includes(query)) return 3;
+  if (label.startsWith(query.endsWith('/') ? query : `${query}/`)) return 1;
+  if (label.startsWith(query)) return 2;
+  if (label.includes(query)) return 3;
+  if (item.context.toLowerCase().includes(query)) return 4;
   return -1;
 }
+
+/** Path depth: `button` 1, `button/color` 2. Shallower ranks first on a tie. */
+const labelDepth = (label: string) => label.split('/').length;
 
 export interface GraphSearchMatches {
   results: GraphSearchItem[];
@@ -180,6 +185,7 @@ export function matchGraphSearchItems(
   scored.sort((a, b) => (
     a.score - b.score
     || KIND_ORDER[a.item.target.kind] - KIND_ORDER[b.item.target.kind]
+    || labelDepth(a.item.label) - labelDepth(b.item.label)
     || a.item.label.localeCompare(b.item.label)
     || a.item.context.localeCompare(b.item.context)
   ));
