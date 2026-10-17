@@ -28,7 +28,7 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
     // dashed — so both strokes are drawn, with CONTAINER_OUTLINE_PADDING
     // between them.
     <div
-      className={`rf-group-outline w-full h-full rounded-sm border border-dashed p-2 ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
+      className={`rf-group-outline w-full h-full rounded-sm border border-dashed p-2 ${isDimmed ? 'border-text/30 opacity-55' : 'border-text/40'} transition-[opacity,box-shadow] duration-150 ${isHighlighted ? 'ring-1 ring-highlight-path ring-offset-2 ring-offset-canvas' : ''}`}
     >
       <div className="rf-group-wrapper w-full h-full rounded-sm border border-text/40 bg-base shadow-xs p-0.5">
         <CardHeaderRow

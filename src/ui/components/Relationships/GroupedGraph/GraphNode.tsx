@@ -80,6 +80,8 @@ export function CardHeaderActions({
   const {
     group,
     onHighlightPath,
+    onHideUnused,
+    isHidingUnused,
     onAddVariable,
     onRenameGroup,
     onDuplicateGroup,
@@ -161,6 +163,9 @@ export function CardHeaderActions({
             Edit as Text
           </Dropdown.Item>
           <Dropdown.Divider />
+          <Dropdown.Item onClick={() => onHideUnused(group)}>
+            {isHidingUnused ? 'Show all' : 'Hide unused'}
+          </Dropdown.Item>
           <Dropdown.Item onClick={() => onDeleteGroup(group)} className="text-danger hover:bg-danger hover:text-white">
             Delete
           </Dropdown.Item>
@@ -219,7 +224,7 @@ export function CardRows({
   return (
     <div className="bg-base py-2">
       {showEmptyLine && (
-        <div className="flex items-center justify-center h-8 px-2 text-xs text-text-muted select-none">
+        <div className="flex items-center justify-center h-8 px-2 text-xs text-text-secondary select-none">
           {/* Not "no variables": since every collection gets a root card, a
               collection with 116 variables — all of them grouped — lands here
               too. What is actually empty is the collection's ROOT. */}
@@ -246,7 +251,7 @@ export function CardRows({
         return (
           <div
             key={node.id}
-            className={`group relative flex items-center px-2 h-8 border-b border-border ${keepLastBorder ? '' : 'last:border-b-0'} bg-base hover:bg-base-2 transition-[background,opacity] duration-150 cursor-pointer ${rowInteractive ? 'bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${isSiblingRow ? 'opacity-45 shadow-[inset_2px_0_0_rgba(236,72,153,0.45)]' : rowDimmed ? 'opacity-30' : ''} ${isSeedRow ? 'bg-base-2 shadow-[inset_2px_0_0_#EC4899]' : ''}`}
+            className={`group relative flex items-center px-2 h-8 border-b border-border ${keepLastBorder ? '' : 'last:border-b-0'} bg-base hover:bg-base-2 transition-[background,opacity] duration-150 cursor-pointer ${rowInteractive ? 'bg-gradient-to-r from-base via-base-2 to-base hover:bg-base-3' : ''} ${isSiblingRow ? 'opacity-45 shadow-[inset_2px_0_0_color-mix(in_oklab,var(--color-highlight-path)_45%,transparent)]' : rowDimmed ? 'opacity-30' : ''} ${isSeedRow ? 'bg-base-2 shadow-[inset_2px_0_0_var(--color-highlight-path)]' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (rowInteractive) onGeneratorOpen(group, node);
@@ -300,7 +305,7 @@ export function CardRows({
 
             {/* Value */}
             <span
-              className={`absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 ${node.isReference ? 'text-text-secondary' : 'text-text-muted'}`}
+              className="absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 text-text-secondary"
               style={{ right: showDeleteAction ? 42 : 16 }}
               title={node.displayName}
             >
@@ -346,7 +351,7 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
   return (
     <div
-      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-xs w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-[#EC4899] ring-offset-2 ring-offset-base-2' : ''}`}
+      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-xs w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-highlight-path ring-offset-2 ring-offset-canvas' : ''}`}
       style={{ height }}
     >
       <CardHeaderRow title={group.title} headerFill={group.headerFill}>

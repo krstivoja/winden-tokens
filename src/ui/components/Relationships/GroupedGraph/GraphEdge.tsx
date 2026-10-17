@@ -31,7 +31,8 @@ function CustomEdgeInner({
   const defaultStroke = kind === 'generated' ? GENERATED_CONNECTION_COLOR : REFERENCE_CONNECTION_COLOR;
   const stroke = isHighlighted || isGroupSibling ? HIGHLIGHT_COLOR : defaultStroke;
   const strokeDasharray = kind === 'generated' ? '7 5' : undefined;
-  const baseWidth = kind === 'generated' ? 2.5 : 2;
+  // --edge-width is theme-dependent (thinner in dark mode); generated edges stay half a pixel heavier.
+  const baseWidth = kind === 'generated' ? 'calc(var(--edge-width) + 0.5px)' : 'var(--edge-width)';
   const opacity = isHighlighted ? 1 : isGroupSibling ? 0.35 : isDimmed ? 0.45 : 1;
 
   const handleClick = (e: React.MouseEvent) => {
@@ -64,9 +65,8 @@ function CustomEdgeInner({
         d={edgePath}
         fill="none"
         stroke={stroke}
-        strokeWidth={baseWidth}
         strokeDasharray={strokeDasharray}
-        style={{ pointerEvents: 'none', opacity, transition: 'opacity 150ms, stroke 150ms' }}
+        style={{ pointerEvents: 'none', strokeWidth: baseWidth, opacity, transition: 'opacity 150ms, stroke 150ms' }}
       />
     </g>
   );

@@ -150,7 +150,7 @@ function GroupNodeRow({
                 return next;
               });
             }}
-            className="w-4 h-4 flex items-center justify-center text-text-muted hover:text-text transition-colors"
+            className="w-4 h-4 flex items-center justify-center text-text-secondary hover:text-text transition-colors"
           >
             {isCollapsed ? '▶' : '▼'}
           </button>
@@ -438,7 +438,7 @@ export function SidebarFilter({
           {selectedModeId && (
             <button
               type="button"
-              className="text-[11px] text-text-muted hover:text-text cursor-pointer bg-transparent border-none p-0"
+              className="text-[11px] text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0"
               onClick={() => onModeChange('')}
             >
               Reset
@@ -466,7 +466,7 @@ export function SidebarFilter({
         </div>
         {activePickerCollection && activePickerCollection.modes.length > 1 && (
           <div className="ml-2 mt-2 pt-3 border-t border-border">
-            <label className="block text-[11px] font-semibold text-text-muted mb-1.5">
+            <label className="block text-[11px] font-semibold text-text-secondary mb-1.5">
               {activePickerCollection.name} modes
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -622,7 +622,7 @@ export function SidebarFilter({
                           return next;
                         });
                       }}
-                      className="w-4 h-4 flex items-center justify-center text-text-muted hover:text-text transition-colors"
+                      className="w-4 h-4 flex items-center justify-center text-text-secondary hover:text-text transition-colors"
                     >
                       {isExpanded ? '▼' : '▶'}
                     </button>

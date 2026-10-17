@@ -58,7 +58,7 @@ const KIND_DOT_CLASS: Record<InspectorEntry['kind'], string> = {
 };
 
 const KIND_TEXT_CLASS: Record<InspectorEntry['kind'], string> = {
-  hardcoded: 'text-text/70',
+  hardcoded: 'text-text-secondary',
   variable: 'text-primary',
   style: 'text-secondary',
 };

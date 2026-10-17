@@ -18,6 +18,10 @@ interface FilterContextValue {
   selectedGroups: Set<string>;
   toggleSelectedGroup: (groupName: string) => void;
   toggleAllGroups: () => void;
+  // Whole-set writes, for callers that change many checkboxes in one step
+  // (the Relationships graph's "Hide unused").
+  setSelectedCollectionIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setSelectedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   filteredVariables: VariableData[];
@@ -197,6 +201,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     selectedGroups: groupFilter.items,
     toggleSelectedGroup,
     toggleAllGroups,
+    setSelectedCollectionIds: collectionFilter.setItems,
+    setSelectedGroups: groupFilter.setItems,
     searchQuery,
     setSearchQuery,
     filteredVariables,
@@ -213,6 +219,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     groupFilter.items,
     toggleSelectedGroup,
     toggleAllGroups,
+    collectionFilter.setItems,
+    groupFilter.setItems,
     searchQuery,
     setSearchQuery,
     filteredVariables,

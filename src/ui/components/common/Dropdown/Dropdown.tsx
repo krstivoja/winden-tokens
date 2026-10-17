@@ -80,7 +80,7 @@ function DropdownRoot({
 
   return (
     <DropdownContext.Provider value={{ isOpen, toggle, close, position, align }}>
-      <div className={`relative ${className}`} ref={ref}>
+      <div className={`relative ${className}`} ref={ref} data-dropdown-open={isOpen || undefined}>
         {children}
       </div>
     </DropdownContext.Provider>
@@ -136,6 +136,10 @@ function DropdownMenu({ children, className = '' }: DropdownMenuProps) {
     <div
       className={`absolute ${positionClasses[position]} z-50 bg-base border border-border rounded-lg shadow-lg py-1 min-w-[160px] ${className}`}
       onMouseDown={(e) => e.stopPropagation()}
+      // A menu choice is not a click on whatever hosts the menu: inside a
+      // graph card it would also fire React Flow's node click, which toggles
+      // the highlight right back off ("Highlight path", "Hide unused").
+      onClick={(e) => e.stopPropagation()}
     >
       {children}
     </div>

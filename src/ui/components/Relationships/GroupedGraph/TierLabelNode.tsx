@@ -18,7 +18,7 @@ function TierLabelNodeInner({ data }: NodeProps<Node<TierLabelNodeData>>) {
 
   return (
     <div className="w-full h-full flex items-end gap-2 px-1 pb-1 border-b border-border pointer-events-none select-none">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text/70 whitespace-nowrap">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary whitespace-nowrap">
         Tier {data.tier}
       </span>
       <span className="text-[11px] text-text/40 overflow-hidden text-ellipsis whitespace-nowrap">

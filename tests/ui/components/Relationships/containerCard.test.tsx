@@ -80,6 +80,7 @@ const cardData = (group: GroupData, overrides: Partial<GroupNodeData> = {}): Gro
   variableType: 'COLOR',
   connectedVars: new Map(),
   onHighlightPath: noop,
+  onHideUnused: noop,
   onHighlightVariable: noop,
   onGeneratorOpen: noop,
   onShowColorMenu: noop,

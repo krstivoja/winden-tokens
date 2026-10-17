@@ -32,6 +32,7 @@ function renderCard(group: GroupData, overrides: Partial<GroupNodeData> = {}) {
     variableType: 'COLOR',
     connectedVars: new Map(),
     onHighlightPath: noop,
+    onHideUnused: noop,
     onHighlightVariable: noop,
     onGeneratorOpen: noop,
     onShowColorMenu: noop,
