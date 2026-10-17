@@ -2207,8 +2207,8 @@ function GroupedGraphInner() {
         maxZoom={3}
         defaultViewport={{ x: 50, y: 50, zoom: 1 }}
         proOptions={{ hideAttribution: true }}
-        connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 2, strokeDasharray: '4 2' }}
-        className="w-full h-full bg-base-2!"
+        connectionLineStyle={{ stroke: REFERENCE_CONNECTION_COLOR, strokeWidth: 'var(--edge-width)', strokeDasharray: '4 2' }}
+        className="w-full h-full bg-canvas!"
         snapToGrid
         snapGrid={[8, 8]}
         selectionOnDrag

@@ -65,13 +65,13 @@ That's it. No config file needed.
     --color-bg-input: var(--color-gray-100);
 }
 
-/* Dark mode theme (system preference) */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-base: black;
-        --color-text: white;
-        --color-border: var(--color-gray-700);
-        --color-bg-input: var(--color-gray-800);
+/* Dark mode theme (Figma theme, else OS) — see "Dark Mode Strategy" */
+:root {
+    @variant dark {
+        --color-base: var(--figma-color-bg, #2C2C2C);
+        --color-text: var(--figma-color-text, #FFFFFF);
+        --color-border: var(--figma-color-border, #444444);
+        --color-bg-input: var(--figma-color-bg-secondary, #383838);
     }
 }
 
@@ -365,27 +365,36 @@ For values from Figma (colors, positions), use **inline styles**:
 
 ## Dark Mode Strategy
 
-### System Preference
+### Figma Theme First, OS Second
 
-We follow the system's dark mode preference:
+Dark mode matches Figma's own UI3 dark chrome and follows Figma's theme, not the OS.
+`figma.showUI(..., { themeColors: true })` puts `figma-dark` / `figma-light` on `<html>` and injects `--figma-color-*` vars.
+The `dark` custom variant in `main.css` applies on `html.figma-dark`, or on `prefers-color-scheme: dark` when `figma-light` is absent (browser tab, `npm run dev`).
+Every `dark:` utility and every `@variant dark` block uses that one trigger.
 
-```css
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-base: black;
-        --color-text: white;
-        --color-border: var(--color-gray-700);
-        --color-bg-input: var(--color-gray-800);
-    }
-}
-```
+Dark tokens read Figma's vars with UI3 fallbacks, so the browser tab looks the same:
+
+| token | dark value |
+|---|---|
+| `--color-base` | `--figma-color-bg` / `#2C2C2C` |
+| `--color-base-2` | `--figma-color-bg-secondary` / `#383838` |
+| `--color-base-3` | `--figma-color-bg-tertiary` / `#444444` |
+| `--color-border` | `--figma-color-border` / `#444444` |
+| `--color-text` | `--figma-color-text` / `#FFFFFF` |
+| `--color-text-secondary` | `--figma-color-text-secondary` / white 70% |
+| `--color-primary` | `--figma-color-bg-brand` / `#0C8CE9` |
+| `--color-canvas` | `#1E1E1E` (graph canvas only) |
+| `--color-edge`, `--color-edge-generated` | primary / secondary mixed 60% toward canvas |
+| `--edge-width` | `1.5px` (light `2px`) |
+
+React Flow chrome (`--xy-*` dots, MiniMap, Controls) is mapped to these tokens on `.react-flow`.
 
 **Components automatically adapt** using theme tokens:
 
 ```tsx
 <div className="bg-base text-text">
-  {/* Light mode: white bg, black text */}
-  {/* Dark mode: black bg, white text */}
+  {/* Light: white bg, black text */}
+  {/* Dark: Figma #2C2C2C bg, white text */}
 </div>
 ```
 
@@ -428,9 +437,9 @@ For specific overrides:
     --color-error: var(--color-red-500);
 }
 
-/* Dark mode override if needed */
-@media (prefers-color-scheme: dark) {
-    :root {
+/* Dark mode override if needed (add to the existing block) */
+:root {
+    @variant dark {
         --color-success: var(--color-green-400);
         --color-error: var(--color-red-400);
     }
@@ -562,8 +571,8 @@ Current CSS bundle: ~15KB gzipped
 
 ### Dark Mode Not Working
 
-1. **Check system preference:** OS set to dark mode?
-2. **Check token defined:** Does `@media (prefers-color-scheme: dark)` override exist?
+1. **Check the trigger:** in Figma, is Figma's theme dark (`html.figma-dark`)? In a browser tab, is the OS dark?
+2. **Check token defined:** Is the token in the `:root { @variant dark { … } }` block in main.css?
 3. **Use `dark:` classes:** `<div className="bg-base dark:bg-gray-900">`
 
 ### Dynamic Value Not Applying

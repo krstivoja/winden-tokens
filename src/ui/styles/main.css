@@ -5,6 +5,23 @@
 @import "./react-area.css";
 @import "./json-editor.css";
 
+/*
+ * Dark mode follows Figma's theme, not the OS. Figma's `themeColors: true`
+ * puts `figma-dark` / `figma-light` on <html>; with neither class (browser
+ * tab, `npm run dev`) the OS preference decides. One variant, so both
+ * triggers share one token block and can't drift.
+ */
+@custom-variant dark {
+    &:where(.figma-dark, .figma-dark *) {
+        @slot;
+    }
+    @media (prefers-color-scheme: dark) {
+        &:where(:not(.figma-light), :not(.figma-light) *) {
+            @slot;
+        }
+    }
+}
+
 /* Light mode theme (default) */
 @theme {
 
@@ -16,12 +33,20 @@
     --color-highlight: white;
 
     --color-text: black;
+    --color-text-secondary: rgb(0 0 0 / 0.6);
     --color-base: white;
     --color-base-2: var(--color-zinc-100);
     --color-base-3: var(--color-zinc-200);
+    --color-canvas: var(--color-zinc-100);
 
     --color-border: var(--color-zinc-200);
     --color-bg-input: var(--color-zinc-100);
+
+    /* Relationships graph wires, handles and traced path */
+    --color-edge: var(--color-primary);
+    --color-edge-generated: var(--color-secondary);
+    --color-highlight-path: #EC4899;
+    --color-checker: #e5e5e5;
 
     /* Accessibility badge backgrounds */
     --color-badge-success: rgba(34, 197, 94, 0.15);
@@ -35,26 +60,56 @@
     --font-size-lg: 16px;
 }
 
-/* Dark mode theme (system preference) */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-primary: var(--color-blue-600);
-        --color-secondary: var(--color-purple-600);
-        --color-danger: var(--color-red-600);
-        --color-success: var(--color-green-600);
+:root {
+    --edge-width: 2px;
+}
 
-        --color-text: var(--color-zinc-100);
-        --color-base: var(--color-zinc-950);
-        --color-base-2: var(--color-zinc-900);
-        --color-base-3: var(--color-zinc-800);
+/*
+ * Dark mode theme: Figma UI3 dark chrome. Each token reads Figma's injected
+ * `--figma-color-*` var, with the UI3 value as fallback for the browser tab.
+ */
+:root {
+    @variant dark {
+        --color-primary: var(--figma-color-bg-brand, #0C8CE9);
+        --color-secondary: var(--figma-color-bg-component, #9747FF);
+        --color-danger: var(--figma-color-bg-danger, #E03E1A);
+        --color-success: var(--figma-color-bg-success, #14AE5C);
 
-        --color-border: var(--color-zinc-700);
-        --color-bg-input: var(--color-zinc-900);
+        --color-text: var(--figma-color-text, #FFFFFF);
+        --color-text-secondary: var(--figma-color-text-secondary, rgb(255 255 255 / 0.7));
+        --color-base: var(--figma-color-bg, #2C2C2C);
+        --color-base-2: var(--figma-color-bg-secondary, #383838);
+        --color-base-3: var(--figma-color-bg-tertiary, #444444);
+        --color-canvas: #1E1E1E;
+
+        --color-border: var(--figma-color-border, #444444);
+        --color-bg-input: var(--figma-color-bg-secondary, #383838);
+
+        /* Muted wires: solid mix toward the canvas, so overlaps don't stack */
+        --color-edge: color-mix(in oklab, var(--color-primary) 60%, var(--color-canvas));
+        --color-edge-generated: color-mix(in oklab, var(--color-secondary) 60%, var(--color-canvas));
+        --edge-width: 1.5px;
+        --color-checker: #4A4A4A;
 
         /* Accessibility badge backgrounds - increased opacity for dark mode */
         --color-badge-success: rgba(34, 197, 94, 0.2);
         --color-badge-danger: rgba(239, 68, 68, 0.2);
+
+        color-scheme: dark;
     }
+}
+
+/* React Flow chrome (dots, MiniMap, Controls) on theme tokens */
+.react-flow {
+    --xy-background-pattern-color-default: var(--color-border);
+    --xy-minimap-background-color-default: var(--color-base);
+    --xy-minimap-mask-background-color-default: color-mix(in oklab, var(--color-canvas) 60%, transparent);
+    --xy-minimap-node-background-color-default: var(--color-base-3);
+    --xy-controls-button-background-color-default: var(--color-base);
+    --xy-controls-button-background-color-hover-default: var(--color-base-2);
+    --xy-controls-button-color-default: var(--color-text);
+    --xy-controls-button-color-hover-default: var(--color-text);
+    --xy-controls-button-border-color-default: var(--color-border);
 }
 
 html, body, #root {
@@ -87,10 +142,10 @@ body, input, button, table, span, div {
 /* Checkerboard background for color transparency visualization */
 .bg-checkerboard {
     background-image:
-        linear-gradient(45deg, #e5e5e5 25%, transparent 25%),
-        linear-gradient(-45deg, #e5e5e5 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #e5e5e5 75%),
-        linear-gradient(-45deg, transparent 75%, #e5e5e5 75%);
+        linear-gradient(45deg, var(--color-checker) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--color-checker) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--color-checker) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--color-checker) 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
 }

@@ -85,8 +85,8 @@
     opacity: 0.7;
 }
 
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
+/* Dark mode adjustments (same trigger as main.css: Figma theme, else OS) */
+@variant dark {
     .json-highlight .json-key {
         color: var(--color-blue-400);
     }
