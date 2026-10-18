@@ -115,8 +115,11 @@ import {
   isTierLabelHidden,
   planSidebarUncheck,
   applySidebarUncheck,
+  getActiveHidingLayout,
+  mergeHidingPositions,
+  collectionToggleEndsHiding,
 } from './GroupedGraph/hideUnused';
-import type { SidebarSelection } from './GroupedGraph/hideUnused';
+import type { HidingLayout, SidebarSelection } from './GroupedGraph/hideUnused';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -200,7 +203,8 @@ function GroupedGraphInner() {
   );
   // Tier captions from the last Arrange Grid run. Pure wayfinding chrome:
   // they carry no graph meaning, never reach `savedPositions`, and are
-  // replaced only by Arrange, its undo, or hydration. The element objects are
+  // replaced only by a saved Arrange, its undo, or hydration (an arrange
+  // while hiding keeps its own, see hidingLayout). The element objects are
   // handed to the caption nodes as `data` unchanged, so the layout effect
   // does not mint a fresh data identity on every pass.
   const [tierLabels, setTierLabels] = useState<TierPlacement[]>([]);
@@ -229,6 +233,15 @@ function GroupedGraphInner() {
   // card never hides the graph because of a choice made in an earlier session.
   const [hideUnused, setHideUnused] = useState(false);
   const isHidingUnused = hideUnused && highlightedGroupKey !== null;
+  // Arrange Grid run while hiding: a grid of the visible path only, in memory
+  // and never saved (see HidingLayout). The layout effect lays it over
+  // `savedPositions`; ending the hiding activation drops it, which brings the
+  // saved layout back untouched. Read through the ref by the layout effect and
+  // the drag save, for the same reason as savedPositionsRef: a drag rewrites
+  // it, and that must not rebuild every node.
+  const [hidingLayout, setHidingLayout] = useState<HidingLayout | null>(null);
+  const hidingLayoutRef = useRef(hidingLayout);
+  hidingLayoutRef.current = hidingLayout;
   // Frames the user has wrapped, as `<collectionId>::<path>` keys (see
   // getWrapperKey). Empty = flat leaf cards. A key here draws a wrapper
   // around every card of THAT collection at or below that path; the empty
@@ -310,8 +323,19 @@ function GroupedGraphInner() {
   }, [setGlobalModeId]);
 
   const handleCollectionToggle = useCallback((collectionId: string) => {
+    // Ticking a whole collection on asks to see it — hiding would keep its
+    // off-path cards out (or bring them back dimmed and unwired). A single
+    // group tick keeps hiding on.
+    if (collectionToggleEndsHiding(isHidingUnused, collectionId, localSelectedCollections)) {
+      setHideUnused(false);
+    }
     toggleCollection(collectionId);
-  }, [toggleCollection]);
+  }, [toggleCollection, isHidingUnused, localSelectedCollections]);
+
+  // Sidebar "Select All" means "show me everything": hiding ends with it.
+  const handleSelectAllCollections = useCallback(() => {
+    setHideUnused(false);
+  }, []);
 
   const handleTypeToggle = useCallback((type: string) => {
     toggleVariableType(type);
@@ -1234,6 +1258,36 @@ function GroupedGraphInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hidingActivation]);
+  // A temporary arrange lives only as long as the activation it was made in.
+  // Once that ends — toolbar or card-menu "Show all", the highlight cleared,
+  // sidebar "Select All" / a collection ticked on, or the highlight moving to
+  // another path — drop it. The layout effect already ignores it from the
+  // ending commit on (its deps cover every input of `hidingActivation`), so no
+  // revision bump is needed; this only frees it and, when hiding ended, frames
+  // the saved layout it brought back. A moved highlight is framed by the
+  // hide-unused fit below instead. The fit timer is deliberately not
+  // cancelled on cleanup: clearing the state re-runs this effect at once.
+  const activeHidingLayout = getActiveHidingLayout(hidingLayout, hidingActivation);
+  useEffect(() => {
+    if (hidingLayout === null || activeHidingLayout !== null) return;
+    setHidingLayout(null);
+    if (hidingActivation !== null) return;
+    // The cards hiding took away mount again here and are measured a frame or
+    // two later; fitView skips unmeasured nodes, so a fixed delay framed only
+    // the path. Wait until every visible node has a size (bounded, so a node
+    // that never measures cannot keep this alive).
+    let frames = 0;
+    const fitWhenMeasured = () => {
+      const pending = reactFlowInstance.getNodes()
+        .some(n => !n.hidden && !(n.measured?.width && n.measured?.height));
+      if (pending && frames++ < 30) {
+        requestAnimationFrame(fitWhenMeasured);
+        return;
+      }
+      reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+    };
+    setTimeout(fitWhenMeasured, 50);
+  }, [hidingLayout, activeHidingLayout, hidingActivation, reactFlowInstance]);
 
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
@@ -1388,8 +1442,13 @@ function GroupedGraphInner() {
 
   useEffect(() => {
     if (!positionsHydrated) return;
-    // Read through the ref: see savedPositionsRef above.
-    const savedPositions = savedPositionsRef.current;
+    // Read through the refs: see savedPositionsRef and hidingLayout above.
+    // A temporary arrange made while hiding wins over the saved record; one
+    // left over from an activation that just ended is already ignored here,
+    // in the commit before it is cleared from state.
+    const temporaryLayout = getActiveHidingLayout(hidingLayoutRef.current, hidingActivation);
+    const savedPositions = mergeHidingPositions(savedPositionsRef.current, temporaryLayout);
+    const shownTierLabels = temporaryLayout?.tierLabels ?? tierLabels;
 
     // The highlighted lineage — see computeHighlightPath. Empty sets when
     // nothing is highlighted, so the rest of the effect reads them freely.
@@ -1526,7 +1585,7 @@ function GroupedGraphInner() {
     // free: a caption has no `parentId` and is no node's parent, so it cannot
     // break the "nested node must follow its parentId" rule, and prepending
     // leaves the relative order of every real node untouched.
-    tierLabels.forEach(label => {
+    shownTierLabels.forEach(label => {
       newNodes.push({
         id: `${TIER_LABEL_NODE_PREFIX}${label.tier}`,
         type: 'tierLabel',
@@ -1807,7 +1866,7 @@ function GroupedGraphInner() {
     setNodes(newNodes);
     setEdges(newEdges);
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
-      tierLabels,
+      tierLabels, hidingActivation,
       cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
@@ -1881,6 +1940,10 @@ function GroupedGraphInner() {
 
   // Save positions when nodes are dragged
   const savePositionsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The save the timeout above will run, so a temporary arrange can run it
+  // early: left pending, it would read the temporary grid off the canvas and
+  // persist it.
+  const pendingPositionSaveRef = useRef<(() => void) | null>(null);
 
   const handleNodesChangeWrapped = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes);
@@ -1888,7 +1951,14 @@ function GroupedGraphInner() {
     const hasPositionChanges = changes.some(c => c.type === 'position' && c.position);
     if (hasPositionChanges) {
       if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
-      savePositionsTimeoutRef.current = setTimeout(() => {
+      // Decided when the drag happens, not when the save fires: a drag on a
+      // temporary arrange only ever updates that layout, even if hiding ends
+      // within the debounce (the layout is gone by then and the save is
+      // dropped) — it must never reach `graph-positions`.
+      const temporary = hidingLayoutRef.current !== null;
+      const save = () => {
+        pendingPositionSaveRef.current = null;
+        savePositionsTimeoutRef.current = null;
         const currentNodes = reactFlowInstance.getNodes();
         const positionsObj: Record<string, { x: number; y: number }> = {};
         currentNodes.forEach(n => {
@@ -1907,10 +1977,16 @@ function GroupedGraphInner() {
             positionsObj[n.id] = { x: n.position.x, y: n.position.y };
           }
         });
+        if (temporary) {
+          setHidingLayout(prev => (prev ? { ...prev, positions: positionsObj } : prev));
+          return;
+        }
         const storageKey = `graph-positions`;
         setSavedPositions(positionsObj);
         post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
-      }, 300);
+      };
+      pendingPositionSaveRef.current = save;
+      savePositionsTimeoutRef.current = setTimeout(save, 300);
     }
   }, [onNodesChange, reactFlowInstance, variableType, setSavedPositions]);
 
@@ -2026,10 +2102,48 @@ function GroupedGraphInner() {
       }
     );
 
-    // Hidden units get no slot, but they must keep an entry in the saved
-    // record. Dropping it would re-seed them from their natural origin on the
-    // next layout pass and drop them straight on top of the arranged grid the
-    // moment the filter is lifted. Park them in a spare column just right of
+    // While hide-unused hides something the arrange is temporary: the grid of
+    // the visible path goes into `hidingLayout` only. Hidden units are not
+    // parked — they keep their spot, so "Show all" brings back the layout from
+    // before exactly — and nothing reaches `savedPositions`, client storage or
+    // the saved undo snapshot (Undo Arrange pops the temporary layout).
+    if (hidingActivation !== null) {
+      // A drag save still pending from before would read the grid below off
+      // the canvas: run it now, against the positions it was meant for.
+      if (pendingPositionSaveRef.current) {
+        if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
+        pendingPositionSaveRef.current();
+      }
+      setNodes(prevNodes =>
+        prevNodes.map(rfNode => {
+          if (rfNode.parentId) return rfNode;
+          const pos = newPositions.get(rfNode.id);
+          return pos ? { ...rfNode, position: { x: pos.x, y: pos.y } } : rfNode;
+        })
+      );
+      const packed: Record<string, { x: number; y: number }> = {};
+      newPositions.forEach((pos, key) => { packed[key] = pos; });
+      // Re-arranging on top of a temporary layout keeps what it did not move
+      // (a card the user dragged, then unticked) where it is now.
+      setHidingLayout(prev => ({
+        activation: hidingActivation,
+        positions: { ...getActiveHidingLayout(prev, hidingActivation)?.positions, ...packed },
+        tierLabels: tiers,
+      }));
+      // The captions come from `hidingLayout`, which the layout effect reads
+      // through its ref.
+      setSavedPositionsRevision(rev => rev + 1);
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+      }, 50);
+      return;
+    }
+
+    // A saved arrange from here on, so every hidden unit is a filtered one
+    // (hide-unused arranges returned above). Hidden units get no slot, but
+    // they must keep an entry in the saved record. Dropping it would re-seed
+    // them from their natural origin on the next layout pass and drop them
+    // straight on top of the arranged grid the moment the filter is lifted. Park them in a spare column just right of
     // the arranged content, ordered by their pre-arrange position so the
     // result is deterministic. Undo restores their real positions anyway (the
     // snapshot below covers every top-level node, hidden ones included).
@@ -2081,9 +2195,16 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, isCardHiddenNow, setNodes, variableType, tierLabels, nodeIdForCard]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, isCardHiddenNow, setNodes, variableType, tierLabels, nodeIdForCard, hidingActivation]);
 
   const handleUndoArrange = useCallback(() => {
+    // A temporary arrange is undone by dropping it: the saved layout comes
+    // back, and the saved one-step snapshot stays for a later undo.
+    if (hidingLayoutRef.current !== null) {
+      setHidingLayout(null);
+      setSavedPositionsRevision(rev => rev + 1);
+      return;
+    }
     const previousPositions = lastArrangeUndoRef.current;
     if (!previousPositions) return;
 
@@ -2161,7 +2282,9 @@ function GroupedGraphInner() {
   }, [selectionId, handleFocusSelection]);
 
   // Hide-unused just took cards away (toggled on with a highlight, or the
-  // highlight moved while on): frame what is left. Plain fitView skips hidden
+  // highlight moved while on): frame what is left. Turning it off frames
+  // nothing here — only dropping a temporary arrange does (see hidingLayout),
+  // since that is when the cards move. Plain fitView skips hidden
   // nodes. Deferred like Arrange Grid's fit, so the rebuilt nodes are
   // committed before we measure; it also lands after a search jump's own
   // zoom, which is fine — the jumped-to card is on the path it fits.
@@ -2204,7 +2327,7 @@ function GroupedGraphInner() {
           <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
           </TextButton>
-          {hasArrangeUndo && (
+          {(hasArrangeUndo || activeHidingLayout !== null) && (
             <TextButton variant="secondary" onClick={handleUndoArrange}>
               Undo Arrange
             </TextButton>
@@ -2290,6 +2413,7 @@ function GroupedGraphInner() {
           highlightedGroupKey={highlightedGroupKey}
           onHighlightGroup={handleHighlightFromSidebar}
           onZoomToCollection={handleZoomToCollection}
+          onSelectAllCollections={handleSelectAllCollections}
           showTypeFilters={true}
         />
 

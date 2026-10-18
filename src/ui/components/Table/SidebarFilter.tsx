@@ -222,6 +222,10 @@ interface SidebarFilterProps {
   /** Move the graph viewport onto everything this collection owns. Absent in
    *  views with no canvas, where the name keeps toggling the checkbox. */
   onZoomToCollection?: (collectionId: string) => void;
+  /** Fired once by "Select All" (never by "Deselect All"), after the
+   *  per-collection and per-group toggles. The graph turns "Hide unused" off
+   *  here; views without it get the plain toggles. */
+  onSelectAllCollections?: () => void;
   showTypeFilters?: boolean;
   footer?: React.ReactNode;
 }
@@ -238,6 +242,7 @@ export function SidebarFilter({
   highlightedGroupKey,
   onHighlightGroup,
   onZoomToCollection,
+  onSelectAllCollections,
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
@@ -403,7 +408,12 @@ export function SidebarFilter({
   }, [groupsByCollection]);
 
   // Select all / deselect all for collections (drives nested groups too)
-  const allCollectionsSelected = collections.every(c => selectedCollections.has(c.id));
+  // A group unticked under a ticked collection counts too: otherwise the
+  // button reads "Deselect All" while cards are still hidden (Hide unused
+  // unticks groups only, when every collection keeps a card on the path), and
+  // "Select All" could never be reached.
+  const allCollectionsSelected = collections.every(c => selectedCollections.has(c.id))
+    && (!selectedGroups || allGroupKeys.every(key => selectedGroups.has(key)));
   const handleToggleAllCollections = () => {
     if (allCollectionsSelected) {
       collections.forEach(c => onCollectionToggle(c.id));
@@ -421,6 +431,7 @@ export function SidebarFilter({
           if (!selectedGroups.has(key)) onGroupToggle(key);
         });
       }
+      onSelectAllCollections?.();
     }
   };
 

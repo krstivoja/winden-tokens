@@ -105,7 +105,10 @@
 - Visualize variable aliases
 - Show reference chains
 - Detect circular dependencies
-- "Hide unused" toolbar toggle (not saved: off again after every reload): while a card or row is highlighted, hides every card, wire and tier caption not on its path and fits the view to what is left; filtered cards stay hidden; Arrange Grid still works while it hides, packing only the visible path and parking the hidden cards like any filtered card
+- "Hide unused" toolbar toggle (not saved: off again after every reload): while a card or row is highlighted, hides every card, wire and tier caption not on its path and fits the view to what is left; filtered cards stay hidden
+- Arrange Grid while Hide unused hides is temporary: it packs only the visible path, leaves the hidden cards where they are, and saves nothing (no positions, no tier captions, no change to the saved Undo Arrange step); dragging cards while it is up stays temporary too
+- Undo Arrange drops a temporary arrange; ending the hiding for any reason ("Show all", card menu "Show all", clearing or moving the highlight, sidebar "Select All", ticking a whole collection on) drops it too, brings back the saved layout exactly as it was, and fits the view
+- Sidebar Collections "Select All", and ticking a whole collection on, turn Hide unused off; ticking a single group keeps it on
 - Hide unused unchecks the off-path groups for real in the sidebar Collections tree (shared with the Table view, so their rows hide there too), at group level; a collection goes only when nothing of it is on the path
 - The uncheck is one write per activation (toggle on with a highlight, card menu, or the highlight moving while on); re-ticking a group while hiding shows it again, and "Show all" re-checks nothing
 - A later activation re-checks only groups Hide unused itself unchecked that are now on the path; groups the user unchecked are never re-checked
