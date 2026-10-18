@@ -834,12 +834,17 @@ export interface ArrangeUnits {
  *   hidden member's space inside the frame stays reserved and the frame drawn
  *   on the canvas is that tall. Measuring only the visible members would
  *   under-size the unit and overlap whatever is placed after it.
+ *
+ * `alsoHidden` is OR'd on top of the filters for what they cannot express —
+ * hide-unused's own hiding — so the caller passes the exact predicate the
+ * canvas renders as `node.hidden`.
  */
 function buildArrangeUnits(
   groups: GroupData[],
   groupedPaths: Set<string>,
   filters: CardVisibilityFilters,
-  wrapperFrames: Map<string, WrapperFrameGeometry>
+  wrapperFrames: Map<string, WrapperFrameGeometry>,
+  alsoHidden?: (group: GroupData) => boolean
 ): ArrangeUnits {
   const unitKeyForGroup = (group: GroupData): string => {
     // Exactly the cards buildWrapperLayout lays out (see isStandardLayoutCard
@@ -870,7 +875,7 @@ function buildArrangeUnits(
 
   groups.forEach(group => {
     const unitKey = unitKeyForGroup(group);
-    const hidden = isCardHidden(group, filters);
+    const hidden = isCardHidden(group, filters) || (alsoHidden?.(group) ?? false);
     hiddenByKey.set(group.key, hidden);
     unitKeyByGroupKey.set(group.key, unitKey);
     unitHidden.set(unitKey, (unitHidden.get(unitKey) ?? true) && hidden);

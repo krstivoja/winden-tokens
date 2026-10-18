@@ -192,6 +192,20 @@ describe('buildArrangeUnits', () => {
     expect(units.map(u => u.key).sort()).toEqual([colorCard.key, globalCard.key].sort());
   });
 
+  it('parks a card the extra predicate hides (hide-unused), even when force-shown', () => {
+    const { units, hiddenUnits, hiddenByKey } = buildArrangeUnits(
+      [globalCard, colorCard],
+      new Set(),
+      filters({ selectionProviderGroupKeys: new Set([globalCard.key]) }),
+      new Map(),
+      group => group.key === globalCard.key
+    );
+
+    expect(units.map(u => u.key)).toEqual([colorCard.key]);
+    expect(hiddenUnits.map(u => u.key)).toEqual([globalCard.key]);
+    expect(hiddenByKey.get(globalCard.key)).toBe(true);
+  });
+
   it('folds wrapped cards into their outermost wrapper unit', () => {
     const inner = card('group:color/brand/deep', 'color', 'color/brand/deep', [row('v-color-1', 'color/brand/deep/x')]);
     const { units, unitKeyByGroupKey } = buildArrangeUnits(

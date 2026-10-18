@@ -1203,6 +1203,15 @@ function GroupedGraphInner() {
   // `coveredCards` are then the filter's to hide; the rest hide-unused still
   // hides itself (see isCardHiddenByHideUnused).
   const sidebarUncheck = useMemo(() => planSidebarUncheck(groupsData, hidingPath), [groupsData, hidingPath]);
+  // Whether a card is hidden on the canvas right now: the shared filter
+  // predicate, with hide-unused OR'd on top for what the sidebar uncheck
+  // cannot cover — it can hide an on-filter card, never show a filtered one.
+  // The layout effect renders this as `node.hidden` and Arrange Grid uses it
+  // to decide which cards get a grid slot, so the two never disagree.
+  const isCardHiddenNow = useCallback((group: GroupData) => (
+    isCardHidden(group, cardVisibilityFilters)
+    || isCardHiddenByHideUnused(group.key, hidingPath, sidebarUncheck.coveredCards)
+  ), [cardVisibilityFilters, hidingPath, sidebarUncheck]);
   // What hide-unused unchecked and is still unchecked. Only these may come
   // back, when a later activation puts them on the path again; anything the
   // user unchecked never does. Kept across "Show all": turning hiding off
@@ -1466,16 +1475,8 @@ function GroupedGraphInner() {
       });
     });
 
-    // Visibility comes from the shared predicate (GroupedGraph/utils) so that
-    // Arrange Grid applies exactly the same rule — see cardVisibilityFilters.
-    // Hide-unused is OR'd on top for what the sidebar uncheck cannot cover: it
-    // can hide an on-filter card, never show a filtered one. Arrange is
-    // disabled while it hides, so the two never disagree about which cards
-    // get a grid slot.
-    const cardHidden = (group: GroupData) => (
-      isCardHidden(group, cardVisibilityFilters)
-      || isCardHiddenByHideUnused(group.key, hidingPath, sidebarUncheck.coveredCards)
-    );
+    // Same predicate Arrange Grid uses — see isCardHiddenNow.
+    const cardHidden = isCardHiddenNow;
 
     // One card's worth of node data. Shared, because a CONTAINER renders the
     // card it absorbed from exactly this object — same header, same rows,
@@ -1831,7 +1832,7 @@ function GroupedGraphInner() {
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
       handleHideUnusedFromCard, handleHighlightVariable, highlightedGroupKey, highlightedVarName, highlightPath, hidingPath,
-      sidebarUncheck, setNodes, setEdges]);
+      sidebarUncheck, isCardHiddenNow, setNodes, setEdges]);
 
   // Everything that can add, remove or move a handle *under an existing node
   // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
@@ -1853,8 +1854,7 @@ function GroupedGraphInner() {
     // with it.
     const containers = groupsData
       .filter(g => isAbsorbedCard(g, groupedPaths))
-      .map(g => `${g.key}|${isCardHidden(g, cardVisibilityFilters)
-        || isCardHiddenByHideUnused(g.key, hidingPath, sidebarUncheck.coveredCards) ? 0 : 1}`)
+      .map(g => `${g.key}|${isCardHiddenNow(g) ? 0 : 1}`)
       .join(',');
     const selection = selectedNode
       ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
@@ -1864,7 +1864,7 @@ function GroupedGraphInner() {
         .join(';')}]`
       : '';
     return `${cards}#${containers}#${selection}`;
-  }, [groupsData, selectedNode, selectedLayers, groupedPaths, cardVisibilityFilters, hidingPath, sidebarUncheck]);
+  }, [groupsData, selectedNode, selectedLayers, groupedPaths, isCardHiddenNow]);
 
   const lastHandleSignatureRef = useRef<string | null>(null);
   const pendingMeasureNodesRef = useRef<Node[] | null>(null);
@@ -1980,9 +1980,6 @@ function GroupedGraphInner() {
   }, [collections, selectedModeId, variableMap, variablesById, selectedLayers]);
 
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
-    // Hide-unused would park every off-path card below the grid. The button
-    // is disabled meanwhile; this also covers Grid Settings' Apply.
-    if (isHidingUnused) return;
     const settings = overrideSettings || gridLayoutSettings;
     const currentNodes = reactFlowInstance.getNodes();
     const currentGroups = groupsData.map(group => {
@@ -1999,8 +1996,8 @@ function GroupedGraphInner() {
 
     // Fold cards into arrangeable units and split them by visibility. The
     // helper applies the SAME predicate the layout effect renders as
-    // `node.hidden` (cardVisibilityFilters, selection-provider force-show
-    // included), so a card that isn't on screen never reserves a grid slot —
+    // `node.hidden` (isCardHiddenNow: filters, selection-provider force-show
+    // and hide-unused included), so a card that isn't on screen never reserves a grid slot —
     // which is what used to leave the large empty gaps.
     const wrapperFrames = new Map<string, WrapperFrameGeometry>();
     currentNodes.forEach(n => {
@@ -2013,7 +2010,7 @@ function GroupedGraphInner() {
       heightOverrides,
       unitKeyByGroupKey,
       hiddenByKey,
-    } = buildArrangeUnits(currentGroups, groupedPaths, cardVisibilityFilters, wrapperFrames);
+    } = buildArrangeUnits(currentGroups, groupedPaths, cardVisibilityFilters, wrapperFrames, isCardHiddenNow);
 
     // Remap connections onto their unit keys; a connection that becomes a
     // self-loop within one unit (both ends now the same wrapper) is dropped.
@@ -2103,7 +2100,7 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, setNodes, variableType, tierLabels, nodeIdForCard, isHidingUnused]);
+  }, [reactFlowInstance, groupsData, connectionData, gridLayoutSettings, groupedPaths, cardVisibilityFilters, isCardHiddenNow, setNodes, variableType, tierLabels, nodeIdForCard]);
 
   const handleUndoArrange = useCallback(() => {
     const previousPositions = lastArrangeUndoRef.current;
@@ -2223,7 +2220,7 @@ function GroupedGraphInner() {
           >
             New Group
           </TextButton>
-          <TextButton variant="secondary" onClick={() => handleArrangeGrid()} disabled={isHidingUnused}>
+          <TextButton variant="secondary" onClick={() => handleArrangeGrid()}>
             Arrange Grid
           </TextButton>
           {hasArrangeUndo && (
