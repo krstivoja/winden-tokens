@@ -454,7 +454,7 @@ export function SidebarFilter({
                 type="button"
                 className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-all ${
                   isActive
-                    ? 'bg-primary text-base border-primary'
+                    ? 'bg-selected text-on-selected border-selected'
                     : 'bg-base-2 text-text border-border hover:bg-base-3'
                 }`}
                 onClick={() => setModePickerCollectionId(collection.id)}
@@ -481,7 +481,7 @@ export function SidebarFilter({
                     type="button"
                     className={`px-2 py-1 rounded text-xs font-medium border cursor-pointer transition-all ${
                       isActive
-                        ? 'bg-primary text-base border-primary'
+                        ? 'bg-selected text-on-selected border-selected'
                         : 'bg-base-2 text-text border-border hover:bg-base-3'
                     }`}
                     onClick={() => onModeChange(mode.modeId)}

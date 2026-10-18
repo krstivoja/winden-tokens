@@ -32,6 +32,11 @@
     --color-component: #9747FF; /* Figma component / instance purple */
     --color-highlight: white;
 
+    /* Selected state (checkboxes, toggle/segment buttons): the browser's own
+       checkbox blue, so a picked button reads exactly like a ticked box */
+    --color-selected: #0075FF;
+    --color-on-selected: white;
+
     --color-text: black;
     --color-text-secondary: rgb(0 0 0 / 0.6);
     --color-base: white;
@@ -74,6 +79,8 @@
         --color-secondary: var(--figma-color-bg-component, #9747FF);
         --color-danger: var(--figma-color-bg-danger, #E03E1A);
         --color-success: var(--figma-color-bg-success, #14AE5C);
+        --color-selected: #99C8FF;
+        --color-on-selected: var(--color-base);
 
         --color-text: var(--figma-color-text, #FFFFFF);
         --color-text-secondary: var(--figma-color-text-secondary, rgb(255 255 255 / 0.7));
@@ -156,6 +163,11 @@ body, input, button, table, span, div {
         linear-gradient(-45deg, transparent 75%, var(--color-checker) 75%);
     background-size: 6px 6px;
     background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+}
+
+/* Checkboxes and selected buttons share one token, so they can't drift */
+input[type="checkbox"] {
+    accent-color: var(--color-selected);
 }
 
 /* Checkbox checked state - show checkmark icon */

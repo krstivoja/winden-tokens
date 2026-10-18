@@ -98,14 +98,14 @@ export function ValueCell({ variable, modifierButton }: ValueCellProps) {
         <div className="flex border border-border rounded overflow-hidden">
           <TextButton
             size="sm"
-            className={`rounded-none border-r border-border ${currentValue === 'true' ? 'bg-primary text-base' : 'bg-transparent'}`}
+            className={`rounded-none border-r border-border ${currentValue === 'true' ? 'bg-selected text-on-selected' : 'bg-transparent'}`}
             onClick={() => handleValueChange('true')}
           >
             True
           </TextButton>
           <TextButton
             size="sm"
-            className={`rounded-none ${currentValue === 'false' ? 'bg-primary text-base' : 'bg-transparent'}`}
+            className={`rounded-none ${currentValue === 'false' ? 'bg-selected text-on-selected' : 'bg-transparent'}`}
             onClick={() => handleValueChange('false')}
           >
             False
