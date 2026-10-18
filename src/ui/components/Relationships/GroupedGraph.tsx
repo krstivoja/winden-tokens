@@ -225,7 +225,8 @@ function GroupedGraphInner() {
   const highlightedVarName = highlightTarget?.varName ?? null;
   // "Hide unused": while something is highlighted, hide every card and wire
   // that is not on its path. A preference, not a mode — with no highlight it
-  // hides nothing. Persisted under `graph-hide-unused`.
+  // hides nothing. Not saved: every reload starts with it off, so a click on a
+  // card never hides the graph because of a choice made in an earlier session.
   const [hideUnused, setHideUnused] = useState(false);
   const isHidingUnused = hideUnused && highlightedGroupKey !== null;
   // Frames the user has wrapped, as `<collectionId>::<path>` keys (see
@@ -389,29 +390,9 @@ function GroupedGraphInner() {
     return () => window.removeEventListener('message', handleStorage);
   }, [variableType]);
 
-  useEffect(() => {
-    const storageKey = `graph-hide-unused`;
-    post({ type: 'get-client-storage', key: storageKey });
-
-    const handleStorage = (event: MessageEvent) => {
-      const msg = event.data.pluginMessage;
-      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
-        setHideUnused(msg.value === true);
-      }
-    };
-
-    window.addEventListener('message', handleStorage);
-    return () => window.removeEventListener('message', handleStorage);
-  }, []);
-
-  const persistHideUnused = useCallback((next: boolean) => {
-    setHideUnused(next);
-    post({ type: 'set-client-storage', key: `graph-hide-unused`, value: next });
-  }, []);
-
   const handleToggleHideUnused = useCallback(() => {
-    persistHideUnused(!hideUnused);
-  }, [hideUnused, persistHideUnused]);
+    setHideUnused(prev => !prev);
+  }, []);
 
   // Load grouped-path state (per variable type)
   useEffect(() => {
@@ -698,12 +679,12 @@ function GroupedGraphInner() {
   // one step. While hiding is active the same item reads "Show all".
   const handleHideUnusedFromCard = useCallback((group: GroupData) => {
     if (hidingPathRef.current) {
-      persistHideUnused(false);
+      setHideUnused(false);
       return;
     }
     setHighlightTarget({ groupKey: group.key, varName: null });
-    persistHideUnused(true);
-  }, [persistHideUnused]);
+    setHideUnused(true);
+  }, []);
 
   // Highlight only one variable row's chain (toggle off if re-selected).
   const handleHighlightVariable = useCallback((group: GroupData, node: VariableNode) => {
