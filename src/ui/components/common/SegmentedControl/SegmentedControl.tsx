@@ -36,13 +36,13 @@ export function SegmentedControl<T extends string = string>({
     if (variant === 'bordered') {
       return `${base} px-3 py-1.5 ${
         isActive
-          ? 'bg-primary text-base shadow-sm'
+          ? 'bg-selected text-on-selected shadow-sm'
           : 'bg-transparent text-text hover:bg-base-2'
       }`;
     } else {
       return `${base} px-3 py-1.5 ${
         isActive
-          ? 'bg-primary text-base'
+          ? 'bg-selected text-on-selected'
           : 'bg-transparent text-text hover:bg-base-3'
       }`;
     }

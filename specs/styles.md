@@ -124,6 +124,12 @@ body {
     /* UI colors */
     --color-border: var(--color-gray-200);
     --color-bg-input: var(--color-gray-100);
+
+    /* Selected state: native checkbox blue (dark: #99C8FF on base).
+       Checkboxes get it via accent-color; selected toggle/segment
+       buttons use bg-selected text-on-selected */
+    --color-selected: #0075FF;
+    --color-on-selected: white;
 }
 ```
 
