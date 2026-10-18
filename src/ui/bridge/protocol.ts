@@ -24,6 +24,12 @@ export interface BridgeEnvelope {
  */
 export const BRIDGE_PORT = 9337;
 export const BRIDGE_URL = `ws://localhost:${BRIDGE_PORT}`;
+/**
+ * The relay serves the browser UI on the same port the plugin's socket is
+ * pinned to, so the bridge window can always link back to it. Copied as a
+ * literal in src/plugin/code.ts, which opens it.
+ */
+export const BRIDGE_UI_URL = `http://localhost:${BRIDGE_PORT}/`;
 export const BRIDGE_PROTOCOL_VERSION = 2;
 
 /** What the user runs to get a relay. Shown verbatim in the bridge window. */

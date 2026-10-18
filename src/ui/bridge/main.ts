@@ -2,8 +2,8 @@
 // window only relays messages and shows one status line.
 
 import { PluginBridge, sandboxMessageFrom } from './client';
-import { requestPluginKey } from './key';
-import { BRIDGE_URL } from './protocol';
+import { requestPluginKey, SANDBOX_OPEN_UI } from './key';
+import { BRIDGE_UI_URL, BRIDGE_URL } from './protocol';
 import { viewFor, type BridgePhase } from './state';
 
 function postToSandbox(message: Record<string, unknown>): void {
@@ -31,6 +31,9 @@ const detail = el<'p'>('bridge-detail');
 const detailText = el<'span'>('bridge-detail-text');
 const detailCode = el<'code'>('bridge-detail-code');
 const retry = el<'button'>('bridge-retry');
+const openLink = el<'button'>('bridge-open');
+
+openLink.title = BRIDGE_UI_URL;
 
 function render(state: BridgePhase): void {
   const view = viewFor(state);
@@ -41,6 +44,7 @@ function render(state: BridgePhase): void {
   detailCode.textContent = view.detail?.code ?? '';
   detailCode.hidden = !view.detail?.code;
   retry.hidden = !view.retry;
+  openLink.hidden = !view.openLink;
 }
 
 const bridge = new PluginBridge({
@@ -53,5 +57,7 @@ const bridge = new PluginBridge({
 bridge.onState(render);
 render(bridge.getState());
 retry.addEventListener('click', () => bridge.retry());
+// A plain link is not reliable inside Figma desktop's iframe; the sandbox opens it.
+openLink.addEventListener('click', () => postToSandbox({ type: SANDBOX_OPEN_UI }));
 
 void requestPluginKey({ post: postToSandbox, listen: onSandboxMessage }).then((key) => bridge.start(key));

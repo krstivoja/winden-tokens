@@ -15,6 +15,8 @@ import { generatePluginKey, isValidPluginKey } from './protocol';
 export const BRIDGE_SANDBOX_PREFIX = 'bridge-';
 export const SANDBOX_GET_KEY = 'bridge-get-key';
 export const SANDBOX_KEY_REPLY = 'bridge-key';
+/** Ask the sandbox to open the relay's browser UI. Carries no URL: the sandbox owns it. */
+export const SANDBOX_OPEN_UI = 'bridge-open-ui';
 
 /** A sandbox that never answers must not leave the window stuck. */
 export const KEY_REPLY_TIMEOUT_MS = 3000;

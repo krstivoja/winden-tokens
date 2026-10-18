@@ -53,6 +53,19 @@
       white-space: nowrap;
       user-select: all;
     }
+    .bridge-open {
+      display: block;
+      margin: 2px 0 0;
+      padding: 0;
+      border: 0;
+      border-radius: 2px;
+      font: inherit;
+      cursor: pointer;
+      color: var(--figma-color-text-brand);
+      background: none;
+    }
+    .bridge-open:hover { text-decoration: underline; }
+    .bridge-open:focus-visible { outline: 2px solid var(--figma-color-border-selected); outline-offset: 1px; }
     .bridge-retry {
       flex: none;
       font: inherit;
@@ -79,6 +92,7 @@
         <span id="bridge-detail-text"></span>
         <code id="bridge-detail-code" hidden></code>
       </p>
+      <button id="bridge-open" class="bridge-open" type="button" hidden>Open in browser</button>
     </div>
     <button id="bridge-retry" class="bridge-retry" type="button" hidden>Retry</button>
   </div>
