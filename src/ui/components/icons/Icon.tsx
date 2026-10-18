@@ -27,7 +27,8 @@ export type IconName =
   | 'edit'
   | 'folder'
   | 'relationships'
-  | 'menu';
+  | 'menu'
+  | 'warning';
 
 interface IconProps {
   name: IconName;
@@ -60,6 +61,7 @@ import EditSvg from './svg/edit.svg?raw';
 import FolderSvg from './svg/folder.svg?raw';
 import RelationshipsSvg from './svg/relationships.svg?raw';
 import MenuSvg from './svg/menu.svg?raw';
+import WarningSvg from './svg/warning.svg?raw';
 
 const svgMap: Record<IconName, string> = {
   plus: PlusSvg,
@@ -86,6 +88,7 @@ const svgMap: Record<IconName, string> = {
   folder: FolderSvg,
   relationships: RelationshipsSvg,
   menu: MenuSvg,
+  warning: WarningSvg,
 };
 
 export function Icon({ name, size = 24, className = '' }: IconProps) {

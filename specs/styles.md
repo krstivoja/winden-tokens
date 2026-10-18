@@ -130,6 +130,10 @@ body {
        buttons use bg-selected text-on-selected */
     --color-selected: #0075FF;
     --color-on-selected: white;
+
+    /* Blocking alert banners (bridge down / no plugin): bg-alert text-on-alert */
+    --color-alert: var(--color-red-700);
+    --color-on-alert: white;
 }
 ```
 

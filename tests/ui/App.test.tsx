@@ -107,7 +107,7 @@ describe('App bridge banners (browser tab)', () => {
     bridgeMock.status = status({ pairingCode: 'K7Q2XD', error: 'Bridge protocol mismatch: update one side.' });
     render(<App />);
 
-    expect(screen.getByRole('status').textContent).toBe('Bridge protocol mismatch: update one side.');
+    expect(screen.getByRole('status').textContent?.trim()).toBe('Bridge protocol mismatch: update one side.');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
