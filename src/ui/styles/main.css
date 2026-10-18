@@ -37,6 +37,10 @@
     --color-selected: #0075FF;
     --color-on-selected: white;
 
+    /* Blocking alert banners: solid dark red, white text, same in both themes */
+    --color-alert: var(--color-red-700);
+    --color-on-alert: white;
+
     --color-text: black;
     --color-text-secondary: rgb(0 0 0 / 0.6);
     --color-base: white;

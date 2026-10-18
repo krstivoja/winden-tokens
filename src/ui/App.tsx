@@ -6,6 +6,7 @@ import { usePluginMessages, post } from './hooks/usePluginMessages';
 import { useBridge, answerBridgePairing, isInsideFigma, BRIDGE_CLIENT_ENABLED } from './hooks/useBridge';
 import { BRIDGE_CLI_COMMAND } from './bridge/protocol';
 import { TextButton } from './components/common/Button';
+import { Icon } from './components/icons/Icon';
 import { TabBar, type TabId } from './components/Tabs/TabBar';
 import { TabContent } from './components/Tabs/TabContent';
 import { ShadesModal } from './components/Modals/ShadesModal';
@@ -22,6 +23,10 @@ export type ActiveTab = TabId;
 // The bridge banners share one look: a single row under the top edge.
 const BRIDGE_BANNER_CLASS =
   'flex shrink-0 items-center justify-center gap-2 border-b border-border bg-base-2 px-4 py-2 text-center';
+// The bridge is down or has no document: nothing in this tab works until it's
+// fixed, so it reads as an alert, not a status line.
+const BRIDGE_ALERT_CLASS =
+  'flex shrink-0 items-center justify-center gap-2 bg-alert px-4 py-2 text-center text-on-alert';
 
 // Where a user finds the Figma half of the bridge.
 const BRIDGE_MENU_HINT =
@@ -150,9 +155,9 @@ export function App() {
   return (
     <>
       {bridgeError ? (
-        <div role="status" className={BRIDGE_BANNER_CLASS}>
-          <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
-          <span className="text-xs text-text">{bridgeError}</span>
+        <div role="status" className={BRIDGE_ALERT_CLASS}>
+          <span className="shrink-0 leading-0" aria-hidden="true"><Icon name="warning" size={14} /></span>
+          <span className="text-xs">{bridgeError}</span>
         </div>
       ) : pairingCode ? (
         <div
@@ -188,9 +193,9 @@ export function App() {
           </span>
         </div>
       ) : isDetachedClient ? (
-        <div role="status" className={BRIDGE_BANNER_CLASS}>
-          <span className="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
-          <span className="text-xs text-text">
+        <div role="status" className={BRIDGE_ALERT_CLASS}>
+          <span className="shrink-0 leading-0" aria-hidden="true"><Icon name="warning" size={14} /></span>
+          <span className="text-xs">
             {bridgeStatus.connected
               ? `No plugin connected. Open the Winden Tokens plugin in Figma and ${BRIDGE_MENU_HINT} — this tab has no data of its own.`
               : `Bridge relay not reachable. Run ${BRIDGE_CLI_COMMAND} (or npm run dev:bridge), then open the Winden Tokens plugin in Figma and ${BRIDGE_MENU_HINT}.`}
