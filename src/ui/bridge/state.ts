@@ -78,6 +78,8 @@ export interface BridgeView {
   detail?: { text: string; code?: string };
   /** Show the Retry button. */
   retry: boolean;
+  /** Show "Open in browser": the relay is up and a tab is useful. */
+  openLink: boolean;
 }
 
 export function tabsLabel(tabs: number): string {
@@ -88,13 +90,14 @@ export function tabsLabel(tabs: number): string {
 export function viewFor(state: BridgePhase): BridgeView {
   switch (state.phase) {
     case 'connecting':
-      return { tone: 'pending', title: 'Connecting…', retry: false };
+      return { tone: 'pending', title: 'Connecting…', retry: false, openLink: false };
     case 'relay-down':
       return {
         tone: 'warn',
         title: 'winden-tokens is not running',
         detail: { text: 'Start it in a terminal:', code: BRIDGE_CLI_COMMAND },
         retry: false,
+        openLink: false,
       };
     case 'busy':
       return {
@@ -102,6 +105,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Another Figma window is waiting for approval',
         detail: { text: 'Answer that one in your browser tab first.' },
         retry: false,
+        openLink: false,
       };
     case 'pairing':
       return {
@@ -109,6 +113,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Approve in your browser tab',
         detail: { text: 'Code', code: state.code },
         retry: false,
+        openLink: true,
       };
     case 'connected':
       return {
@@ -116,6 +121,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Connected',
         detail: { text: tabsLabel(state.tabs) },
         retry: false,
+        openLink: true,
       };
     case 'denied':
       return {
@@ -123,6 +129,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Pairing denied',
         detail: { text: 'It was declined in the browser tab.' },
         retry: true,
+        openLink: false,
       };
     case 'timed-out':
       return {
@@ -130,6 +137,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Pairing timed out',
         detail: { text: 'Nobody approved it in the browser tab.' },
         retry: true,
+        openLink: false,
       };
     case 'replaced':
       return {
@@ -137,6 +145,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Another Figma window took over',
         detail: { text: 'Only one window can bridge at a time.' },
         retry: true,
+        openLink: false,
       };
     case 'version':
       return {
@@ -144,6 +153,7 @@ export function viewFor(state: BridgePhase): BridgeView {
         title: 'Update winden-tokens',
         detail: { text: 'Run', code: BRIDGE_CLI_UPDATE_COMMAND },
         retry: false,
+        openLink: false,
       };
   }
 }

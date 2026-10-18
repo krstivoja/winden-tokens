@@ -61,4 +61,16 @@ describe('viewFor', () => {
     expect(tabsLabel(1)).toBe('1 browser tab attached');
     expect(tabsLabel(0)).toBe('No browser tab open yet');
   });
+
+  it('offers "Open in browser" only while connected or pairing', () => {
+    expect(viewFor({ phase: 'connected', tabs: 0 }).openLink).toBe(true);
+    expect(viewFor({ phase: 'pairing', code: 'K7Q2ZP' }).openLink).toBe(true);
+    expect(viewFor({ phase: 'connecting' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'relay-down' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'busy' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'denied' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'timed-out' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'replaced' }).openLink).toBe(false);
+    expect(viewFor({ phase: 'version', reason: 'x' }).openLink).toBe(false);
+  });
 });

@@ -159,6 +159,14 @@ Figma variables can have different values per mode (e.g., Light/Dark themes).
 
 ---
 
+### 9. Browser Bridge
+
+**"Bridge to browser" window:**
+- Status strip that relays this file to the local `npx winden-tokens` relay (pairing code, attached tab count, Retry)
+- "Open in browser" link while connected or pairing: opens `http://localhost:9337/` in the system default browser via `figma.openExternal` (the sandbox owns the URL)
+
+---
+
 ## Plugin Architecture
 
 ### Two-File System

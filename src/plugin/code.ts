@@ -9,7 +9,7 @@ const BRIDGE_COMMAND = 'bridge';
 const IS_BRIDGE_WINDOW = figma.command === BRIDGE_COMMAND;
 
 if (IS_BRIDGE_WINDOW) {
-  figma.showUI(__uiFiles__.bridge, { width: 320, height: 64, themeColors: true, title: 'Winden Tokens Bridge' });
+  figma.showUI(__uiFiles__.bridge, { width: 320, height: 76, themeColors: true, title: 'Winden Tokens Bridge' });
 } else {
   figma.showUI(__uiFiles__.open, { width: 750, height: 500, themeColors: true } as any);
 }
@@ -19,6 +19,10 @@ if (IS_BRIDGE_WINDOW) {
 // driving the sandbox through the relay can never read or overwrite it.
 const BRIDGE_KEY_STORAGE = 'winden-bridge-plugin-key';
 const BRIDGE_KEY_PATTERN = /^[0-9a-f]{32}$/;
+// The relay's browser UI (BRIDGE_UI_URL in src/ui/bridge/protocol.ts). The
+// sandbox owns it: the bridge window only asks, so nothing can make the plugin
+// open an arbitrary URL.
+const BRIDGE_UI_URL = 'http://localhost:9337/';
 
 // Track variable state for change detection
 let lastDataHash = '';
@@ -4525,6 +4529,10 @@ figma.ui.onmessage = async (msg: any) => {
         console.error('[Plugin] Error reading the bridge key:', error);
         figma.ui.postMessage({ type: 'bridge-key', key: null });
       }
+      break;
+
+    case 'bridge-open-ui':
+      figma.openExternal(BRIDGE_UI_URL);
       break;
 
     case 'get-client-storage':

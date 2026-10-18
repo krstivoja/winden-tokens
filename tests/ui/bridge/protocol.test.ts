@@ -3,6 +3,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   BRIDGE_PROTOCOL_VERSION,
+  BRIDGE_UI_URL,
+  BRIDGE_URL,
   decodeEnvelope,
   encodeEnvelope,
   generatePluginKey,
@@ -12,6 +14,11 @@ import {
 describe('bridge protocol', () => {
   it('speaks v2', () => {
     expect(BRIDGE_PROTOCOL_VERSION).toBe(2);
+  });
+
+  it('links the browser UI on the socket port (literal copy in src/plugin/code.ts)', () => {
+    expect(BRIDGE_URL).toBe('ws://localhost:9337');
+    expect(BRIDGE_UI_URL).toBe('http://localhost:9337/');
   });
 
   it('puts the plugin key in the hello payload', () => {
