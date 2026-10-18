@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   applySidebarUncheck,
+  collectionToggleEndsHiding,
   computeHighlightPath,
+  getActiveHidingLayout,
+  mergeHidingPositions,
   getHidingPath,
   isCardHiddenByHideUnused,
   isCardOffPath,
@@ -9,6 +12,7 @@ import {
   isEdgeOffPath,
   isTierLabelHidden,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
+import type { HidingLayout } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import { isCardHidden } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type { CardVisibilityFilters } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import { STANDARD_GROUP_HEADER_FILL } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
@@ -346,5 +350,71 @@ describe('isTierLabelHidden', () => {
     expect(isTierLabelHidden(label, [])).toBe(true);
     // Neighbouring columns touch the edges but do not overlap.
     expect(isTierLabelHidden(label, [{ x: 100, width: 300 }, { x: 700, width: 300 }])).toBe(true);
+  });
+});
+
+// ── Temporary arrange while hiding ─────────────────────────────────
+
+describe('getActiveHidingLayout', () => {
+  const layout: HidingLayout = { activation: '["A",null]', positions: {}, tierLabels: [] };
+
+  it('applies only within the activation it was made in', () => {
+    expect(getActiveHidingLayout(layout, '["A",null]')).toBe(layout);
+    // Highlight moved to another card, or onto one row of the same card.
+    expect(getActiveHidingLayout(layout, '["B",null]')).toBe(null);
+    expect(getActiveHidingLayout(layout, '["A","a/1"]')).toBe(null);
+    // Hiding ended.
+    expect(getActiveHidingLayout(layout, null)).toBe(null);
+  });
+
+  it('is null with no layout', () => {
+    expect(getActiveHidingLayout(null, '["A",null]')).toBe(null);
+    expect(getActiveHidingLayout(null, null)).toBe(null);
+  });
+});
+
+describe('mergeHidingPositions', () => {
+  const saved = {
+    A: { x: 0, y: 0 },
+    'wrapper:one::b': { x: 400, y: 0 },
+    'rel:B': { x: 10, y: 40 },
+    E: { x: 1320, y: 0 },
+  };
+
+  it('returns the saved record itself without a temporary layout', () => {
+    expect(mergeHidingPositions(saved, null)).toBe(saved);
+  });
+
+  it('lays the temporary positions over the saved ones, leaving the rest', () => {
+    const merged = mergeHidingPositions(saved, {
+      activation: '["A",null]',
+      positions: { A: { x: 0, y: 200 }, 'wrapper:one::b': { x: 300, y: 0 } },
+      tierLabels: [],
+    });
+    expect(merged).toEqual({
+      A: { x: 0, y: 200 },
+      'wrapper:one::b': { x: 300, y: 0 },
+      // Nested override and the hidden card keep their saved spot.
+      'rel:B': { x: 10, y: 40 },
+      E: { x: 1320, y: 0 },
+    });
+    // Never written into the saved record.
+    expect(saved.A).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('collectionToggleEndsHiding', () => {
+  const selected = new Set(['one']);
+
+  it('ends hiding when a collection is ticked on while hiding', () => {
+    expect(collectionToggleEndsHiding(true, 'two', selected)).toBe(true);
+  });
+
+  it('keeps hiding when a collection is ticked off', () => {
+    expect(collectionToggleEndsHiding(true, 'one', selected)).toBe(false);
+  });
+
+  it('does nothing while not hiding', () => {
+    expect(collectionToggleEndsHiding(false, 'two', selected)).toBe(false);
   });
 });

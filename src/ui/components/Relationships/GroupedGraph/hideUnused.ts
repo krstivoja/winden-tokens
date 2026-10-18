@@ -275,3 +275,59 @@ export function isTierLabelHidden(
   const right = label.x + label.width;
   return !visibleBoxes.some(box => box.x < right && box.x + box.width > left);
 }
+
+// ── Temporary arrange while hiding ─────────────────────────────────
+
+type PositionRecord = Record<string, { x: number; y: number }>;
+
+/**
+ * An Arrange Grid run made while hide-unused hides something. Held in memory
+ * only and never written to `savedPositions` or client storage: it belongs to
+ * the hiding activation it was made in (`activation`, see `hidingActivation`
+ * in GroupedGraph), and is dropped as soon as that activation ends, which
+ * brings the saved layout back exactly as it was.
+ *
+ * `positions` uses the saved record's key shapes (top-level unit keys, plus
+ * `rel:` keys from a drag), so it can be laid over that record as is.
+ */
+export interface HidingLayout {
+  activation: string;
+  positions: PositionRecord;
+  tierLabels: TierPlacement[];
+}
+
+/**
+ * The temporary layout that applies right now: null once the activation it
+ * was made for has ended (hiding turned off, highlight cleared or moved),
+ * even in the commit before the stale layout is cleared from state.
+ */
+export function getActiveHidingLayout(
+  layout: HidingLayout | null,
+  activation: string | null
+): HidingLayout | null {
+  return layout !== null && layout.activation === activation ? layout : null;
+}
+
+/**
+ * The positions the layout effect seeds nodes from: the saved record with the
+ * temporary layout laid over it (temporary wins). Cards the temporary arrange
+ * did not move keep their saved spot. Returns `saved` itself when there is no
+ * temporary layout.
+ */
+export function mergeHidingPositions(saved: PositionRecord, layout: HidingLayout | null): PositionRecord {
+  return layout ? { ...saved, ...layout.positions } : saved;
+}
+
+/**
+ * Whether a collection checkbox click ends hiding: ticking a whole collection
+ * ON while hiding is active is a request to see it, and hide-unused would
+ * otherwise keep its off-path cards hidden (or bring them back dimmed and
+ * unwired). Unticking, or any click while not hiding, leaves hiding alone.
+ */
+export function collectionToggleEndsHiding(
+  isHiding: boolean,
+  collectionId: string,
+  selectedCollections: Set<string>
+): boolean {
+  return isHiding && !selectedCollections.has(collectionId);
+}
