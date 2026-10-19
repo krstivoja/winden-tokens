@@ -24,7 +24,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
-import { getVariableGroupName } from '../../utils/groupFilters';
+import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -108,7 +108,8 @@ import {
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 import {
-  computeHighlightPath,
+  computeHighlightPathForKeys,
+  isSingleTarget,
   getHidingPath,
   isCardHiddenByHideUnused,
   isEdgeOffPath,
@@ -119,7 +120,8 @@ import {
   mergeHidingPositions,
   collectionToggleEndsHiding,
 } from './GroupedGraph/hideUnused';
-import type { HidingLayout, SidebarSelection } from './GroupedGraph/hideUnused';
+import type { HidingLayout, HighlightTarget, SidebarSelection } from './GroupedGraph/hideUnused';
+import { collectFocusableRowKeys, selectFocusScope } from './GroupedGraph/sidebarFocus';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -222,17 +224,47 @@ function GroupedGraphInner() {
   useEffect(() => {
     savedPositionsRef.current = savedPositions;
   }, [savedPositions]);
-  // Highlight target: a group card (varName null = whole card's chain) or a
-  // single variable row inside it (varName set = only that row's chain).
-  const [highlightTarget, setHighlightTarget] = useState<{ groupKey: string; varName: string | null } | null>(null);
-  const highlightedGroupKey = highlightTarget?.groupKey ?? null;
+  // Highlight target: a set of cards (varName null = their whole chains) or a
+  // single variable row inside one card (varName set = only that row's chain).
+  // Card clicks, row clicks and quick search pass one key; a sidebar row
+  // focuses every card under it. Never empty — no highlight is null.
+  const [highlightTarget, setHighlightTarget] = useState<HighlightTarget | null>(null);
+  const highlightedGroupKeys = highlightTarget?.groupKeys ?? null;
   const highlightedVarName = highlightTarget?.varName ?? null;
+  const hasHighlight = highlightTarget !== null;
+  // Value identity of the target: a re-focus that lands on the same cards
+  // builds a new array, and must not count as the highlight moving.
+  const highlightSignature = highlightTarget
+    ? JSON.stringify([highlightTarget.groupKeys, highlightTarget.varName])
+    : null;
+  // "The one card" — only when exactly one is highlighted (the sidebar's
+  // per-card ring). Anything asking "is something highlighted" uses
+  // `hasHighlight` instead.
+  const highlightedGroupKey = highlightedGroupKeys?.length === 1 ? highlightedGroupKeys[0] : null;
+  // The sidebar row whose label set the current highlight (its
+  // `<collectionId>::<path>`), ringed there. Cleared by every other way of
+  // setting or clearing the highlight; see setCardHighlight.
+  const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
+  // Sidebar rows with something visible under them, as one sorted
+  // `\n`-joined string of row keys (see collectFocusableRowKeys). Written by
+  // the layout effect — the only place visibility changes — and a string, so
+  // an unchanged set is an unchanged state and a drag never re-renders the
+  // sidebar.
+  const [focusableRowSignature, setFocusableRowSignature] = useState('');
+  const focusableRowKeys = useMemo(
+    () => new Set(focusableRowSignature ? focusableRowSignature.split('\n') : []),
+    [focusableRowSignature]
+  );
+  const isPathFocusable = useCallback(
+    (collectionId: string, path: string) => focusableRowKeys.has(getCollectionGroupKey(collectionId, path)),
+    [focusableRowKeys]
+  );
   // "Hide unused": while something is highlighted, hide every card and wire
   // that is not on its path. A preference, not a mode — with no highlight it
   // hides nothing. Not saved: every reload starts with it off, so a click on a
   // card never hides the graph because of a choice made in an earlier session.
   const [hideUnused, setHideUnused] = useState(false);
-  const isHidingUnused = hideUnused && highlightedGroupKey !== null;
+  const isHidingUnused = hideUnused && hasHighlight;
   // Arrange Grid run while hiding: a grid of the visible path only, in memory
   // and never saved (see HidingLayout). The layout effect lays it over
   // `savedPositions`; ending the hiding activation drops it, which brings the
@@ -690,14 +722,21 @@ function GroupedGraphInner() {
     post({ type: 'unbind-node-property', nodeId, target });
   }, []);
 
+  // Every highlight change that does not come from a sidebar row goes
+  // through here, so the sidebar ring never outlives the focus it marks.
+  const setCardHighlight = useCallback((
+    next: HighlightTarget | null | ((prev: HighlightTarget | null) => HighlightTarget | null)
+  ) => {
+    setHighlightTarget(next);
+    setFocusedRowKey(null);
+  }, []);
+
   // Highlight the full connected chain of a group (toggle off if re-selected)
   const handleHighlightPath = useCallback((group: GroupData) => {
-    setHighlightTarget(prev => (
-      prev?.groupKey === group.key && prev.varName === null
-        ? null
-        : { groupKey: group.key, varName: null }
+    setCardHighlight(prev => (
+      isSingleTarget(prev, group.key, null) ? null : { groupKeys: [group.key], varName: null }
     ));
-  }, []);
+  }, [setCardHighlight]);
 
   // Card menu "Hide unused": highlight this card's chain and hide the rest in
   // one step. While hiding is active the same item reads "Show all".
@@ -706,18 +745,16 @@ function GroupedGraphInner() {
       setHideUnused(false);
       return;
     }
-    setHighlightTarget({ groupKey: group.key, varName: null });
+    setCardHighlight({ groupKeys: [group.key], varName: null });
     setHideUnused(true);
-  }, []);
+  }, [setCardHighlight]);
 
   // Highlight only one variable row's chain (toggle off if re-selected).
   const handleHighlightVariable = useCallback((group: GroupData, node: VariableNode) => {
-    setHighlightTarget(prev => (
-      prev?.groupKey === group.key && prev.varName === node.name
-        ? null
-        : { groupKey: group.key, varName: node.name }
+    setCardHighlight(prev => (
+      isSingleTarget(prev, group.key, node.name) ? null : { groupKeys: [group.key], varName: node.name }
     ));
-  }, []);
+  }, [setCardHighlight]);
 
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type !== 'groupNode') return;
@@ -726,14 +763,12 @@ function GroupedGraphInner() {
     // hold rows behaves like any other card.
     const clickedGroup = (node.data as { group?: GroupData } | undefined)?.group;
     if (clickedGroup?.kind === 'collection' && clickedGroup.variables.length === 0) return;
-    setHighlightTarget(prev => (
-      prev?.groupKey === node.id && prev.varName === null
-        ? null
-        : { groupKey: node.id, varName: null }
+    setCardHighlight(prev => (
+      isSingleTarget(prev, node.id, null) ? null : { groupKeys: [node.id], varName: null }
     ));
-  }, []);
+  }, [setCardHighlight]);
 
-  const clearHighlight = useCallback(() => setHighlightTarget(null), []);
+  const clearHighlight = useCallback(() => setCardHighlight(null), [setCardHighlight]);
 
   // Pan/zoom to one xyflow node, on the next frame so a node the same
   // interaction just caused to be rebuilt has painted before we measure it.
@@ -749,60 +784,50 @@ function GroupedGraphInner() {
     });
   }, [reactFlowInstance]);
 
-  // Sidebar label click — same toggle behavior as clicking the card in the graph,
-  // plus panning the canvas to it since (unlike a card click) it may be off-screen.
-  const handleHighlightFromSidebar = useCallback((graphGroupKey: string) => {
-    setHighlightTarget(prev => {
-      const next = prev?.groupKey === graphGroupKey && prev.varName === null
-        ? null
-        : { groupKey: graphGroupKey, varName: null };
-      // An absorbed card is drawn by its container, so pan to that node.
-      if (next) zoomToNodeId(nodeIdForCard(graphGroupKey));
-      return next;
-    });
-  }, [zoomToNodeId, nodeIdForCard]);
-
-  // Quick-search's card/variable jump. Deliberately NOT a toggle, unlike the
-  // sidebar: searching for the card that already happens to be highlighted
-  // must still move the viewport to it, not clear it and stay put.
+  // Quick-search's card/variable jump. Deliberately NOT a toggle: searching
+  // for the card that already happens to be highlighted must still move the
+  // viewport to it, not clear it and stay put.
   const focusCard = useCallback((cardKey: string, varName: string | null) => {
-    setHighlightTarget({ groupKey: cardKey, varName });
+    setCardHighlight({ groupKeys: [cardKey], varName });
     zoomToNodeId(nodeIdForCard(cardKey));
-  }, [zoomToNodeId, nodeIdForCard]);
+  }, [setCardHighlight, zoomToNodeId, nodeIdForCard]);
 
-  // Sidebar → canvas for a whole collection. No highlight: `highlightTarget`
-  // addresses one group key, and a collection is a set of cards.
-  const handleZoomToCollection = useCallback((collectionId: string) => {
-    // Live nodes off the instance rather than the `nodes` state, so this
-    // callback keeps one identity across layout passes (see the drag-perf work).
-    const targets = reactFlowInstance
-      .getNodes()
-      .filter(node => {
-        // Filtered-out cards stay in the node list as `hidden`. Zooming to one
-        // would park the canvas on empty space.
-        if (node.hidden) return false;
-        if (node.type === 'groupNode') {
-          return (node.data as { group?: GroupData } | undefined)?.group?.collectionId === collectionId;
-        }
-        // A container is a card too, and for a collection whose cards are all
-        // grouped it may be the only node that collection has.
-        if (node.type === 'groupWrapper') {
-          return (node.data as WrapperNodeData | undefined)?.collectionId === collectionId;
-        }
-        return false;
-      })
-      .map(node => ({ id: node.id }));
-
-    // Nothing visible to move to. Silent: the collection's own checkbox is in
-    // the same row and is the reason.
-    if (targets.length === 0) return;
-
-    try {
-      reactFlowInstance.fitView({ nodes: targets, duration: 400, padding: 0.2, maxZoom: 1 });
-    } catch {
-      // Same defence as the group case — a node can leave between read and fit.
-    }
+  // Fit the viewport to a set of NODE ids, on the next frame like
+  // zoomToNodeId. Callers pass visible nodes only (selectFocusScope).
+  const fitToNodeIds = useCallback((nodeIds: string[]) => {
+    requestAnimationFrame(() => {
+      try {
+        reactFlowInstance.fitView({ nodes: nodeIds.map(id => ({ id })), duration: 400, padding: 0.2, maxZoom: 1 });
+      } catch {
+        // A node can leave between read and fit — nothing to move to then.
+      }
+    });
   }, [reactFlowInstance]);
+
+  // Sidebar row → canvas: highlight every visible card under the row and fit
+  // them. Always focuses, never toggles — a second click on the same row
+  // re-focuses, like the quick-search jump. Live nodes off the instance rather
+  // than the `nodes` state, so this keeps one identity across layout passes
+  // (see the drag-perf work). Nothing visible in scope → nothing at all, so a
+  // stale sidebar can never park the canvas on a hidden node.
+  const handleFocusPath = useCallback((collectionId: string, path: string) => {
+    const scope = selectFocusScope(reactFlowInstance.getNodes(), collectionId, path);
+    if (!scope) return;
+    // A frame with no card of its own (or its card filtered out) is a fit
+    // target with nothing to highlight; the highlight then stays as it was.
+    if (scope.cardKeys.length > 0) {
+      setHighlightTarget({ groupKeys: scope.cardKeys, varName: null });
+      setFocusedRowKey(getCollectionGroupKey(collectionId, path));
+    }
+    fitToNodeIds(scope.nodeIds);
+  }, [reactFlowInstance, fitToNodeIds]);
+
+  // Quick-search's collection jump: fit every visible card of the collection,
+  // no highlight. Same scope as the sidebar's collection row.
+  const handleZoomToCollection = useCallback((collectionId: string) => {
+    const scope = selectFocusScope(reactFlowInstance.getNodes(), collectionId, '');
+    if (scope) fitToNodeIds(scope.nodeIds);
+  }, [reactFlowInstance, fitToNodeIds]);
 
   const handleCreateGroup = useCallback(() => {
     const firstCollectionId = Array.from(localSelectedCollections)[0];
@@ -1194,8 +1219,9 @@ function GroupedGraphInner() {
   // signature below needs it too (hide-unused can hide a container's own
   // card, which changes handles under a mounted node). Null = no highlight.
   const highlightPath = useMemo(
-    () => computeHighlightPath(highlightedGroupKey, highlightedVarName, groupsData, connectionData, variableMap),
-    [highlightedGroupKey, highlightedVarName, groupsData, connectionData, variableMap]
+    () => computeHighlightPathForKeys(highlightedGroupKeys ?? [], highlightedVarName, groupsData, connectionData, variableMap),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the signature, see highlightSignature
+    [highlightSignature, groupsData, connectionData, variableMap]
   );
   // What hide-unused hides against: the path while the toggle is on, else
   // null — and null hides nothing.
@@ -1240,7 +1266,7 @@ function GroupedGraphInner() {
   // re-ticking a group while hiding stays on simply shows it. Turning hiding
   // off re-checks nothing; the user re-ticks by hand. Keyed on the highlight
   // target, not the path, so a data edit mid-hide does not write again.
-  const hidingActivation = hidingPath ? JSON.stringify([highlightedGroupKey, highlightedVarName]) : null;
+  const hidingActivation = hidingPath ? highlightSignature : null;
   const lastHidingActivationRef = useRef<string | null>(null);
   useEffect(() => {
     if (hidingActivation === lastHidingActivationRef.current) return;
@@ -1458,7 +1484,6 @@ function GroupedGraphInner() {
     // All variables in the selected card — used to tint its off-chain edges
     // in a faded highlight color (group membership vs. actual selection).
     const selectedCardVars = highlightPath?.selectedCardVars ?? new Set<string>();
-    const hasHighlight = highlightedGroupKey !== null;
 
     // Resolve the selected node's bound tokens against the local token cards.
     // A token that maps to a real card marks that card as a "provider" (kept
@@ -1865,13 +1890,14 @@ function GroupedGraphInner() {
 
     setNodes(newNodes);
     setEdges(newEdges);
+    setFocusableRowSignature(collectFocusableRowKeys(newNodes).join('\n'));
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, savedPositionsRevision, groupedPaths,
       tierLabels, hidingActivation,
       cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
-      handleHideUnusedFromCard, handleHighlightVariable, highlightedGroupKey, highlightedVarName, highlightPath, hidingPath,
+      handleHideUnusedFromCard, handleHighlightVariable, hasHighlight, highlightedVarName, highlightPath, hidingPath,
       sidebarUncheck, isCardHiddenNow, setNodes, setEdges]);
 
   // Everything that can add, remove or move a handle *under an existing node
@@ -2296,7 +2322,7 @@ function GroupedGraphInner() {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400, maxZoom: 1 });
     }, 50);
     return () => clearTimeout(timer);
-  }, [isHidingUnused, highlightedGroupKey, highlightedVarName, reactFlowInstance]);
+  }, [isHidingUnused, highlightSignature, reactFlowInstance]);
 
   const handleApplyGridSettings = useCallback(() => {
     const settings = normalizeGridLayoutSettings({
@@ -2411,8 +2437,9 @@ function GroupedGraphInner() {
           selectedGroups={selectedGroups}
           onGroupToggle={handleGroupToggle}
           highlightedGroupKey={highlightedGroupKey}
-          onHighlightGroup={handleHighlightFromSidebar}
-          onZoomToCollection={handleZoomToCollection}
+          onFocusPath={handleFocusPath}
+          isPathFocusable={isPathFocusable}
+          focusedRowKey={focusedRowKey}
           onSelectAllCollections={handleSelectAllCollections}
           showTypeFilters={true}
         />
