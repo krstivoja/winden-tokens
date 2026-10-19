@@ -27,13 +27,31 @@ export interface HighlightPath {
 }
 
 /**
+ * What is highlighted: a set of cards (their whole chains), or — with
+ * `varName` — one row of the single card in `groupKeys`. Never empty; no
+ * highlight is null.
+ */
+export interface HighlightTarget {
+  groupKeys: string[];
+  varName: string | null;
+}
+
+/**
+ * Whether `target` is exactly the one card (or one row of it) — the toggle
+ * check for the single-card callers, so clicking a card that is part of a
+ * wider sidebar focus narrows to it instead of clearing.
+ */
+export function isSingleTarget(target: HighlightTarget | null, groupKey: string, varName: string | null): boolean {
+  return target !== null
+    && target.groupKeys.length === 1
+    && target.groupKeys[0] === groupKey
+    && target.varName === varName;
+}
+
+/**
  * Resolve the highlighted lineage of a card (varName null) or of one row.
- *
- * References are per-variable (row), so the chain is traced at the VARIABLE
- * level using fromVar/toVar — otherwise passing through an intermediate card
- * would fan out to every row's provider instead of staying on the one chain.
- * Upstream (providers, edges walked backward) and downstream (dependents,
- * forward) are walked independently so siblings are never picked up.
+ * One-key form of `computeHighlightPathForKeys`, kept for the single-card
+ * callers and tests.
  *
  * Null when nothing is highlighted.
  */
@@ -44,7 +62,33 @@ export function computeHighlightPath(
   connections: ConnectionRecord[],
   variableGroup: Map<string, { group: string }>
 ): HighlightPath | null {
-  if (groupKey === null) return null;
+  return computeHighlightPathForKeys(groupKey === null ? [] : [groupKey], varName, groups, connections, variableGroup);
+}
+
+/**
+ * Resolve the highlighted lineage of a SET of cards (a sidebar row focuses
+ * every card under it): the union of `computeHighlightPath` over each key.
+ * Computed as one walk seeded with every card's rows — reachability from a
+ * union of seeds is the union of each seed's reachability, so the result is
+ * the same and the graph is walked once. `varName` narrows the seed to one
+ * row, which only the single-card row highlight uses.
+ *
+ * References are per-variable (row), so the chain is traced at the VARIABLE
+ * level using fromVar/toVar — otherwise passing through an intermediate card
+ * would fan out to every row's provider instead of staying on the one chain.
+ * Upstream (providers, edges walked backward) and downstream (dependents,
+ * forward) are walked independently so siblings are never picked up.
+ *
+ * Null when nothing is highlighted.
+ */
+export function computeHighlightPathForKeys(
+  groupKeys: string[],
+  varName: string | null,
+  groups: GroupData[],
+  connections: ConnectionRecord[],
+  variableGroup: Map<string, { group: string }>
+): HighlightPath | null {
+  if (groupKeys.length === 0) return null;
 
   const path: HighlightPath = {
     groups: new Set(),
@@ -62,12 +106,13 @@ export function computeHighlightPath(
     varIncoming.get(conn.toVar)!.push({ edgeId: conn.id, varName: conn.fromVar });
   });
 
-  // Seed with the single selected row, or every variable in the card.
-  const selectedGroup = groups.find(g => g.key === groupKey);
-  selectedGroup?.variables.forEach(v => path.selectedCardVars.add(v.name));
+  // Seed with the single selected row, or every variable in the cards.
+  const keySet = new Set(groupKeys);
+  const selectedGroups = groups.filter(g => keySet.has(g.key));
+  selectedGroups.forEach(g => g.variables.forEach(v => path.selectedCardVars.add(v.name)));
   const seedVars = varName
     ? [varName]
-    : (selectedGroup?.variables || []).map(v => v.name);
+    : selectedGroups.flatMap(g => g.variables.map(v => v.name));
   seedVars.forEach(v => path.vars.add(v));
 
   const walk = (adjacency: Map<string, Array<{ edgeId: string; varName: string }>>) => {
@@ -94,7 +139,7 @@ export function computeHighlightPath(
     const info = variableGroup.get(name);
     if (info) path.groups.add(info.group);
   });
-  path.groups.add(groupKey);
+  groupKeys.forEach(key => path.groups.add(key));
 
   return path;
 }

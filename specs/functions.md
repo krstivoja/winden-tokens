@@ -105,6 +105,8 @@
 - Visualize variable aliases
 - Show reference chains
 - Detect circular dependencies
+- Sidebar Collections tree names are links to the graph, at every level (collection, folder such as `badge` or `badge > color`, group): click or Enter/Space highlights every visible card under that row, fits the view to them, and rings the row; it always focuses, never toggles (click the empty canvas to clear)
+- A row with nothing visible on the canvas (unticked, hidden by Hide unused, or filtered out) has a muted, inert label; a click never ticks a checkbox or turns Hide unused off. Checkboxes and expand arrows are unchanged; the Table view keeps plain-text names
 - "Hide unused" toolbar toggle (not saved: off again after every reload): while a card or row is highlighted, hides every card, wire and tier caption not on its path and fits the view to what is left; filtered cards stay hidden
 - Arrange Grid while Hide unused hides is temporary: it packs only the visible path, leaves the hidden cards where they are, and saves nothing (no positions, no tier captions, no change to the saved Undo Arrange step); dragging cards while it is up stays temporary too
 - Undo Arrange drops a temporary arrange; ending the hiding for any reason ("Show all", card menu "Show all", clearing or moving the highlight, sidebar "Select All", ticking a whole collection on) drops it too, brings back the saved layout exactly as it was, and fits the view

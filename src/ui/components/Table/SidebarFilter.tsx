@@ -61,6 +61,57 @@ function collectGroupKeys(node: GroupTreeNode, collectionId: string): string[] {
   return [...own, ...node.children.flatMap(child => collectGroupKeys(child, collectionId))];
 }
 
+// Label props for a sidebar row that focuses its cards on the graph. Without
+// `onFocusPath` (Table view) the label stays plain text. A disabled row (nothing
+// of it visible on the canvas) is muted and out of the Tab order, and its click
+// is swallowed so a collection label inside its <label> never ticks the checkbox.
+function getFocusLabelProps(
+  collectionId: string,
+  path: string,
+  onFocusPath?: (collectionId: string, path: string) => void,
+  isPathFocusable?: (collectionId: string, path: string) => boolean
+): { props: React.HTMLAttributes<HTMLSpanElement>; className: string } {
+  if (!onFocusPath) return { props: {}, className: '' };
+
+  if (isPathFocusable && !isPathFocusable(collectionId, path)) {
+    return {
+      props: {
+        tabIndex: -1,
+        'aria-disabled': true,
+        title: 'Not shown in graph',
+        onClick: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+      },
+      className: 'text-text-secondary cursor-default',
+    };
+  }
+
+  return {
+    props: {
+      role: 'button',
+      tabIndex: 0,
+      title: 'Click to find in graph',
+      // preventDefault: inside the collection <label> the click would also
+      // toggle the checkbox, and Space would scroll the tree.
+      onClick: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onFocusPath(collectionId, path);
+      },
+      onKeyDown: (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        onFocusPath(collectionId, path);
+      },
+    },
+    className:
+      'cursor-pointer hover:underline rounded-sm focus-visible:outline-1 focus-visible:outline-text focus-visible:outline-offset-2',
+  };
+}
+
 interface GroupNodeRowProps {
   node: GroupTreeNode;
   depth: number;
@@ -73,7 +124,9 @@ interface GroupNodeRowProps {
   collapsedGroups: Set<string>;
   setCollapsedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
   highlightedGroupKey?: string | null;
-  onHighlightGroup?: (graphGroupKey: string) => void;
+  focusedRowKey?: string | null;
+  onFocusPath?: (collectionId: string, path: string) => void;
+  isPathFocusable?: (collectionId: string, path: string) => boolean;
   forceExpanded?: boolean;
 }
 
@@ -89,7 +142,9 @@ function GroupNodeRow({
   collapsedGroups,
   setCollapsedGroups,
   highlightedGroupKey,
-  onHighlightGroup,
+  focusedRowKey,
+  onFocusPath,
+  isPathFocusable,
   forceExpanded = false,
 }: GroupNodeRowProps) {
   const nodeKey = `${collectionId}::${node.path}`;
@@ -99,7 +154,11 @@ function GroupNodeRow({
   // the same helper the graph uses, so this sidebar row and the card it
   // highlights can never drift apart.
   const graphGroupKey = getGroupCardKey(collectionId, node.path);
-  const isHighlighted = node.isGroup && highlightedGroupKey === graphGroupKey;
+  // Ringed when its card was clicked on the canvas, or when this row was the
+  // last one focused from the sidebar (folder rows have no card of their own).
+  const isHighlighted =
+    (node.isGroup && highlightedGroupKey === graphGroupKey) || focusedRowKey === nodeKey;
+  const focusLabel = getFocusLabelProps(collectionId, node.path, onFocusPath, isPathFocusable);
 
   const count = variables.filter(
     v => v.collectionId === collectionId && v.name.startsWith(`${node.path}/`)
@@ -166,17 +225,7 @@ function GroupNodeRow({
           onChange={handleToggle}
           className="w-3.5 h-3.5 cursor-pointer"
         />
-        <span
-          onClick={
-            node.isGroup && onHighlightGroup
-              ? () => onHighlightGroup(graphGroupKey)
-              : undefined
-          }
-          title={node.isGroup ? 'Click to find in graph' : undefined}
-          className={`text-xs flex-1 ${
-            node.isGroup && onHighlightGroup ? 'cursor-pointer hover:underline' : ''
-          }`}
-        >
+        <span {...focusLabel.props} className={`text-xs flex-1 ${focusLabel.className}`}>
           {node.label}
         </span>
         <span className="text-xs opacity-60">{count}</span>
@@ -198,7 +247,9 @@ function GroupNodeRow({
               collapsedGroups={collapsedGroups}
               setCollapsedGroups={setCollapsedGroups}
               highlightedGroupKey={highlightedGroupKey}
-              onHighlightGroup={onHighlightGroup}
+              focusedRowKey={focusedRowKey}
+              onFocusPath={onFocusPath}
+              isPathFocusable={isPathFocusable}
               forceExpanded={forceExpanded}
             />
           ))}
@@ -218,10 +269,16 @@ interface SidebarFilterProps {
   selectedGroups?: Set<string>;
   onGroupToggle?: (groupName: string) => void;
   highlightedGroupKey?: string | null;
-  onHighlightGroup?: (graphGroupKey: string) => void;
-  /** Move the graph viewport onto everything this collection owns. Absent in
-   *  views with no canvas, where the name keeps toggling the checkbox. */
-  onZoomToCollection?: (collectionId: string) => void;
+  /** Focus the graph on every card under a row: `path` is '' for the
+   *  collection row, otherwise the tree node's path ('badge', 'badge/color').
+   *  Absent in views with no canvas, where labels stay plain text and the
+   *  collection name keeps toggling its checkbox. */
+  onFocusPath?: (collectionId: string, path: string) => void;
+  /** False when nothing under the row is visible on the canvas: the label is
+   *  then muted and inert. Absent = every row is focusable. */
+  isPathFocusable?: (collectionId: string, path: string) => boolean;
+  /** `${collectionId}::${path}` of the row last focused; that row is ringed. */
+  focusedRowKey?: string | null;
   /** Fired once by "Select All" (never by "Deselect All"), after the
    *  per-collection and per-group toggles. The graph turns "Hide unused" off
    *  here; views without it get the plain toggles. */
@@ -240,8 +297,9 @@ export function SidebarFilter({
   selectedGroups,
   onGroupToggle,
   highlightedGroupKey,
-  onHighlightGroup,
-  onZoomToCollection,
+  onFocusPath,
+  isPathFocusable,
+  focusedRowKey,
   onSelectAllCollections,
   showTypeFilters = true,
   footer,
@@ -614,10 +672,17 @@ export function SidebarFilter({
               }
             };
 
+            const collectionLabel = getFocusLabelProps(collection.id, '', onFocusPath, isPathFocusable);
+            const isCollectionFocused = focusedRowKey === `${collection.id}::`;
+
             return (
               <div key={collection.id} className="space-y-0.5">
                 {/* Collection checkbox */}
-                <div className="flex items-center gap-2 hover:bg-base-2 px-2 py-1 rounded transition-colors">
+                <div
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-colors ${
+                    isCollectionFocused ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-base-2'
+                  }`}
+                >
                   {hasGroups && (
                     <button
                       type="button"
@@ -650,17 +715,8 @@ export function SidebarFilter({
                       className="w-4 h-4"
                     />
                     <span
-                      onClick={onZoomToCollection
-                        // Inside the <label>: without preventDefault the click
-                        // also reaches the checkbox and toggles the collection.
-                        ? (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onZoomToCollection(collection.id);
-                        }
-                        : undefined}
-                      title={onZoomToCollection ? 'Click to find in graph' : undefined}
-                      className={`text-sm flex-1 ${onZoomToCollection ? 'hover:underline' : ''}`}
+                      {...collectionLabel.props}
+                      className={`text-sm flex-1 ${collectionLabel.className}`}
                     >
                       {collection.name}
                     </span>
@@ -685,7 +741,9 @@ export function SidebarFilter({
                         collapsedGroups={collapsedGroups}
                         setCollapsedGroups={setCollapsedGroups}
                         highlightedGroupKey={highlightedGroupKey}
-                        onHighlightGroup={onHighlightGroup}
+                        focusedRowKey={focusedRowKey}
+                        onFocusPath={onFocusPath}
+                        isPathFocusable={isPathFocusable}
                         forceExpanded={isSearching}
                       />
                     ))}
