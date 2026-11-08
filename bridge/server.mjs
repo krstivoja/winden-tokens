@@ -23,7 +23,7 @@
  *
  * Every frame is JSON:
  *
- *     { v: 2, role: 'plugin' | 'client' | 'mcp', kind: 'hello' | 'message' | 'status', payload }
+ *     { v: 3, role: 'plugin' | 'client' | 'mcp', kind: 'hello' | 'message' | 'status', payload }
  *
  * `payload` is opaque to the relay. It carries the existing plugin message
  * types verbatim (`refresh`, `create-variable`, `bind-node-property`, …).
@@ -34,9 +34,9 @@
  *
  * 1. hello — first frame on every socket, names the role:
  *
- *        { v: 2, role: 'plugin', kind: 'hello', payload: { pluginKey: '<32-128 hex>' } }
- *        { v: 2, role: 'client', kind: 'hello', payload: {...} }
- *        { v: 2, role: 'mcp',    kind: 'hello', payload: { token: '<contents of ~/.winden-tokens/mcp-token>' } }
+ *        { v: 3, role: 'plugin', kind: 'hello', payload: { pluginKey: '<32-128 hex>' } }
+ *        { v: 3, role: 'client', kind: 'hello', payload: {...} }
+ *        { v: 3, role: 'mcp',    kind: 'hello', payload: { token: '<contents of ~/.winden-tokens/mcp-token>' } }
  *
  *    Before its hello a socket is unidentified: the relay sends it nothing and
  *    forwards nothing from it. A socket that has not said hello within
@@ -95,7 +95,7 @@
  *
  * 3. CLIENT HELLO IS FORWARDED TO THE PLUGIN VERBATIM.
  *    When a browser tab says hello, the plugin socket receives that exact
- *    frame — `{ v:2, role:'client', kind:'hello', payload }`. That is the
+ *    frame — `{ v:3, role:'client', kind:'hello', payload }`. That is the
  *    plugin's cue to push a full `refresh`, so a tab opened late still gets
  *    current data. There is no special wrapper kind for this: the plugin
  *    simply listens for `kind === 'hello'` from `role === 'client'`.
@@ -103,21 +103,21 @@
  * 4. Relay-generated status frames use a THIRD role, `'relay'`, and the kind
  *    `'status'`, so they can never be confused with app traffic:
  *
- *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/plugin-connected'    } }
- *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/plugin-disconnected' } }
+ *        { v:3, role:'relay', kind:'status', payload:{ type:'bridge/plugin-connected'    } }
+ *        { v:3, role:'relay', kind:'status', payload:{ type:'bridge/plugin-disconnected' } }
  *            → sent to clients. `plugin-disconnected` is what lets the browser
  *              say "lost the document" instead of hanging. A client also gets
  *              one of these immediately after its own hello, describing the
  *              current state.
  *
- *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/client-attached', clients:N } }
- *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/client-detached', clients:N } }
+ *        { v:3, role:'relay', kind:'status', payload:{ type:'bridge/client-attached', clients:N } }
+ *        { v:3, role:'relay', kind:'status', payload:{ type:'bridge/client-detached', clients:N } }
  *            → sent to the plugin, for the headless status strip. Purely
  *              informational; safe to ignore. The refresh cue is the forwarded
  *              client hello in (3), NOT these frames.
  *
- *        { v:2, role:'relay', kind:'status', payload:{ type:'bridge/version-mismatch',
- *                                                      relay:2, peer:3, message:'…' } }
+ *        { v:3, role:'relay', kind:'status', payload:{ type:'bridge/version-mismatch',
+ *                                                      relay:3, peer:4, message:'…' } }
  *            → broadcast to every attached client when a socket is turned away
  *              for speaking a different protocol version. Without it, the
  *              failure a user actually sees is "my tab is empty" — the rejected
@@ -127,13 +127,13 @@
  *              why from its close reason instead.)
  *
  * 5. PAIRING — how an unknown plugin becomes trusted. All frames below are
- *    `{ v:2, role:'relay', kind:'status', payload }` unless marked client → relay.
+ *    `{ v:3, role:'relay', kind:'status', payload }` unless marked client → relay.
  *
  *        relay → pending plugin   { type:'bridge/pairing-pending', code }
  *        relay → every client     { type:'bridge/pairing-request', code }
  *            (also sent to a client that attaches while a request is open,
  *            right after its plugin-connected/-disconnected frame)
- *        client → relay           { v:2, role:'client', kind:'status',
+ *        client → relay           { v:3, role:'client', kind:'status',
  *                                   payload:{ type:'bridge/pairing-answer', code, approve:boolean } }
  *            (ignored unless `code` is the CURRENT request's code, so an answer
  *            meant for one plugin can never approve another)
@@ -231,7 +231,14 @@ import { WebSocketServer } from 'ws';
 
 export const DEFAULT_PORT = 9337;
 export const HOST = '127.0.0.1'; // loopback ONLY — see threat model above
-export const PROTOCOL_VERSION = 2;
+/**
+ * v2: the plugin's hello carries a `pluginKey` (pairing).
+ * v3: the plugin answers `save-version` (version checkpoints, ./mcp.mjs). The
+ *     envelope did not change; the bump exists so that an older plugin build,
+ *     which would silently ignore that command, is turned away with "update"
+ *     instead of letting every MCP write wait out a timeout.
+ */
+export const PROTOCOL_VERSION = 3;
 
 const HELLO_TIMEOUT_MS = 10_000;
 const HEARTBEAT_MS = 30_000;

@@ -20,7 +20,7 @@ Keep the Figma bridge window open: it is the only thing that can reach the Figma
 
 Trusted plugins are stored as hashes in `~/.winden-tokens/trusted-plugins.json`. Delete an entry to revoke it.
 
-If the bridge window or the tab says "Update winden-tokens", the plugin and the relay speak different protocol versions. Run `npx winden-tokens@latest`.
+If the bridge window or the tab says "Update winden-tokens", the plugin and the relay speak different protocol versions. Run `npx winden-tokens@latest`; if the relay is already current, update the Winden Tokens plugin in Figma.
 
 | | |
 |---|---|
@@ -36,9 +36,12 @@ The package also installs an MCP server, so Claude can read and edit the variabl
 claude mcp add winden-tokens -- winden-tokens-mcp
 ```
 
-It needs `winden-tokens` running first and the Bridge to browser window open in Figma, the same as the browser view. It authenticates with a token the relay writes to `~/.winden-tokens/mcp-token` (readable only by you); set `WINDEN_TOKENS_HOME` to use another directory than `~/.winden-tokens`. It can list collections, read a variable and everything it references, create variables, groups and collections, and set values. If the relay or the plugin is not there, a tool fails immediately and says which.
+It needs `winden-tokens` running first and the Bridge to browser window open in Figma, the same as the browser view. It authenticates with a token the relay writes to `~/.winden-tokens/mcp-token` (readable only by you); set `WINDEN_TOKENS_HOME` to use another directory than `~/.winden-tokens`. It can list collections, read a variable and everything it references, create variables, groups and collections, set values, and save a named version of the file (`save_version`). If the relay or the plugin is not there, a tool fails immediately and says which.
 
-Renaming and deleting a variable are not reversible from Claude's side — Figma's own undo is the only recovery.
+Before it changes anything, the MCP server saves a version of the file, named `Winden Tokens MCP · before edit · <date time>`: one for each burst of edits (a write after 10 quiet minutes starts a new one), and always one right before renaming or deleting a variable.
+If that version cannot be saved, the edit does not happen.
+To undo, open File → Show version history in Figma and restore the version.
+Restoring a version restores the WHOLE file, including any design work done after it, not just the variables.
 
 ## Your tokens stay on your machine
 

@@ -4382,6 +4382,12 @@ void (async () => {
   if (!IS_BRIDGE_WINDOW) await sendSelection();
 })();
 
+// Replies to `save-version`, the one command whose outcome is not
+// `update-success` / `update-error` (see its case below).
+type VersionSaveReply =
+  | { type: 'version-saved'; id: string | null }
+  | { type: 'version-save-error'; message: string };
+
 // Message handler
 figma.ui.onmessage = async (msg: any) => {
   switch (msg.type) {
@@ -4514,6 +4520,25 @@ figma.ui.onmessage = async (msg: any) => {
       await fetchData();
       await sendSelection();
       break;
+
+    case 'save-version': {
+      // A restore point, taken by the MCP server before it edits (bridge/mcp.mjs).
+      // Its own reply types: `update-success` / `update-error` are the outcome
+      // signal for writes, and a checkpoint reply must never pass for one. No
+      // fetchData(): saving a version changes no variables.
+      let reply: VersionSaveReply;
+      try {
+        const description = typeof msg.description === 'string' && msg.description ? msg.description : undefined;
+        const result = await figma.saveVersionHistoryAsync(String(msg.title ?? ''), description);
+        // The typings allow a null result. Failures throw, so a resolved call
+        // counts as saved; only the id is unknown.
+        reply = { type: 'version-saved', id: result?.id ?? null };
+      } catch (error: any) {
+        reply = { type: 'version-save-error', message: error?.message ?? String(error) };
+      }
+      figma.ui.postMessage(reply);
+      break;
+    }
 
     case 'bridge-get-key':
       // The bridge window sends a fresh candidate (the sandbox has no reliable

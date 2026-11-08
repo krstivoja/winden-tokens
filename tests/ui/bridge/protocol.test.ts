@@ -12,8 +12,8 @@ import {
 } from '../../../src/ui/bridge/protocol';
 
 describe('bridge protocol', () => {
-  it('speaks v2', () => {
-    expect(BRIDGE_PROTOCOL_VERSION).toBe(2);
+  it('speaks v3', () => {
+    expect(BRIDGE_PROTOCOL_VERSION).toBe(3);
   });
 
   it('links the browser UI on the socket port (literal copy in src/plugin/code.ts)', () => {
@@ -23,17 +23,17 @@ describe('bridge protocol', () => {
 
   it('puts the plugin key in the hello payload', () => {
     const frame = JSON.parse(encodeEnvelope('plugin', 'hello', { pluginKey: 'a'.repeat(32) }));
-    expect(frame).toEqual({ v: 2, role: 'plugin', kind: 'hello', payload: { pluginKey: 'a'.repeat(32) } });
+    expect(frame).toEqual({ v: 3, role: 'plugin', kind: 'hello', payload: { pluginKey: 'a'.repeat(32) } });
   });
 
   it('keeps a payload-less hello payload-less', () => {
-    expect(JSON.parse(encodeEnvelope('client', 'hello'))).toEqual({ v: 2, role: 'client', kind: 'hello' });
+    expect(JSON.parse(encodeEnvelope('client', 'hello'))).toEqual({ v: 3, role: 'client', kind: 'hello' });
   });
 
   it('carries the payload of a client status frame (the pairing answer)', () => {
     const payload = { type: 'bridge/pairing-answer', code: 'K7Q2XD', approve: true };
     expect(JSON.parse(encodeEnvelope('client', 'status', payload))).toEqual({
-      v: 2,
+      v: 3,
       role: 'client',
       kind: 'status',
       payload,
@@ -42,20 +42,20 @@ describe('bridge protocol', () => {
 
   it('round-trips a message frame', () => {
     const raw = encodeEnvelope('client', 'message', { type: 'refresh' });
-    expect(decodeEnvelope(raw)).toEqual({ v: 2, role: 'client', kind: 'message', payload: { type: 'refresh' } });
+    expect(decodeEnvelope(raw)).toEqual({ v: 3, role: 'client', kind: 'message', payload: { type: 'refresh' } });
   });
 
   it('rejects other versions, junk and impersonated relay frames', () => {
-    expect(decodeEnvelope(JSON.stringify({ v: 1, role: 'client', kind: 'message', payload: {} }))).toBeNull();
+    expect(decodeEnvelope(JSON.stringify({ v: 2, role: 'client', kind: 'message', payload: {} }))).toBeNull();
     expect(decodeEnvelope('not json')).toBeNull();
     expect(decodeEnvelope(42)).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 2, role: 'client', kind: 'status', payload: {} }))).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 2, role: 'relay', kind: 'message', payload: {} }))).toBeNull();
-    expect(decodeEnvelope(JSON.stringify({ v: 2, role: 'client', kind: 'message' }))).toBeNull();
+    expect(decodeEnvelope(JSON.stringify({ v: 3, role: 'client', kind: 'status', payload: {} }))).toBeNull();
+    expect(decodeEnvelope(JSON.stringify({ v: 3, role: 'relay', kind: 'message', payload: {} }))).toBeNull();
+    expect(decodeEnvelope(JSON.stringify({ v: 3, role: 'client', kind: 'message' }))).toBeNull();
   });
 
   it('accepts relay status frames', () => {
-    const raw = JSON.stringify({ v: 2, role: 'relay', kind: 'status', payload: { type: 'bridge/pairing-pending', code: 'ABC123' } });
+    const raw = JSON.stringify({ v: 3, role: 'relay', kind: 'status', payload: { type: 'bridge/pairing-pending', code: 'ABC123' } });
     expect(decodeEnvelope(raw)?.payload).toEqual({ type: 'bridge/pairing-pending', code: 'ABC123' });
   });
 

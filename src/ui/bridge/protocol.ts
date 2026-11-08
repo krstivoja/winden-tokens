@@ -30,7 +30,8 @@ export const BRIDGE_URL = `ws://localhost:${BRIDGE_PORT}`;
  * literal in src/plugin/code.ts, which opens it.
  */
 export const BRIDGE_UI_URL = `http://localhost:${BRIDGE_PORT}/`;
-export const BRIDGE_PROTOCOL_VERSION = 2;
+// v3: the sandbox answers `save-version` (see PROTOCOL_VERSION in bridge/server.mjs).
+export const BRIDGE_PROTOCOL_VERSION = 3;
 
 /** What the user runs to get a relay. Shown verbatim in the bridge window. */
 export const BRIDGE_CLI_COMMAND = 'npx winden-tokens';

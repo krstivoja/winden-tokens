@@ -98,6 +98,73 @@ A read tool a model may call several times per answer must not quietly destroy e
 
 Keep this plan until that last box is ticked.
 
+## Version checkpoints before writes
+
+### Goal
+
+Every edit Claude makes can be reverted from Figma's own version history (File → Show version history).
+The MCP saves a named version before it changes anything, and also exposes saving as a tool.
+
+### Decisions (approved 2026-11-08)
+
+- **When it saves automatically:** before the first write after 10 quiet minutes (a "burst"), and always right before `rename_variable` and `delete_variable`.
+  One restore point per editing session, and never a missing one before something irreversible.
+  Saving every write was rejected: 40 value changes would leave 40 permanent entries in the file's history.
+- **Title:** `Winden Tokens MCP · before edit · 2026-11-08 14:32` (local time, minute precision).
+  Not "Claude": any MCP client can drive this server.
+- **Description:** the tool about to run and what it targets, e.g. `delete_variable color/brand/500`.
+- **If the save fails, the write is blocked.**
+  The tool changes nothing and says the checkpoint could not be saved, and why.
+  The point of the feature is that a restore point always exists.
+- **Explicit tool `save_version`:** optional `title` and `description`.
+  Defaults to the same title pattern with `· manual` in place of `· before edit`.
+  A manual save also resets the burst timer.
+- **Older plugin builds: bridge protocol bumped to v3** (taken while building, 2026-11-08).
+  The protocol version is the one compatibility signal the relay, the plugin window and the MCP server already exchange, and its mismatch path already tells the user, in the bridge window, the browser tab and the relay's terminal, to update the older half.
+  Detecting the missing reply instead cannot tell an old build from a slow save without a short timeout that would also fire on a large file, or yet another plugin message to probe with.
+  With the bump the relay refuses an older plugin outright, so the MCP server never meets one; a write then fails at once with "no plugin attached", plus the relay's mismatch sentence and "update the Winden Tokens plugin".
+  Cost: the browser bridge also needs both halves updated, which is the rule for every protocol change anyway.
+  The envelope itself did not change, which the comment on `PROTOCOL_VERSION` in `bridge/server.mjs` says.
+
+### Shape
+
+This is the first MCP feature that needs a plugin change: only the sandbox can call `figma.saveVersionHistoryAsync(title, description)`.
+
+- New plugin command `save-version` in `src/plugin/code.ts`, with `{ title, description }`.
+- It replies with its own message types, `version-saved` (with the version id Figma returns) or `version-save-error` (with the message).
+  It does NOT reuse `update-success` / `update-error`: those are the outcome signal for writes, and a checkpoint reply arriving there could be mistaken for a write's result.
+  It does not call `fetchData()`: saving a version changes no variables.
+- In `bridge/mcp.mjs`, a `checkpoint(link, reason)` step that every write tool runs before `writeCommand`, and the `save_version` tool.
+- The burst timer lives in the MCP process and resets whenever the plugin detaches or reattaches, since the bridge window may now be on a different file.
+- `create_group` checkpoints once, before its first variable, not once per variable.
+- Write results report the checkpoint: its title, or that none was needed because one was saved N minutes ago.
+- Tool descriptions for `rename_variable` and `delete_variable` change from "no undo from here" to: a version is saved first, and it is restorable from Figma's version history.
+  Also state the catch: restoring a version restores the WHOLE file, including design work done after it, not just the variables.
+
+### Older plugin builds
+
+A plugin build without `save-version` silently ignores the command, so the MCP would wait out the 20s timeout and then block every write.
+Decide while building: bump the bridge protocol version (the existing "Update winden-tokens" mismatch path), or detect a missing reply and fail fast with "update the Winden Tokens plugin".
+Prefer the protocol bump if it is the existing mechanism for exactly this; write down which was chosen and why.
+
+### Steps
+
+- [x] Plugin: `save-version` handler + reply types, in the message types shared with the bridge.
+- [x] MCP: `checkpoint()` before every write, burst timer, reset on plugin detach/reattach.
+- [x] MCP: `save_version` tool.
+- [x] MCP: blocked-write error when the save fails; checkpoint reported in write results.
+- [x] Old-plugin handling (see above).
+- [x] Tool descriptions and `bridge/README.md` updated (the "Renaming and deleting… not reversible" paragraph).
+- [x] Tests in `tests/bridge/` against the fake plugin socket: burst timing (fake clock), always-before-destructive, one save per `create_group`, blocked write on `version-save-error`, timer reset on reattach, old plugin.
+
+### Verify
+
+- [x] Fake plugin socket: all cases in the tests step above.
+- [ ] Real Figma file: a write creates a `Winden Tokens MCP · before edit · …` entry in version history with the right description, a second write within 10 minutes does not, a delete always does, and restoring the version brings the deleted variable back.
+  Also check whether `saveVersionHistoryAsync` ever resolves `null`: the typings allow it, and the plugin then reports the version as saved with no id.
+- [x] `npm run build`, plugin type check, `npm test` (514/514) pass. There is no `npm run lint` script.
+- [ ] Before publishing: bump `bridge/package.json` (0.3.0 on npm speaks protocol v2).
+
 ## After this
 
 The conventions — how tiers are decided, naming grammar, what may reference what — are what make these tools produce CORRECT tokens rather than merely valid ones. One source of truth in the repo, exposed as an MCP resource (so it reaches Claude chat, which a local skill does not) and wrapped as a skill for working in this repo. Drafted from the live file, corrected by the user.

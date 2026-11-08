@@ -46,7 +46,7 @@ class FakeSocket implements SocketLike {
 }
 
 function relay(type: string, extra?: Record<string, unknown>) {
-  return { v: 2, role: 'relay', kind: 'status', payload: { type, ...extra } };
+  return { v: 3, role: 'relay', kind: 'status', payload: { type, ...extra } };
 }
 
 function setup() {
@@ -97,7 +97,7 @@ describe('PluginBridge', () => {
     const t = setup();
     t.bridge.start(KEY);
     t.last().accept();
-    expect(t.last().frames()).toEqual([{ v: 2, role: 'plugin', kind: 'hello', payload: { pluginKey: KEY } }]);
+    expect(t.last().frames()).toEqual([{ v: 3, role: 'plugin', kind: 'hello', payload: { pluginKey: KEY } }]);
     expect(t.bridge.getState()).toEqual({ phase: 'connecting' });
     vi.advanceTimersByTime(OPEN_GRACE_MS);
     expect(t.bridge.getState()).toEqual({ phase: 'connected', tabs: 0 });
@@ -133,7 +133,7 @@ describe('PluginBridge', () => {
     t.last().deliver(relay('bridge/pairing-approved'));
     expect(t.bridge.getState()).toEqual({ phase: 'connected', tabs: 0 });
     t.fromSandbox({ type: 'selection-changed' });
-    expect(t.last().frames()[1]).toEqual({ v: 2, role: 'plugin', kind: 'message', payload: { type: 'selection-changed' } });
+    expect(t.last().frames()[1]).toEqual({ v: 3, role: 'plugin', kind: 'message', payload: { type: 'selection-changed' } });
   });
 
   it('stops on a denial until Retry', () => {
@@ -188,7 +188,7 @@ describe('PluginBridge', () => {
     t.bridge.start(KEY);
     t.last().accept();
     t.last().deliver(relay('bridge/client-attached', { clients: 1 }));
-    t.last().deliver({ v: 2, role: 'client', kind: 'hello' });
+    t.last().deliver({ v: 3, role: 'client', kind: 'hello' });
     expect(t.bridge.getState()).toEqual({ phase: 'connected', tabs: 1 });
     expect(t.toSandbox).toEqual([{ type: 'ui-ready' }, { type: 'get-history-state' }]);
 
@@ -207,7 +207,7 @@ describe('PluginBridge', () => {
     t.bridge.start(KEY);
     t.last().accept();
     vi.advanceTimersByTime(OPEN_GRACE_MS);
-    const command = (payload: Record<string, unknown>) => ({ v: 2, role: 'client', kind: 'message', payload });
+    const command = (payload: Record<string, unknown>) => ({ v: 3, role: 'client', kind: 'message', payload });
     t.last().deliver(command({ type: 'update-variable-value', id: 'v1', value: '#fff' }));
     t.last().deliver(command({ type: 'resize', width: 1920, height: 1080 }));
     t.last().deliver(command({ type: 'cancel' }));

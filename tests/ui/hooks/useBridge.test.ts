@@ -20,7 +20,7 @@ import { encodeEnvelope } from '../../../src/ui/bridge/protocol';
 
 /** A relay-authored status frame, exactly as bridge/server.mjs sends it. */
 function relayStatus(type: string, extra?: Record<string, unknown>): string {
-  return JSON.stringify({ v: 2, role: 'relay', kind: 'status', payload: { type, ...extra } });
+  return JSON.stringify({ v: 3, role: 'relay', kind: 'status', payload: { type, ...extra } });
 }
 
 class FakeWebSocket {
@@ -133,7 +133,7 @@ describe('BridgeClient', () => {
     expect(socket.url).toBe(BRIDGE_URL);
     socket.accept();
 
-    expect(socket.frames()[0]).toEqual({ v: 2, role: 'client', kind: 'hello' });
+    expect(socket.frames()[0]).toEqual({ v: 3, role: 'client', kind: 'hello' });
     client.stop();
   });
 
@@ -147,8 +147,8 @@ describe('BridgeClient', () => {
     socket.accept();
 
     expect(socket.frames()).toEqual([
-      { v: 2, role: 'client', kind: 'hello' },
-      { v: 2, role: 'client', kind: 'message', payload: { type: 'ui-ready' } },
+      { v: 3, role: 'client', kind: 'hello' },
+      { v: 3, role: 'client', kind: 'message', payload: { type: 'ui-ready' } },
     ]);
     client.stop();
   });
@@ -326,7 +326,7 @@ describe('BridgeClient', () => {
     // Same payload, but claiming the plugin role: not the relay's frame.
     socket.deliver(
       JSON.stringify({
-        v: 2,
+        v: 3,
         role: 'plugin',
         kind: 'status',
         payload: { type: 'bridge/plugin-disconnected' },
@@ -377,7 +377,7 @@ describe('BridgeClient', () => {
     expect(client.answerPairing(true)).toBe(true);
 
     expect(socket.frames().at(-1)).toEqual({
-      v: 2,
+      v: 3,
       role: 'client',
       kind: 'status',
       payload: { type: 'bridge/pairing-answer', code: 'K7Q2XD', approve: true },
@@ -396,7 +396,7 @@ describe('BridgeClient', () => {
     client.answerPairing(false);
 
     expect(socket.frames().at(-1)).toEqual({
-      v: 2,
+      v: 3,
       role: 'client',
       kind: 'status',
       payload: { type: 'bridge/pairing-answer', code: 'ABCDEF', approve: false },

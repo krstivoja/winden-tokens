@@ -265,10 +265,13 @@ Start them, then reconnect the MCP server in your client.
 | `get_variable` | value per mode, what it references per mode, what references it |
 | `create_collection`, `create_variable`, `create_group` | additive |
 | `set_variable_value` | per mode; a raw value or `{another/variable}` |
-| `rename_variable`, `delete_variable` | **destructive, no undo from the model's side** |
+| `rename_variable`, `delete_variable` | **destructive**; a version is always saved first |
+| `save_version` | a named version of the file, restorable from Figma's version history |
 
 `rename_variable` and `delete_variable` say so at the top of their own descriptions, so a client that can gate tools has something to gate on.
-Figma's own undo, in the Figma window, is the only way back from either.
+Every write saves a version first (`save-version`, the one plugin command added for the MCP server): one per burst of edits, a burst ending after 10 quiet minutes, and always one right before a rename or delete.
+If the save fails, the write does not happen.
+Restoring a version from File → Show version history restores the whole file, not just the variables.
 
 Deliberately not in v1: binding a variable to a node property (it depends on the live Figma selection, which the model cannot see) and `rename-group` (it silently rewires every consumer).
 
@@ -276,7 +279,7 @@ Deliberately not in v1: binding a variable to a node property (it depends on the
 
 The plugin protocol is fire-and-forget: commands carry no id, replies carry no id, and every reply goes to everything attached.
 So the MCP server correlates by outcome — reads await the next `data-loaded`, writes await the next `update-success` / `update-error` — and every wait is bounded by a timeout that says what it was waiting for.
-Nothing in `src/plugin/code.ts` changed, which is what lets this work against a plugin bundle that is already loaded in Figma.
+Reads and writes need nothing new from `src/plugin/code.ts`; only the version checkpoints do, which is why they came with bridge protocol v3.
 
 The cost is stated in every write tool's own description: a second writer (a browser tab on the same relay, or the user clicking in the plugin window) produces outcomes that are indistinguishable from ours, so an `update-success` is not proof that THAT write is the one that succeeded.
 Every write therefore reports state re-read from the file rather than what it hoped it did.

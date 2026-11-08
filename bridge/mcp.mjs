@@ -27,9 +27,9 @@
  *
  * What that buys, and what it costs:
  *
- *   + no change to the ~4,500 lines of src/plugin/code.ts, and no change to any
- *     plugin build already loaded in Figma. This works against the bundle the
- *     user has open right now.
+ *   + reads and writes reuse the plugin's existing commands; nothing in
+ *     src/plugin/code.ts was added for them. (Version checkpoints, below, are
+ *     the one exception.)
  *   − a second writer (a browser tab on the same relay, or the user clicking in
  *     the plugin window) produces `update-success` frames that are
  *     indistinguishable from ours. A success is therefore not proof that OUR
@@ -38,7 +38,18 @@
  *     rather than from what it hoped it did.
  *
  * The clean fix is a correlation id in the envelope, echoed by the sandbox.
- * That is the v2, and it costs a plugin rebuild for every user.
+ * That is a later step, and it costs a plugin rebuild for every user.
+ *
+ * VERSION CHECKPOINTS — the one plugin command added for this server
+ *
+ * Before it changes anything, every write tool saves a named version of the
+ * file (`save-version` → `version-saved` / `version-save-error`), so any edit
+ * can be undone from Figma's own version history. One per burst of writes
+ * (BURST_QUIET_MS), and always one right before a rename or a delete. If the
+ * save fails, the write does not happen. Only the sandbox can call
+ * `figma.saveVersionHistoryAsync`, so this needs a current plugin build; the
+ * bridge protocol went to v3 for it, which makes an older build a legible
+ * version mismatch rather than a silent 20s wait. See plans/mcp-server.md.
  *
  * WHY READS SEND `ui-ready` AND NOT `refresh`
  *
@@ -82,15 +93,13 @@
  *   every variable under it in one unreviewable step.
  */
 
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { get as httpGet } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { WebSocket } from 'ws';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { CLOSE_POLICY, DEFAULT_PORT, HOST, PROTOCOL_VERSION, mcpTokenPath, readMcpToken } from './server.mjs';
 import {
@@ -130,6 +139,14 @@ const RECONNECT_MS = 2_000;
 /** The relay's close code for a protocol-version mismatch. Retrying cannot fix it. */
 const CLOSE_VERSION = 4002;
 
+/**
+ * A burst of writes ends after this long without one. The first write of the
+ * next burst saves a version first; the rest of the burst shares it, so forty
+ * value changes leave one entry in the file's history, not forty.
+ */
+const BURST_QUIET_MS = 10 * 60_000;
+const VERSION_TITLE_PREFIX = 'Winden Tokens MCP';
+
 /** Default cap on `list_variables`, so one call cannot return a whole file. */
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
@@ -165,9 +182,11 @@ const HELP = `
     claude mcp add winden-tokens -- winden-tokens-mcp
 
   Safety
-    delete_variable and rename_variable change the Figma file and CANNOT be
-    undone from here. Figma's own undo (in the Figma window) is the only way
-    back. Gate them in your client if it can.
+    Every write saves a version of the file first (one per burst of edits, and
+    always one right before delete_variable and rename_variable), so it can be
+    undone from Figma's version history. Restoring a version restores the
+    WHOLE file, including design work done after it. Gate the destructive
+    tools in your client if it can.
 `;
 
 function fail(message, code = 1) {
@@ -276,7 +295,8 @@ async function preflight(port) {
         `  The plugin window is the only thing that can call the Figma API — this server\n` +
         `  cannot read or write a single variable without it. Open the Winden Tokens plugin\n` +
         `  in Figma, on the file you want to work on, leave that window open, and start this\n` +
-        `  server again.`
+        `  server again. If that window says the bridge protocol does not match, update the\n` +
+        `  Winden Tokens plugin (or this package, whichever is older).`
     );
   }
 
@@ -306,8 +326,10 @@ function missingTokenMessage(port) {
 const WIRE_ROLE = 'client';
 
 class RelayLink {
-  constructor(port) {
+  /** `now` is injectable so tests can move the burst clock. */
+  constructor(port, { now = Date.now } = {}) {
     this.port = port;
+    this.now = now;
     this.socket = null;
     this.connected = false;
     this.pluginAttached = false;
@@ -319,6 +341,21 @@ class RelayLink {
     /** @type {Set<{ match:(p:any)=>boolean, resolve:Function, reject:Function, timer:any, describe:string }>} */
     this.waiters = new Set();
     this.retry = null;
+    /** The relay's last version-mismatch sentence: why a plugin may be missing. */
+    this.mismatch = null;
+    this.resetBurst();
+  }
+
+  /**
+   * Forget the burst. Called whenever the plugin attaches or detaches: the
+   * bridge window may now be on a different file, whose history holds no
+   * version of ours.
+   */
+  resetBurst() {
+    /** When a write (or a manual save) last ran — the end of the burst so far. */
+    this.lastWriteAt = null;
+    /** The last version this server saved, for "none needed" reports. */
+    this.lastVersion = null;
   }
 
   connect() {
@@ -377,6 +414,7 @@ class RelayLink {
         this.connected = false;
         this.pluginAttached = false;
         this.socket = null;
+        this.resetBurst();
 
         if (code === CLOSE_POLICY) {
           // The relay refused our token. Retrying with the same file cannot
@@ -436,15 +474,19 @@ class RelayLink {
       const type = frame.payload?.type;
       if (type === 'bridge/plugin-connected') {
         this.pluginAttached = true;
+        this.mismatch = null;
+        this.resetBurst();
         note('the Figma plugin is attached');
       } else if (type === 'bridge/plugin-disconnected') {
         this.pluginAttached = false;
+        this.resetBurst();
         note('the Figma plugin window detached');
         this.failWaiters(
           'The Figma plugin window detached while this was waiting. Reopen the Winden Tokens plugin in Figma and try again.'
         );
       } else if (type === 'bridge/version-mismatch') {
-        note(String(frame.payload?.message ?? 'bridge protocol version mismatch'));
+        this.mismatch = String(frame.payload?.message ?? 'bridge protocol version mismatch');
+        note(this.mismatch);
       }
       return;
     }
@@ -497,7 +539,10 @@ class RelayLink {
       return Promise.reject(
         new Error(
           'No Figma plugin is attached to the bridge relay. The plugin window is the only thing that can ' +
-            'reach the Figma API. Open the Winden Tokens plugin in Figma, on the file you want, and leave it open.'
+            'reach the Figma API. Open the Winden Tokens plugin in Figma, on the file you want, and leave it open.' +
+            (this.mismatch
+              ? ` The relay turned the last plugin away: ${this.mismatch} If the plugin is the older half, update the Winden Tokens plugin in Figma.`
+              : '')
         )
       );
     }
@@ -579,6 +624,65 @@ async function writeCommand(link, command, describe) {
 
   const snapshot = link.snapshotSeq > seqBefore ? link.lastSnapshot : await readSnapshot(link);
   return snapshot;
+}
+
+/** `Winden Tokens MCP · before edit · 2026-11-08 14:32`, in local time. */
+function versionTitle(kind, at) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp =
+    `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ` + `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  return `${VERSION_TITLE_PREFIX} · ${kind} · ${stamp}`;
+}
+
+/**
+ * Save a named version of the open file and wait for Figma to confirm it.
+ * The reply has its own types, so it can never be mistaken for a write's
+ * `update-success`, nor a write's outcome for it.
+ */
+async function saveVersion(link, title, description) {
+  const reply = await link.await({
+    describe: 'the plugin to confirm it saved a version (`version-saved`)',
+    match: (p) => p.type === 'version-saved' || p.type === 'version-save-error',
+    timeoutMs: WRITE_TIMEOUT_MS,
+    trigger: () => link.send({ type: 'save-version', title, description }),
+  });
+  if (reply.type === 'version-save-error') throw new Error(`Figma refused to save a version: ${reply.message}`);
+
+  const at = link.now();
+  link.lastWriteAt = at;
+  link.lastVersion = { title, at };
+  return { id: reply.id ?? null, title, description };
+}
+
+/**
+ * Run before every write. Saves a version when this write starts a new burst,
+ * or always when `always` is set (rename, delete). Returns the sentence the
+ * write reports; throws, and the caller writes nothing, when the save fails —
+ * an edit with no restore point is exactly what this exists to prevent.
+ */
+async function checkpoint(link, reason, { always = false } = {}) {
+  const now = link.now();
+  const inBurst = link.lastWriteAt !== null && now - link.lastWriteAt < BURST_QUIET_MS;
+
+  if (inBurst && !always) {
+    link.lastWriteAt = now;
+    const minutes = Math.floor((now - link.lastVersion.at) / 60_000);
+    return (
+      `No new version needed: ${JSON.stringify(link.lastVersion.title)} was saved ${minutes} minute(s) ago, ` +
+      `and edits less than ${BURST_QUIET_MS / 60_000} minutes apart share one.`
+    );
+  }
+
+  let saved;
+  try {
+    saved = await saveVersion(link, versionTitle('before edit', new Date(now)), reason);
+  } catch (err) {
+    throw new Error(
+      `Nothing was changed: the checkpoint version could not be saved, and this server does not edit the file ` +
+        `without a restore point. ${err?.message ?? err}`
+    );
+  }
+  return `Saved version ${JSON.stringify(saved.title)} (${saved.description}) before this edit. Restore it from File → Show version history in Figma.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,8 +836,10 @@ const TOOLS = [
   {
     name: 'rename_variable',
     description:
-      'DESTRUCTIVE — ASK THE USER FIRST. Renames a variable in the user\'s Figma file. THERE IS NO UNDO FROM ' +
-      'HERE: this server cannot reverse it, and only Figma\'s own undo, in the Figma window, can.\n\n' +
+      'DESTRUCTIVE — ASK THE USER FIRST. Renames a variable in the user\'s Figma file. A version of the file is ' +
+      'saved first, so the rename can be undone from Figma\'s version history (File → Show version history) — ' +
+      'but restoring a version restores the WHOLE file, including any design work done after it, not just the ' +
+      'variables. This server cannot reverse it any other way.\n\n' +
       'What a rename does and does not break: aliases between variables are stored by id, so other variables ' +
       'that reference this one keep working. Everything that consumes the NAME does not — exported CSS custom ' +
       'properties, code that looks the token up by name, and any documentation of it. Renaming across `/` also ' +
@@ -753,9 +859,10 @@ const TOOLS = [
   {
     name: 'delete_variable',
     description:
-      'DESTRUCTIVE — ASK THE USER FIRST. Permanently deletes a variable from the user\'s Figma file. THERE IS NO ' +
-      'UNDO FROM HERE: this server cannot restore it, and only Figma\'s own undo, in the Figma window, can — and ' +
-      'only while that window is open.\n\n' +
+      'DESTRUCTIVE — ASK THE USER FIRST. Deletes a variable from the user\'s Figma file. A version of the file is ' +
+      'saved first, so the variable can be brought back from Figma\'s version history (File → Show version ' +
+      'history) — but restoring a version restores the WHOLE file, including any design work done after it, not ' +
+      'just the variables. This server cannot restore it any other way.\n\n' +
       'It can take more than the one variable with it. If the variable is the source of a generated shade ramp, ' +
       'the plugin deletes EVERY shade it manages in the same step. Any variable that aliased this one is left ' +
       'pointing at nothing, and so is every layer in the file bound to it.\n\n' +
@@ -767,6 +874,22 @@ const TOOLS = [
         variable: { type: 'string', description: 'Variable id (preferred) or exact full name.' },
       },
       required: ['variable'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'save_version',
+    description:
+      'Save a named version of the open Figma file, restorable from File → Show version history. Write tools ' +
+      'already save one before they edit (one per burst of edits, and always one before a rename or delete); ' +
+      'call this for a restore point of your own, e.g. before a larger change. Restoring a version restores the ' +
+      'WHOLE file. Adds an entry to the file\'s history; changes no variables.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: `Version title. Default \`${VERSION_TITLE_PREFIX} · manual · YYYY-MM-DD HH:MM\`.` },
+        description: { type: 'string', description: 'Version description, e.g. what is about to change.' },
+      },
       additionalProperties: false,
     },
   },
@@ -823,6 +946,7 @@ async function callTool(link, name, args) {
       const before = await readSnapshot(link);
       const clash = (before.collections ?? []).find((c) => c.name === args.name);
 
+      const saved = await checkpoint(link, `create_collection ${args.name}`);
       const after = await writeCommand(
         link,
         { type: 'create-collection', name: args.name },
@@ -836,6 +960,7 @@ async function callTool(link, name, args) {
           ? { warning: `A collection named ${JSON.stringify(args.name)} already existed (${clash.id}). Figma allows the duplicate; now there are two, and a name alone no longer identifies one.` }
           : {}),
         collections: collectionsOverview(after).map((c) => ({ id: c.id, name: c.name, variableCount: c.variableCount })),
+        checkpoint: saved,
       });
     }
 
@@ -852,6 +977,7 @@ async function callTool(link, name, args) {
         );
       }
 
+      const saved = await checkpoint(link, `create_variable ${args.name}`);
       const after = await writeCommand(
         link,
         { type: 'create-variable', collectionId: collection.id, name: args.name, varType: type, value: args.value ?? '' },
@@ -872,6 +998,7 @@ async function callTool(link, name, args) {
           collection.modes.length > 1
             ? `The value was set on the first mode (${collection.modes[0].name}) only — ${collection.name} has ${collection.modes.length} modes. Use set_variable_value for the rest.`
             : undefined,
+        checkpoint: saved,
       });
     }
 
@@ -890,14 +1017,25 @@ async function callTool(link, name, args) {
 
       const results = [];
       let snapshot = before;
+      // One checkpoint for the whole group, taken before its first variable.
+      let saved = null;
       for (const spec of wanted) {
         const fullName = groupedName(group, spec.name);
+        let type;
         try {
-          const type = normaliseType(spec.type);
-          if (findVariable(snapshot, collection.id, fullName)) {
-            results.push({ name: fullName, status: 'skipped', reason: 'already exists' });
-            continue;
-          }
+          type = normaliseType(spec.type);
+        } catch (err) {
+          results.push({ name: fullName, status: 'failed', reason: err.message });
+          break;
+        }
+        if (findVariable(snapshot, collection.id, fullName)) {
+          results.push({ name: fullName, status: 'skipped', reason: 'already exists' });
+          continue;
+        }
+        // Not inside the try below: a failed checkpoint is not one variable
+        // failing, it blocks the whole call before anything is written.
+        saved ??= await checkpoint(link, `create_group ${group}`);
+        try {
           snapshot = await writeCommand(
             link,
             { type: 'create-variable', collectionId: collection.id, name: fullName, varType: type, value: spec.value ?? '' },
@@ -925,6 +1063,7 @@ async function callTool(link, name, args) {
         ...(results.some((r) => r.status === 'failed')
           ? { warning: 'Stopped at the first failure. Variables listed as created are already in the file.' }
           : {}),
+        checkpoint: saved ?? 'Nothing was written, so no version was needed.',
       });
     }
 
@@ -937,6 +1076,7 @@ async function callTool(link, name, args) {
 
       const previous = variable.valuesByMode?.[mode.modeId];
 
+      const saved = await checkpoint(link, `set_variable_value ${variable.name}`);
       const after = await writeCommand(
         link,
         { type: 'update-variable-value', id: variable.id, value: args.value, modeId: mode.modeId },
@@ -952,6 +1092,7 @@ async function callTool(link, name, args) {
         ...(updated?.valuesByMode?.[mode.modeId] === previous
           ? { warning: 'The value in the file is unchanged. Either it already had this value, or the write that reported success was somebody else\'s.' }
           : {}),
+        checkpoint: saved,
       });
     }
 
@@ -969,6 +1110,8 @@ async function callTool(link, name, args) {
       }
       const wasReferencedBy = describeVariable(before, variable).referencedBy;
 
+      // Always, whatever the burst: a rename is the edit most worth undoing.
+      const saved = await checkpoint(link, `rename_variable ${variable.name} → ${args.new_name}`, { always: true });
       const after = await writeCommand(
         link,
         { type: 'update-variable-name', id: variable.id, name: args.new_name },
@@ -987,6 +1130,7 @@ async function callTool(link, name, args) {
         ...(updated?.name === args.new_name
           ? {}
           : { warning: 'The file does not show the new name. The success this matched on may have been a concurrent write — check Figma.' }),
+        checkpoint: saved,
       });
     }
 
@@ -995,6 +1139,8 @@ async function callTool(link, name, args) {
       const variable = resolveVariable(before, args.variable);
       const impact = deletionImpact(before, variable);
 
+      // Always, whatever the burst: nothing else can bring a deleted variable back.
+      const saved = await checkpoint(link, `delete_variable ${variable.name}`, { always: true });
       const after = await writeCommand(
         link,
         { type: 'delete-variable', id: variable.id },
@@ -1016,6 +1162,18 @@ async function callTool(link, name, args) {
         ...(stillThere
           ? { warning: 'The variable is still in the file. The success this matched on was probably a concurrent write — check Figma.' }
           : {}),
+        checkpoint: saved,
+      });
+    }
+
+    case 'save_version': {
+      const title = args.title?.trim() || versionTitle('manual', new Date(link.now()));
+      // A manual save resets the burst like any other: the next write within
+      // BURST_QUIET_MS shares this version instead of saving its own.
+      const saved = await saveVersion(link, title, args.description ?? '');
+      return ok({
+        saved: { id: saved.id, title: saved.title, description: saved.description },
+        note: 'Restore it from File → Show version history in Figma. Restoring restores the WHOLE file.',
       });
     }
 
@@ -1076,6 +1234,15 @@ async function main() {
     );
   }
 
+  // Loaded here, not at the top: tests/bridge import this module for the link
+  // and the tools, and only bridge/package.json installs the MCP SDK, not the
+  // repo root. The specifier is built at run time because Vite (which runs the
+  // tests) resolves every literal import, even one that never executes.
+  const sdk = (path) => import(/* @vite-ignore */ `${'@modelcontextprotocol/sdk'}/${path}`);
+  const { Server } = await sdk('server/index.js');
+  const { StdioServerTransport } = await sdk('server/stdio.js');
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await sdk('types.js');
+
   const server = new Server(
     { name: 'winden-tokens', version: await version() },
     { capabilities: { tools: {} } }
@@ -1098,6 +1265,23 @@ async function main() {
   note('MCP server ready on stdio');
 }
 
-main().catch((err) => {
-  fail(`  winden-tokens-mcp failed to start:\n  ${err?.stack ?? err}`);
-});
+/**
+ * Run as a bin, or imported by tests. npm links a bin through a symlink, so
+ * compare real paths, not the path the process was started with.
+ */
+function isMain() {
+  try {
+    return realpathSync(process.argv[1] ?? '') === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
+  main().catch((err) => {
+    fail(`  winden-tokens-mcp failed to start:\n  ${err?.stack ?? err}`);
+  });
+}
+
+// For tests/bridge: the link and the tool dispatch, without stdio or preflight.
+export { BURST_QUIET_MS, RelayLink, TOOLS, callTool };
