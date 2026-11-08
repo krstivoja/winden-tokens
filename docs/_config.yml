@@ -1,11 +1,14 @@
 title: Winden Tokens
 description: Professional Design Token Management for Figma
 baseurl: "" # Empty for production (root domain)
-url: "https://krstivoja.github.io"
+url: "https://windentokens.com"
 
 # Build settings
 markdown: kramdown
 theme: minima
+
+plugins:
+  - jekyll-sitemap
 
 # Collections
 collections:
@@ -57,3 +60,8 @@ exclude:
   - .jekyll-cache
   - gemfiles
   - README.md
+  - LOCAL_DEVELOPMENT.md
+  - decisions
+  - serve.sh
+  - create-video-post.sh
+  - _config_dev.yml
