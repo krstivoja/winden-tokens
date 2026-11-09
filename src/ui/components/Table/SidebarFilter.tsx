@@ -1,10 +1,11 @@
-// Sidebar filter with mode selector, type filters, and collection tree
+// Sidebar filter with mode selector, collection tree, and a type filter dropdown
 
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, PlusIcon } from '../Icons';
-import { TextButton, IconTextButton } from '../common/Button';
+import { TypeIcon, PlusIcon, FilterIcon } from '../Icons';
+import { IconTextButton } from '../common/Button';
+import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { useModalContext } from '../Modals/ModalContext';
 import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
 import { getGroupCardKey } from '../Relationships/GroupedGraph/utils';
@@ -279,7 +280,7 @@ interface SidebarFilterProps {
   isPathFocusable?: (collectionId: string, path: string) => boolean;
   /** `${collectionId}::${path}` of the row last focused; that row is ringed. */
   focusedRowKey?: string | null;
-  /** Fired once by "Select All" (never by "Deselect All"), after the
+  /** Fired once by the "All variables" checkbox when it selects everything (never when it deselects), after the
    *  per-collection and per-group toggles. The graph turns "Hide unused" off
    *  here; views without it get the plain toggles. */
   onSelectAllCollections?: () => void;
@@ -309,6 +310,7 @@ export function SidebarFilter({
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [rootExpanded, setRootExpanded] = useState(true);
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
   const hasInitializedExpanded = React.useRef(false);
@@ -443,18 +445,9 @@ export function SidebarFilter({
     ? resolveModeIdForCollection(collections, activePickerCollection.id, selectedModeId)
     : null;
 
-  // Select all / deselect all for types
-  const allTypesSelected = selectedTypes ? availableTypes.every(type => selectedTypes.has(type)) : false;
-  const handleToggleAllTypes = () => {
-    if (!selectedTypes || !onTypeToggle) return;
-    if (allTypesSelected) {
-      availableTypes.forEach(type => onTypeToggle(type));
-    } else {
-      availableTypes.forEach(type => {
-        if (!selectedTypes.has(type)) onTypeToggle(type);
-      });
-    }
-  };
+  // The filter trigger shows a dot while some available type is unticked.
+  const hasTypeFilter = showTypeFilters && !!selectedTypes && !!onTypeToggle && availableTypes.length > 0;
+  const typesFiltered = hasTypeFilter && availableTypes.some(type => !selectedTypes!.has(type));
 
   // All group keys across every collection (for tri-state / select-all)
   const allGroupKeys = React.useMemo(() => {
@@ -467,9 +460,9 @@ export function SidebarFilter({
 
   // Select all / deselect all for collections (drives nested groups too)
   // A group unticked under a ticked collection counts too: otherwise the
-  // button reads "Deselect All" while cards are still hidden (Hide unused
-  // unticks groups only, when every collection keeps a card on the path), and
-  // "Select All" could never be reached.
+  // "All variables" checkbox reads checked while cards are still hidden (Hide
+  // unused unticks groups only, when every collection keeps a card on the
+  // path), and select-all could never be reached.
   const allCollectionsSelected = collections.every(c => selectedCollections.has(c.id))
     && (!selectedGroups || allGroupKeys.every(key => selectedGroups.has(key)));
   const handleToggleAllCollections = () => {
@@ -492,6 +485,10 @@ export function SidebarFilter({
       onSelectAllCollections?.();
     }
   };
+  const someCollectionsSelected =
+    collections.some(c => selectedCollections.has(c.id)) ||
+    (!!selectedGroups && allGroupKeys.some(key => selectedGroups.has(key)));
+  const allVariablesIndeterminate = !allCollectionsSelected && someCollectionsSelected;
 
   return (
     <div
@@ -564,42 +561,37 @@ export function SidebarFilter({
         )}
       </div>
 
-      {/* Type Filters */}
-      {showTypeFilters && selectedTypes && onTypeToggle && (
-        <div className="p-3 border-b border-border">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold">Types</label>
-            <TextButton onClick={handleToggleAllTypes} size="sm">
-              {allTypesSelected ? 'Deselect All' : 'Select All'}
-            </TextButton>
-          </div>
-          <div className="space-y-1">
-            {availableTypes.map(type => (
-              <label
-                key={type}
-                className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedTypes.has(type)}
-                  onChange={() => onTypeToggle(type)}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm flex-1">{type}</span>
-                <TypeIcon type={type} />
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Collections Tree */}
       <div className="flex-1 p-3 flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-semibold">Collections</label>
-          <TextButton onClick={handleToggleAllCollections} size="sm">
-            {allCollectionsSelected ? 'Deselect All' : 'Select All'}
-          </TextButton>
+          {hasTypeFilter && (
+            <OptionsDropdown
+              label="Filter by type"
+              icon={<FilterIcon />}
+              align="right"
+              indicator={typesFiltered}
+            >
+              <div className="text-xs font-semibold mb-1 px-2">Types</div>
+              <div className="space-y-1">
+                {availableTypes.map(type => (
+                  <label
+                    key={type}
+                    className="flex items-center gap-2 cursor-pointer hover:bg-base-2 px-2 py-1 rounded transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes!.has(type)}
+                      onChange={() => onTypeToggle!(type)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm flex-1">{type}</span>
+                    <TypeIcon type={type} />
+                  </label>
+                ))}
+              </div>
+            </OptionsDropdown>
+          )}
         </div>
         <Search
           value={searchQuery}
@@ -609,6 +601,37 @@ export function SidebarFilter({
           fullWidth
         />
         <div className="space-y-1 overflow-auto flex-1 min-h-0">
+          {collections.length > 0 && (
+            <div
+              className="flex items-center gap-2 px-2 py-1 rounded hover:bg-base-2 transition-colors"
+            >
+              <button
+                type="button"
+                aria-label={rootExpanded || isSearching ? 'Collapse all variables' : 'Expand all variables'}
+                aria-expanded={rootExpanded || isSearching}
+                onClick={() => setRootExpanded(prev => !prev)}
+                className="w-4 h-4 flex items-center justify-center text-text-secondary hover:text-text transition-colors"
+              >
+                {rootExpanded || isSearching ? '▼' : '▶'}
+              </button>
+              <label className="flex items-center gap-2 cursor-pointer flex-1">
+                <input
+                  type="checkbox"
+                  aria-label="All variables"
+                  ref={el => {
+                    if (el) el.indeterminate = allVariablesIndeterminate;
+                  }}
+                  checked={allCollectionsSelected}
+                  onChange={handleToggleAllCollections}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-semibold flex-1">All variables</span>
+                <span className="text-xs opacity-60">{variables.length}</span>
+              </label>
+            </div>
+          )}
+          {(rootExpanded || isSearching) && (
+          <div className="ml-4 space-y-1">
           {collections.map(collection => {
             const variableCount = variables.filter(v => v.collectionId === collection.id).length;
             const groups = groupsByCollection.get(collection.id);
@@ -752,6 +775,8 @@ export function SidebarFilter({
               </div>
             );
           })}
+          </div>
+          )}
         </div>
 
         {/* Add Collection Button */}

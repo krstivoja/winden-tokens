@@ -78,6 +78,10 @@ export function SearchIcon() {
   return <Icon name="search" />;
 }
 
+export function FilterIcon() {
+  return <Icon name="filter" />;
+}
+
 export function EditIcon() {
   return <Icon name="edit" />;
 }

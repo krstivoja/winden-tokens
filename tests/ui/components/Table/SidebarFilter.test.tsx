@@ -1,5 +1,5 @@
-// Collections "Select All" fires onSelectAllCollections (the graph turns
-// "Hide unused" off there); "Deselect All" never does, and a sidebar without
+// Collections the "All variables" checkbox fires onSelectAllCollections (the graph turns
+// "Hide unused" off there); deselecting never does, and a sidebar without
 // the callback (Table view) keeps its plain toggles.
 // Every tree label (collection, folder row, real group) focuses the graph
 // through onFocusPath, by click and by Enter/Space.
@@ -58,30 +58,30 @@ function renderSidebar(
   return { onCollectionToggle };
 }
 
-describe('SidebarFilter Select All', () => {
+describe('SidebarFilter All variables checkbox', () => {
   it('calls onSelectAllCollections after toggling the unselected collections on', () => {
     const onSelectAllCollections = vi.fn();
     const { onCollectionToggle } = renderSidebar(new Set(['c1']), { onSelectAllCollections });
-    fireEvent.click(screen.getByText('Select All'));
+    fireEvent.click(screen.getByLabelText('All variables'));
     expect(onCollectionToggle.mock.calls).toEqual([['c2']]);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
   });
 
-  it('does not call it from Deselect All', () => {
+  it('does not call it when deselecting', () => {
     const onSelectAllCollections = vi.fn();
     const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onSelectAllCollections });
-    fireEvent.click(screen.getByText('Deselect All'));
+    fireEvent.click(screen.getByLabelText('All variables'));
     expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(0);
   });
 
   it('keeps working without the callback', () => {
     const { onCollectionToggle } = renderSidebar(new Set());
-    fireEvent.click(screen.getByText('Select All'));
+    fireEvent.click(screen.getByLabelText('All variables'));
     expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
   });
 
-  it('reads Select All while a group is unticked under ticked collections', () => {
+  it('selects all while a group is unticked under ticked collections', () => {
     const onSelectAllCollections = vi.fn();
     const onGroupToggle = vi.fn();
     const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), {
@@ -89,7 +89,7 @@ describe('SidebarFilter Select All', () => {
       onGroupToggle,
       onSelectAllCollections,
     });
-    fireEvent.click(screen.getByText('Select All'));
+    fireEvent.click(screen.getByLabelText('All variables'));
     expect(onCollectionToggle).not.toHaveBeenCalled();
     expect(onGroupToggle.mock.calls).toEqual([['c2::space']]);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);

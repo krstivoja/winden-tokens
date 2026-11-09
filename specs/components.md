@@ -262,6 +262,9 @@ Dependency graph in `src/ui/components/Relationships/`
 - `label: string` - Button label text
 - `children: React.ReactNode` - Menu content (Radio buttons, Checkboxes, Buttons, etc.)
 - `className?: string` - Additional CSS classes
+- `icon?: ReactNode` - Icon-only trigger (IconButton); `label` becomes its `aria-label`
+- `align?: 'left' | 'right'` - Menu edge alignment (default `left`)
+- `indicator?: boolean` - Dot on the icon-only trigger (e.g. an active filter)
 
 **Features:**
 - Absolute positioned menu (overlays content, doesn't push layout)
@@ -274,6 +277,7 @@ Dependency graph in `src/ui/components/Relationships/`
 - Consistent padding, rounded corners, border
 
 **Used In:**
+- SidebarFilter (Table/Relationships sidebar) - Icon-only filter trigger on the Collections header opening the Types checkboxes
 - CollectionFilters (toolbar) - Multiple collections with checkboxes
 - VariableTypeFilters (toolbar) - Type checkboxes
 - ModeSelector (toolbar) - Mode selection
