@@ -1,8 +1,7 @@
-// Collections the "All variables" checkbox fires onSelectAllCollections (the graph turns
-// "Hide unused" off there); deselecting never does, and a sidebar without
-// the callback (Table view) keeps its plain toggles.
-// Every tree label (collection, folder row, real group) focuses the graph
-// through onFocusPath, by click and by Enter/Space.
+// The Collections tree is click-to-select (no checkboxes): a plain click
+// selects only that row and its subgroups, Cmd/Ctrl-click toggles it, and
+// "All variables" selects everything (and fires onSelectAllCollections).
+// A plain click also asks the graph to focus the row through onFocusPath.
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,7 +14,6 @@ const collections: CollectionData[] = [
   { id: 'c2', name: 'Primitives', modes: [{ modeId: 'm2', name: 'Default' }] },
 ];
 
-// Group keys of the two variables below (`<collectionId>::<group>`).
 const ALL_GROUPS = new Set(['c1::color', 'c2::space']);
 
 const variables: VariableData[] = [
@@ -43,56 +41,202 @@ function renderSidebar(
   selectedCollections: Set<string>,
   props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}
 ) {
-  const onCollectionToggle = vi.fn();
+  const onSelectionChange = vi.fn();
   render(
     <SidebarFilter
       selectedModeId="m1"
       onModeChange={() => {}}
       selectedCollections={selectedCollections}
-      onCollectionToggle={onCollectionToggle}
       selectedGroups={ALL_GROUPS}
-      onGroupToggle={() => {}}
+      onSelectionChange={onSelectionChange}
       {...props}
     />
   );
-  return { onCollectionToggle };
+  return { onSelectionChange };
 }
 
-describe('SidebarFilter All variables checkbox', () => {
-  it('calls onSelectAllCollections after toggling the unselected collections on', () => {
-    const onSelectAllCollections = vi.fn();
-    const { onCollectionToggle } = renderSidebar(new Set(['c1']), { onSelectAllCollections });
-    fireEvent.click(screen.getByLabelText('All variables'));
-    expect(onCollectionToggle.mock.calls).toEqual([['c2']]);
-    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
-  });
+// Tree row of a label ('color' etc. are unique: the type filter only lists
+// COLOR / FLOAT in upper case).
+const label = (text: string) => screen.getByText(text, { selector: 'span' });
+const rowOf = (text: string) => label(text).closest('[role="treeitem"]') as HTMLElement;
+const lastCall = (fn: ReturnType<typeof vi.fn>) => {
+  const next = fn.mock.calls[fn.mock.calls.length - 1][0];
+  return { collections: Array.from(next.collections).sort(), groups: Array.from(next.groups).sort() };
+};
 
-  it('does not call it when deselecting', () => {
-    const onSelectAllCollections = vi.fn();
-    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onSelectAllCollections });
-    fireEvent.click(screen.getByLabelText('All variables'));
-    expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
-    expect(onSelectAllCollections).toHaveBeenCalledTimes(0);
+describe('SidebarFilter tree has no checkboxes', () => {
+  it('renders every row as a selectable treeitem and no checkbox in the tree', () => {
+    renderSidebar(new Set(['c1', 'c2']));
+    const tree = screen.getByRole('tree');
+    expect(tree.querySelectorAll('input[type="checkbox"]').length).toBe(0);
+    expect(screen.getAllByRole('treeitem').length).toBeGreaterThanOrEqual(5);
+    expect(rowOf('Theme').getAttribute('tabindex')).toBe('0');
   });
+});
 
-  it('keeps working without the callback', () => {
-    const { onCollectionToggle } = renderSidebar(new Set());
-    fireEvent.click(screen.getByLabelText('All variables'));
-    expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
-  });
-
-  it('selects all while a group is unticked under ticked collections', () => {
+describe('SidebarFilter All variables row', () => {
+  it('selects everything and fires onSelectAllCollections once', () => {
     const onSelectAllCollections = vi.fn();
-    const onGroupToggle = vi.fn();
-    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), {
+    const { onSelectionChange } = renderSidebar(new Set(['c1']), {
       selectedGroups: new Set(['c1::color']),
-      onGroupToggle,
       onSelectAllCollections,
     });
-    fireEvent.click(screen.getByLabelText('All variables'));
-    expect(onCollectionToggle).not.toHaveBeenCalled();
-    expect(onGroupToggle.mock.calls).toEqual([['c2::space']]);
+    fireEvent.click(rowOf('All variables'));
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(lastCall(onSelectionChange)).toEqual({
+      collections: ['c1', 'c2'],
+      groups: ['c1::color', 'c2::space'],
+    });
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cmd-click behaves like a plain click and it works without the callback', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c1']), { selectedGroups: new Set(['c1::color']) });
+    fireEvent.click(rowOf('All variables'), { metaKey: true });
+    expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
+  });
+
+  it('is the only selected row while everything is selected', () => {
+    renderSidebar(new Set(['c1', 'c2']));
+    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('All variables').className).toContain('bg-primary/10');
+    for (const text of ['Theme', 'Primitives', 'color', 'space']) {
+      expect(rowOf(text).getAttribute('aria-selected')).toBe('false');
+      expect(rowOf(text).className).not.toContain('ring-primary');
+    }
+  });
+});
+
+describe('SidebarFilter row selection', () => {
+  afterEach(() => {
+    currentVariables = variables;
+  });
+
+  it('plain click on a collection selects only it and its groups', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+    fireEvent.click(rowOf('Primitives'));
+    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c2'], groups: ['c2::space'] });
+  });
+
+  it('plain click on a group keeps every collection selected (others stay unfiltered)', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+    fireEvent.click(rowOf('color'));
+    // c2 keeps all its groups; the clicked group is the only c1 key. With two
+    // collections of one group each that is "everything", so use a second group below.
+    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c1', 'c2'], groups: ['c1::color', 'c2::space'] });
+  });
+
+  it('highlights the clicked group with a ring, not the other (merely visible) collections', () => {
+    currentVariables = [
+      ...variables,
+      { id: 'v3', collectionId: 'c1', name: 'size/sm', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
+    ];
+    renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
+    expect(rowOf('color').className).toContain('ring-primary');
+    expect(rowOf('color').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('size').className).not.toContain('bg-primary/10');
+    for (const text of ['Theme', 'Primitives', 'space', 'All variables']) {
+      expect(rowOf(text).getAttribute('aria-selected')).toBe('false');
+      expect(rowOf(text).className).not.toContain('ring-primary');
+    }
+  });
+
+  it('marks the single selected row and clears the root', () => {
+    renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('Primitives').className).toContain('bg-primary/10');
+    expect(rowOf('Primitives').className).toContain('ring-primary');
+    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
+    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('false');
+  });
+
+  // Theme gets a second group so one group click narrows it.
+  const withSecondGroup = () => {
+    currentVariables = [
+      ...variables,
+      { id: 'v3', collectionId: 'c1', name: 'size/sm', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
+    ];
+  };
+
+  it('Cmd-click adds a group within a collection, and narrows a fully visible one to that group', () => {
+    withSecondGroup();
+    const add = renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
+    fireEvent.click(rowOf('size'), { metaKey: true });
+    expect(lastCall(add.onSelectionChange)).toEqual({
+      collections: ['c1', 'c2'],
+      groups: ['c1::color', 'c1::size', 'c2::space'],
+    });
+    document.body.innerHTML = '';
+
+    // Other collections stay visible; only the picked group narrows its collection.
+    const narrow = renderSidebar(new Set(['c1', 'c2']), {
+      selectedGroups: new Set(['c1::color', 'c1::size', 'c2::space']),
+    });
+    fireEvent.click(rowOf('size'), { metaKey: true });
+    expect(lastCall(narrow.onSelectionChange)).toEqual({
+      collections: ['c1', 'c2'],
+      groups: ['c1::size', 'c2::space'],
+    });
+  });
+
+  it('Cmd-click on a collection in a collection subset adds it, again removes it', () => {
+    const add = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    fireEvent.click(rowOf('Theme'), { metaKey: true });
+    expect(lastCall(add.onSelectionChange)).toEqual({
+      collections: ['c1', 'c2'],
+      groups: ['c1::color', 'c2::space'],
+    });
+    document.body.innerHTML = '';
+    const remove = renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
+    fireEvent.click(rowOf('Theme'), { ctrlKey: true });
+    // Both collections are merely visible here (nothing picked): no-op.
+    expect(remove.onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('Cmd-click cannot remove the last selected collection', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    fireEvent.click(rowOf('Primitives'), { metaKey: true });
+    fireEvent.click(rowOf('space'), { metaKey: true });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('Enter and Space select, with the modifier they toggle', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    // fireEvent returns false when the handler called preventDefault (no scroll).
+    expect(fireEvent.keyDown(rowOf('Primitives'), { key: 'Enter' })).toBe(false);
+    expect(lastCall(onSelectionChange).collections).toEqual(['c2']);
+    expect(fireEvent.keyDown(rowOf('Theme'), { key: ' ', metaKey: true })).toBe(false);
+    expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
+    expect(onSelectionChange).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(rowOf('Theme'), { key: 'a' });
+    expect(onSelectionChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('chevrons expand and collapse without changing the selection', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+    fireEvent.click(screen.getByLabelText('Collapse Theme'));
+    expect(screen.queryByText('color', { selector: 'span' })).toBe(null);
+    fireEvent.keyDown(screen.getByLabelText('Expand Theme'), { key: 'Enter' });
+    fireEvent.click(screen.getByLabelText('Expand Theme'));
+    expect(screen.getByText('color', { selector: 'span' })).toBeTruthy();
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('search forces the tree open and matching rows still select', () => {
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+    fireEvent.change(screen.getByPlaceholderText('Search collections & groups...'), {
+      target: { value: 'space' },
+    });
+    expect(screen.queryByText('Theme', { selector: 'span' })).toBe(null);
+    fireEvent.click(rowOf('space'));
+    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c1', 'c2'], groups: ['c1::color', 'c2::space'] });
+  });
+
+  it('shows the variable counts', () => {
+    renderSidebar(new Set(['c1', 'c2']));
+    expect(rowOf('All variables').textContent).toContain('2');
+    expect(rowOf('Theme').textContent).toContain('1');
   });
 });
 
@@ -109,27 +253,21 @@ const focusVariables: VariableData[] = [
 const FOCUS_GROUPS = new Set(['c3::badge/color/error', 'c3::button']);
 
 function renderFocusSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}) {
-  const onCollectionToggle = vi.fn();
-  const onGroupToggle = vi.fn();
+  const onSelectionChange = vi.fn();
   render(
     <SidebarFilter
       selectedModeId="m3"
       onModeChange={() => {}}
       selectedCollections={new Set(['c3'])}
-      onCollectionToggle={onCollectionToggle}
       selectedGroups={FOCUS_GROUPS}
-      onGroupToggle={onGroupToggle}
+      onSelectionChange={onSelectionChange}
       {...props}
     />
   );
-  return { onCollectionToggle, onGroupToggle };
+  return { onSelectionChange };
 }
 
-// Label <span> of a tree row ('color' is unique here: the type filter only
-// lists COLOR / FLOAT in upper case).
-const label = (text: string) => screen.getByText(text, { selector: 'span' });
-
-describe('SidebarFilter focus labels', () => {
+describe('SidebarFilter folder rows and focus', () => {
   beforeEach(() => {
     currentCollections = focusCollections;
     currentVariables = focusVariables;
@@ -139,127 +277,86 @@ describe('SidebarFilter focus labels', () => {
     currentVariables = variables;
   });
 
+  it('a folder row selects its whole subtree, a leaf only itself', () => {
+    const { onSelectionChange } = renderFocusSidebar();
+    fireEvent.click(rowOf('badge'));
+    expect(lastCall(onSelectionChange)).toEqual({
+      collections: ['c3'],
+      groups: ['c3::badge/color/error'],
+    });
+    fireEvent.click(rowOf('button'));
+    expect(lastCall(onSelectionChange).groups).toEqual(['c3::button']);
+  });
+
   it.each([
     ['Components', ''],
     ['badge', 'badge'],
     ['color', 'badge/color'],
     ['error', 'badge/color/error'],
     ['button', 'button'],
-  ])('click on %s focuses path "%s"', (text, path) => {
+  ])('plain click on %s selects then focuses path "%s"', (text, path) => {
     const onFocusPath = vi.fn();
-    renderFocusSidebar({ onFocusPath });
-    const el = label(text);
-    expect(el.getAttribute('role')).toBe('button');
-    expect(el.getAttribute('tabindex')).toBe('0');
-    expect(el.getAttribute('title')).toBe('Click to find in graph');
-    fireEvent.click(el);
+    const { onSelectionChange } = renderFocusSidebar({ onFocusPath });
+    expect(rowOf(text).getAttribute('title')).toBe('Click to select and find in graph');
+    fireEvent.click(rowOf(text));
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
     expect(onFocusPath.mock.calls).toEqual([['c3', path]]);
+    // Selection is written before the camera is asked to move.
+    expect(onSelectionChange.mock.invocationCallOrder[0]).toBeLessThan(onFocusPath.mock.invocationCallOrder[0]);
   });
 
-  it.each([
-    ['Enter', 'Components', ''],
-    [' ', 'Components', ''],
-    ['Enter', 'badge', 'badge'],
-    [' ', 'color', 'badge/color'],
-    ['Enter', 'error', 'badge/color/error'],
-  ])('key "%s" on %s focuses path "%s"', (key, text, path) => {
+  it('Enter and Space focus too; Cmd/Ctrl-click toggles without moving the camera', () => {
     const onFocusPath = vi.fn();
-    renderFocusSidebar({ onFocusPath });
-    const el = label(text);
-    // fireEvent returns false when the handler called preventDefault (no scroll).
-    expect(fireEvent.keyDown(el, { key })).toBe(false);
-    expect(onFocusPath.mock.calls).toEqual([['c3', path]]);
-  });
+    const { onSelectionChange } = renderFocusSidebar({ onFocusPath, selectedGroups: new Set(['c3::button']) });
+    fireEvent.keyDown(rowOf('error'), { key: 'Enter' });
+    fireEvent.keyDown(rowOf('error'), { key: ' ' });
+    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge/color/error'], ['c3', 'badge/color/error']]);
 
-  it('ignores other keys', () => {
-    const onFocusPath = vi.fn();
-    renderFocusSidebar({ onFocusPath });
-    fireEvent.keyDown(label('badge'), { key: 'a' });
+    onFocusPath.mockClear();
+    onSelectionChange.mockClear();
+    fireEvent.click(rowOf('error'), { metaKey: true });
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
     expect(onFocusPath).not.toHaveBeenCalled();
   });
 
-  it('clicking the collection label does not toggle its checkbox', () => {
+  it('a row with nothing on the canvas is muted but still selects (and asks to focus)', () => {
     const onFocusPath = vi.fn();
-    const { onCollectionToggle, onGroupToggle } = renderFocusSidebar({ onFocusPath });
-    fireEvent.click(label('Components'));
-    fireEvent.keyDown(label('Components'), { key: ' ' });
-    expect(onCollectionToggle).not.toHaveBeenCalled();
-    expect(onGroupToggle).not.toHaveBeenCalled();
-    expect(onFocusPath).toHaveBeenCalledTimes(2);
-  });
-
-  it('a disabled row is muted and inert', () => {
-    const onFocusPath = vi.fn();
-    const { onCollectionToggle } = renderFocusSidebar({
+    const { onSelectionChange } = renderFocusSidebar({
       onFocusPath,
-      isPathFocusable: (collectionId, path) => !(collectionId === 'c3' && (path === 'badge' || path === '')),
+      isPathFocusable: (collectionId, path) => !(collectionId === 'c3' && path === 'badge'),
     });
-    for (const text of ['badge', 'Components']) {
-      const el = label(text);
-      expect(el.getAttribute('role')).toBe(null);
-      expect(el.getAttribute('aria-disabled')).toBe('true');
-      expect(el.getAttribute('tabindex')).toBe('-1');
-      expect(el.className).toContain('text-text-secondary');
-      expect(el.className).not.toContain('hover:underline');
-      fireEvent.click(el);
-      fireEvent.keyDown(el, { key: 'Enter' });
-    }
-    expect(onFocusPath).not.toHaveBeenCalled();
-    // The collection label's click is still swallowed in graph view.
-    expect(onCollectionToggle).not.toHaveBeenCalled();
-    // Other rows stay focusable.
-    fireEvent.click(label('color'));
-    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge/color']]);
+    expect(label('badge').className).toContain('text-text-secondary');
+    expect(rowOf('badge').getAttribute('title')).toBe('Not shown in graph');
+    expect(label('color').className).not.toContain('text-text-secondary');
+    fireEvent.click(rowOf('badge'));
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge']]);
   });
 
   it('rings the row named by focusedRowKey', () => {
     renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::badge/color' });
-    const rowOf = (text: string) => label(text).parentElement!;
-    expect(rowOf('color').className).toContain('ring-brand');
-    expect(rowOf('badge').className).not.toContain('ring-brand');
-    expect(rowOf('error').className).not.toContain('ring-brand');
+    expect(rowOf('color').className).toContain('ring-primary');
+    expect(rowOf('badge').className).not.toContain('ring-primary');
+    expect(rowOf('error').className).not.toContain('ring-primary');
   });
 
   it('rings the collection row for its "<id>::" key', () => {
     renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::' });
-    // span -> <label> -> row
-    expect(label('Components').parentElement!.parentElement!.className).toContain('ring-brand');
-    expect(label('badge').parentElement!.className).not.toContain('ring-brand');
+    expect(rowOf('Components').className).toContain('ring-primary');
+    expect(rowOf('badge').className).not.toContain('ring-primary');
   });
 
   it('still rings a group highlighted from the canvas', () => {
     renderFocusSidebar({ onFocusPath: vi.fn(), highlightedGroupKey: 'group:c3::badge/color/error' });
-    expect(label('error').parentElement!.className).toContain('ring-brand');
+    expect(rowOf('error').className).toContain('ring-primary');
   });
 
-  it('checkboxes and expand arrows behave as before', () => {
-    const onFocusPath = vi.fn();
-    const { onCollectionToggle, onGroupToggle } = renderFocusSidebar({ onFocusPath });
-    // Row checkbox: badge -> its only real descendant group goes off.
-    const badgeCheckbox = label('badge').parentElement!.querySelector('input[type="checkbox"]')!;
-    fireEvent.click(badgeCheckbox);
-    expect(onGroupToggle.mock.calls).toEqual([['c3::badge/color/error']]);
-    // Collection checkbox: fully on -> collection + every group off.
-    const collectionCheckbox = label('Components').parentElement!.querySelector('input[type="checkbox"]')!;
-    fireEvent.click(collectionCheckbox);
-    expect(onCollectionToggle.mock.calls).toEqual([['c3']]);
-    // Expand arrow on `badge` collapses its subtree.
-    fireEvent.click(label('badge').parentElement!.querySelector('button')!);
-    expect(screen.queryByText('color', { selector: 'span' })).toBe(null);
-    // Collection arrow collapses the whole tree.
-    fireEvent.click(label('Components').parentElement!.parentElement!.querySelector('button')!);
-    expect(screen.queryByText('badge', { selector: 'span' })).toBe(null);
-    expect(onFocusPath).not.toHaveBeenCalled();
-  });
-
-  it('without onFocusPath labels are plain text and the collection name toggles its checkbox', () => {
-    const { onCollectionToggle } = renderFocusSidebar();
-    expect(screen.queryAllByRole('button').filter(b => b.tagName === 'SPAN')).toEqual([]);
+  it('without onFocusPath a click only selects and rows have no title', () => {
+    const { onSelectionChange } = renderFocusSidebar();
     for (const text of ['Components', 'badge', 'color', 'error']) {
-      expect(label(text).getAttribute('tabindex')).toBe(null);
-      expect(label(text).getAttribute('title')).toBe(null);
+      expect(rowOf(text).getAttribute('title')).toBe(null);
     }
-    fireEvent.click(label('Components'));
-    expect(onCollectionToggle.mock.calls).toEqual([['c3']]);
+    fireEvent.click(rowOf('Components'));
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
   });
 });

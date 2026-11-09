@@ -1,4 +1,4 @@
-// Types filter dropdown and the "All variables" root row of the sidebar.
+// Types filter dropdown (its checkboxes stay) and the "All variables" root row of the sidebar.
 
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -25,7 +25,7 @@ vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
 vi.mock('../../../../src/ui/hooks/usePluginMessages', () => ({ post: vi.fn() }));
 
 function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}) {
-  const onCollectionToggle = vi.fn();
+  const onSelectionChange = vi.fn();
   const onTypeToggle = vi.fn();
   const utils = render(
     <SidebarFilter
@@ -34,15 +34,16 @@ function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>
       selectedTypes={new Set(['COLOR', 'FLOAT'])}
       onTypeToggle={onTypeToggle}
       selectedCollections={new Set(['c1', 'c2'])}
-      onCollectionToggle={onCollectionToggle}
+      selectedGroups={new Set(['c1::color', 'c2::space'])}
+      onSelectionChange={onSelectionChange}
       {...props}
     />
   );
-  return { onCollectionToggle, onTypeToggle, ...utils };
+  return { onSelectionChange, onTypeToggle, ...utils };
 }
 
 const openFilter = () => fireEvent.click(screen.getByLabelText('Filter by type'));
-const root = () => screen.getByLabelText('All variables') as HTMLInputElement;
+const root = () => screen.getByText('All variables').closest('[role="treeitem"]') as HTMLElement;
 
 describe('SidebarFilter types dropdown', () => {
   it('no longer renders the Types block or the bulk text button', () => {
@@ -105,33 +106,30 @@ describe('SidebarFilter All variables root row', () => {
     expect(screen.getByText('Primitives', { selector: 'span' })).toBeTruthy();
   });
 
-  it('is checked when all, indeterminate when some, unchecked when none', () => {
+  it('is selected only while everything is selected', () => {
     const { unmount } = renderSidebar();
-    expect(root().checked).toBe(true);
-    expect(root().indeterminate).toBe(false);
+    expect(root().getAttribute('aria-selected')).toBe('true');
     unmount();
 
     const partial = renderSidebar({ selectedCollections: new Set(['c1']) });
-    expect(root().checked).toBe(false);
-    expect(root().indeterminate).toBe(true);
+    expect(root().getAttribute('aria-selected')).toBe('false');
     partial.unmount();
 
     renderSidebar({ selectedCollections: new Set() });
-    expect(root().checked).toBe(false);
-    expect(root().indeterminate).toBe(false);
+    expect(root().getAttribute('aria-selected')).toBe('false');
   });
 
-  it('deselects all without firing onSelectAllCollections, selects with it', () => {
+  it('has no checkbox and a click selects everything, firing onSelectAllCollections', () => {
     const onSelectAllCollections = vi.fn();
-    const all = renderSidebar({ onSelectAllCollections });
+    const { onSelectionChange } = renderSidebar({
+      selectedCollections: new Set(['c1']),
+      onSelectAllCollections,
+    });
+    expect(root().querySelector('input')).toBe(null);
     fireEvent.click(root());
-    expect(all.onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
-    expect(onSelectAllCollections).not.toHaveBeenCalled();
-    all.unmount();
-
-    const none = renderSidebar({ selectedCollections: new Set(['c1']), onSelectAllCollections });
-    fireEvent.click(root());
-    expect(none.onCollectionToggle.mock.calls).toEqual([['c2']]);
+    const next = onSelectionChange.mock.calls[0][0];
+    expect(Array.from(next.collections)).toEqual(['c1', 'c2']);
+    expect(Array.from(next.groups)).toEqual(['c1::color', 'c2::space']);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
   });
 

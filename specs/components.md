@@ -472,6 +472,25 @@ Dependency graph in `src/ui/components/Relationships/`
 
 ---
 
+### SidebarFilter
+**File:** `Table/SidebarFilter.tsx` (selection math: `utils/sidebarSelection.ts`)
+
+**Purpose:** Left sidebar of the Table and Relationships views: mode picker, Collections tree, Types filter dropdown
+
+**Collections tree (click-to-select, no checkboxes):**
+- Rows ("All variables", collections, folders, groups) are `role="treeitem"` inside a `role="tree"`, with `aria-selected`, `tabIndex=0`, Enter/Space to activate
+- Plain click on a collection shows only that collection (the others hide); plain click on a group or folder shows only that group (and subgroups) inside its own collection while every other collection stays fully visible and unfiltered; "All variables" selects everything (and fires `onSelectAllCollections`)
+- Cmd/Ctrl-click (or Enter/Space with it) toggles the row: a picked row leaves, an unpicked one joins (a group joins within its collection and keeps the other collections visible; a fully visible group narrows its collection to it); the last picked row can never be removed
+- Chevrons are separate buttons and never change the selection
+- Only rows the user picked are marked (`isRowMarked`), never rows that are merely visible: the clicked row gets `bg-primary/10 ring-1 ring-primary` (also the canvas-focus ring), its descendants only the `bg-primary/10` fill; while everything is selected only "All variables" is marked
+- In the graph a plain click also finds the row on the canvas via `onFocusPath`; Cmd/Ctrl-click does not move the camera
+
+**Props:** `selectedCollections`, `selectedGroups`, `onSelectionChange({ collections, groups })` (one atomic write per click), optional `onFocusPath`, `isPathFocusable`, `focusedRowKey`, `highlightedGroupKey`, `onSelectAllCollections`
+
+**Table filtering:** ungrouped (collection root) variables show only while every group of their collection is selected, so picking a group shows just that group (`isVariableVisibleForGroupFilters` with `getGroupKeysByCollection`)
+
+---
+
 ### TableRow
 **File:** `Table/TableRow.tsx`
 

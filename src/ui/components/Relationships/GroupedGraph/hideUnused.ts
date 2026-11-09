@@ -282,6 +282,16 @@ export function applySidebarUncheck(
 }
 
 /**
+ * The group keys that count as selected for the loose-variable rule while
+ * hiding: only what hide-unused itself unchecked (`own`), never the whole
+ * plan, so keys the user had not selected stay unselected and their
+ * narrowing survives. Undefined when not hiding.
+ */
+export function getHideUnusedGroupKeys(hiding: boolean, own: SidebarSelection): Set<string> | undefined {
+  return hiding ? own.groups : undefined;
+}
+
+/**
  * Whether hide-unused itself still hides this card: off the path, and not
  * one the sidebar uncheck covers. Covered cards are the filter's to hide — so
  * re-ticking their group shows them again while hiding stays on. What is left

@@ -24,7 +24,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { CollectionData, InspectorBindingTarget, ShadeGroupData, VariableData } from '../../types';
 import { resolveModeIdForCollection } from '../../utils/modes';
-import { getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
+import { getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
 import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
@@ -116,6 +116,7 @@ import {
   isTierLabelHidden,
   planSidebarUncheck,
   applySidebarUncheck,
+  getHideUnusedGroupKeys,
   getActiveHidingLayout,
   mergeHidingPositions,
   collectionToggleEndsHiding,
@@ -245,6 +246,10 @@ function GroupedGraphInner() {
   // `<collectionId>::<path>`), ringed there. Cleared by every other way of
   // setting or clearing the highlight; see setCardHighlight.
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
+  // Sidebar click = select, then focus. Both refs bridge the gap until the
+  // layout effect has applied the new selection to the nodes.
+  const selectionPendingLayoutRef = useRef(false);
+  const pendingFocusRef = useRef<{ collectionId: string; path: string } | null>(null);
   // Sidebar rows with something visible under them, as one sorted
   // `\n`-joined string of row keys (see collectFocusableRowKeys). Written by
   // the layout effect — the only place visibility changes — and a string, so
@@ -318,8 +323,6 @@ function GroupedGraphInner() {
     selectedCollectionIds: localSelectedCollections,
     selectedGroups,
     toggleVariableType,
-    toggleCollection,
-    toggleSelectedGroup,
     setSelectedCollectionIds,
     setSelectedGroups,
   } = useAppContext();
@@ -354,28 +357,38 @@ function GroupedGraphInner() {
     setGlobalModeId(modeId);
   }, [setGlobalModeId]);
 
-  const handleCollectionToggle = useCallback((collectionId: string) => {
-    // Ticking a whole collection on asks to see it — hiding would keep its
-    // off-path cards out (or bring them back dimmed and unwired). A single
-    // group tick keeps hiding on.
-    if (collectionToggleEndsHiding(isHidingUnused, collectionId, localSelectedCollections)) {
-      setHideUnused(false);
-    }
-    toggleCollection(collectionId);
-  }, [toggleCollection, isHidingUnused, localSelectedCollections]);
+  // One atomic write of the sidebar's click selection. Selecting a collection
+  // that was off asks to see it — hiding would keep its off-path cards out (or
+  // bring them back dimmed and unwired) — so that ends hiding. Narrowing the
+  // selection or picking within selected collections keeps hiding on.
+  const handleSelectionChange = useCallback((next: { collections: Set<string>; groups: Set<string> }) => {
+    const addsCollection = Array.from(next.collections).some(id =>
+      collectionToggleEndsHiding(isHidingUnused, id, localSelectedCollections)
+    );
+    if (addsCollection) setHideUnused(false);
+    const changed =
+      next.collections.size !== localSelectedCollections.size
+      || next.groups.size !== selectedGroups.size
+      || Array.from(next.collections).some(id => !localSelectedCollections.has(id))
+      || Array.from(next.groups).some(key => !selectedGroups.has(key));
+    // The layout has not seen the new visibility yet: a focus request that
+    // follows (the row click) waits for it (see handleFocusPath).
+    if (changed) selectionPendingLayoutRef.current = true;
+    setSelectedCollectionIds(next.collections);
+    setSelectedGroups(next.groups);
+  }, [isHidingUnused, localSelectedCollections, selectedGroups, setSelectedCollectionIds, setSelectedGroups]);
 
   // Sidebar "Select All" means "show me everything": hiding ends with it.
+  // The previous row's focus ring (and its canvas highlight) ends with it.
   const handleSelectAllCollections = useCallback(() => {
     setHideUnused(false);
+    setHighlightTarget(null);
+    setFocusedRowKey(null);
   }, []);
 
   const handleTypeToggle = useCallback((type: string) => {
     toggleVariableType(type);
   }, [toggleVariableType]);
-
-  const handleGroupToggle = useCallback((groupName: string) => {
-    toggleSelectedGroup(groupName);
-  }, [toggleSelectedGroup]);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
     event.stopPropagation();
@@ -810,7 +823,7 @@ function GroupedGraphInner() {
   // than the `nodes` state, so this keeps one identity across layout passes
   // (see the drag-perf work). Nothing visible in scope → nothing at all, so a
   // stale sidebar can never park the canvas on a hidden node.
-  const handleFocusPath = useCallback((collectionId: string, path: string) => {
+  const runFocusPath = useCallback((collectionId: string, path: string) => {
     const scope = selectFocusScope(reactFlowInstance.getNodes(), collectionId, path);
     if (!scope) return;
     // A frame with no card of its own (or its card filtered out) is a fit
@@ -821,6 +834,25 @@ function GroupedGraphInner() {
     }
     fitToNodeIds(scope.nodeIds);
   }, [reactFlowInstance, fitToNodeIds]);
+
+  // A row click selects, then asks to focus. When the selection just changed
+  // the canvas still shows the old visibility, so the request is parked and
+  // run by the effect below once the layout has applied the new one.
+  const handleFocusPath = useCallback((collectionId: string, path: string) => {
+    if (selectionPendingLayoutRef.current) {
+      pendingFocusRef.current = { collectionId, path };
+      return;
+    }
+    runFocusPath(collectionId, path);
+  }, [runFocusPath]);
+
+  useEffect(() => {
+    selectionPendingLayoutRef.current = false;
+    const pending = pendingFocusRef.current;
+    if (!pending) return;
+    pendingFocusRef.current = null;
+    runFocusPath(pending.collectionId, pending.path);
+  }, [nodes, runFocusPath]);
 
   // Quick-search's collection jump: fit every visible card of the collection,
   // no highlight. Same scope as the sidebar's collection row.
@@ -1183,17 +1215,6 @@ function GroupedGraphInner() {
     return keys;
   }, [selectedLayers, variableMap]);
 
-  // The one definition of "is this card on screen right now", shared by the
-  // layout effect (which renders the answer as node.hidden) and Arrange Grid
-  // (which must skip hidden cards instead of reserving empty grid slots).
-  const cardVisibilityFilters = useMemo<CardVisibilityFilters>(() => ({
-    selectedCollections: localSelectedCollections,
-    selectedTypes,
-    selectedGroups,
-    variablesById,
-    selectionProviderGroupKeys,
-  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys]);
-
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
     const connected = new Map<string, ConnectionFlags>();
@@ -1234,6 +1255,28 @@ function GroupedGraphInner() {
   // `coveredCards` are then the filter's to hide; the rest hide-unused still
   // hides itself (see isCardHiddenByHideUnused).
   const sidebarUncheck = useMemo(() => planSidebarUncheck(groupsData, hidingPath), [groupsData, hidingPath]);
+  // The one definition of "is this card on screen right now", shared by the
+  // layout effect (which renders the answer as node.hidden) and Arrange Grid
+  // (which must skip hidden cards instead of reserving empty grid slots).
+  // What hide-unused unchecked and is still unchecked. Only these may come
+  // back, when a later activation puts them on the path again; anything the
+  // user unchecked never does. Kept across "Show all": turning hiding off
+  // re-checks nothing, but the next path must not be left hidden by an old
+  // one's write.
+  const hideUnusedOwnRef = useRef<SidebarSelection>({ groups: new Set(), collections: new Set() });
+  const groupKeysByCollection = useMemo(() => getGroupKeysByCollection(variables), [variables]);
+  const cardVisibilityFilters = useMemo<CardVisibilityFilters>(() => ({
+    selectedCollections: localSelectedCollections,
+    selectedTypes,
+    selectedGroups,
+    variablesById,
+    selectionProviderGroupKeys,
+    groupKeysByCollection,
+    // Only while hiding: just the keys Hide unused itself unchecked (never the
+    // plan's other keys), so the user's own narrowing is kept.
+    hideUnusedGroupKeys: getHideUnusedGroupKeys(!!hidingPath, hideUnusedOwnRef.current),
+  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys, groupKeysByCollection, hidingPath]);
+
   // Whether a card is hidden on the canvas right now: the shared filter
   // predicate, with hide-unused OR'd on top for what the sidebar uncheck
   // cannot cover — it can hide an on-filter card, never show a filtered one.
@@ -1243,12 +1286,6 @@ function GroupedGraphInner() {
     isCardHidden(group, cardVisibilityFilters)
     || isCardHiddenByHideUnused(group.key, hidingPath, sidebarUncheck.coveredCards)
   ), [cardVisibilityFilters, hidingPath, sidebarUncheck]);
-  // What hide-unused unchecked and is still unchecked. Only these may come
-  // back, when a later activation puts them on the path again; anything the
-  // user unchecked never does. Kept across "Show all": turning hiding off
-  // re-checks nothing, but the next path must not be left hidden by an old
-  // one's write.
-  const hideUnusedOwnRef = useRef<SidebarSelection>({ groups: new Set(), collections: new Set() });
   // A key the user re-ticks is theirs from then on: unticking it again later
   // is their uncheck, not ours to undo. Declared before the write below so it
   // never sees that write's own result mid-commit.
@@ -2433,9 +2470,8 @@ function GroupedGraphInner() {
           selectedTypes={selectedTypes}
           onTypeToggle={handleTypeToggle}
           selectedCollections={localSelectedCollections}
-          onCollectionToggle={handleCollectionToggle}
           selectedGroups={selectedGroups}
-          onGroupToggle={handleGroupToggle}
+          onSelectionChange={handleSelectionChange}
           highlightedGroupKey={highlightedGroupKey}
           onFocusPath={handleFocusPath}
           isPathFocusable={isPathFocusable}

@@ -13,13 +13,37 @@ export function getCollectionGroupKey(collectionId: string, groupName: string): 
   return `${collectionId}::${groupName}`;
 }
 
+/** Every real group key per collection, derived from the variable names. */
+export function getGroupKeysByCollection(
+  variables: Pick<VariableData, 'collectionId' | 'name'>[]
+): Map<string, string[]> {
+  const byCollection = new Map<string, Set<string>>();
+  variables.forEach(v => {
+    const groupName = getVariableGroupName(v.name);
+    if (!groupName) return;
+    if (!byCollection.has(v.collectionId)) byCollection.set(v.collectionId, new Set());
+    byCollection.get(v.collectionId)!.add(getCollectionGroupKey(v.collectionId, groupName));
+  });
+  return new Map(Array.from(byCollection, ([id, keys]) => [id, Array.from(keys)]));
+}
+
+/**
+ * Grouped variables show when their own group is selected. Ungrouped
+ * (collection root) variables belong to no group row, so with
+ * `groupKeysByCollection` they show only while every group of their
+ * collection is selected (or it has none): picking one group in the sidebar
+ * shows just that group. Without the map they always show.
+ */
 export function isVariableVisibleForGroupFilters(
   variable: Pick<VariableData, 'collectionId' | 'name'>,
-  selectedGroupKeys: Set<string>
+  selectedGroupKeys: Set<string>,
+  groupKeysByCollection?: Map<string, string[]>
 ): boolean {
   const groupName = getVariableGroupName(variable.name);
   if (!groupName) {
-    return true;
+    if (!groupKeysByCollection) return true;
+    const own = groupKeysByCollection.get(variable.collectionId) ?? [];
+    return own.every(key => selectedGroupKeys.has(key));
   }
 
   return selectedGroupKeys.has(getCollectionGroupKey(variable.collectionId, groupName));
