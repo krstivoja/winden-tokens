@@ -30,6 +30,7 @@ const title = el<'p'>('bridge-title');
 const detail = el<'p'>('bridge-detail');
 const detailText = el<'span'>('bridge-detail-text');
 const detailCode = el<'code'>('bridge-detail-code');
+const copyButton = el<'button'>('bridge-copy');
 const retry = el<'button'>('bridge-retry');
 const openLink = el<'button'>('bridge-open');
 
@@ -43,6 +44,7 @@ function render(state: BridgePhase): void {
   detailText.textContent = view.detail?.text ?? '';
   detailCode.textContent = view.detail?.code ?? '';
   detailCode.hidden = !view.detail?.code;
+  copyButton.hidden = !view.detail?.code;
   retry.hidden = !view.retry;
   openLink.hidden = !view.openLink;
 }
@@ -52,6 +54,36 @@ const bridge = new PluginBridge({
   createSocket: (url) => new WebSocket(url),
   postToSandbox,
   onSandboxMessage,
+});
+
+/** Figma's iframe often denies navigator.clipboard, so fall back to execCommand. */
+function copyText(text: string): boolean {
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(field);
+  field.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+
+let copiedTimer: number | undefined;
+copyButton.addEventListener('click', () => {
+  const text = detailCode.textContent ?? '';
+  if (!text || !copyText(text)) return;
+  copyButton.dataset.copied = 'true';
+  copyButton.title = 'Copied';
+  window.clearTimeout(copiedTimer);
+  copiedTimer = window.setTimeout(() => {
+    delete copyButton.dataset.copied;
+    copyButton.title = 'Copy';
+  }, 1500);
 });
 
 bridge.onState(render);
