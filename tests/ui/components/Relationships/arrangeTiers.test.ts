@@ -349,7 +349,7 @@ describe('normalizeGridLayoutSettings drops the retired column cap', () => {
     const stored = { gapX: 10, gapY: 20, maxColumnHeight: 2400 };
     const settings = normalizeGridLayoutSettings(stored);
 
-    expect(settings).toEqual({ gapX: 10, gapY: 20 });
+    expect(settings).toEqual({ gapX: 10, gapY: 20, sortBy: 'tier' });
     expect('maxColumnHeight' in settings).toBe(false);
   });
 
@@ -357,16 +357,18 @@ describe('normalizeGridLayoutSettings drops the retired column cap', () => {
     expect(normalizeGridLayoutSettings(undefined)).toEqual({
       gapX: GROUP_GAP_X,
       gapY: GROUP_GAP_Y,
+      sortBy: 'tier',
     });
     expect(normalizeGridLayoutSettings({ gapX: -1, gapY: 5 })).toEqual({
       gapX: GROUP_GAP_X,
       gapY: 5,
+      sortBy: 'tier',
     });
   });
 
   it('round-trips through the draft the Grid Settings inputs edit', () => {
     const settings = normalizeGridLayoutSettings({ gapX: 1, gapY: 2, maxColumnHeight: 3 });
-    expect(toGridLayoutDraft(settings)).toEqual({ gapX: '1', gapY: '2' });
+    expect(toGridLayoutDraft(settings)).toEqual({ gapX: '1', gapY: '2', sortBy: 'tier' });
   });
 });
 

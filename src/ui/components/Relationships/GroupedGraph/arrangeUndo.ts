@@ -1,0 +1,37 @@
+// One-step Undo Arrange — the pure half.
+//
+// The snapshot is the SAVED record from before the arrange, never the live
+// node positions. Units that had no saved position were placed by the natural
+// layout, which depends on the filters: a frame is sized from its visible
+// cards, and the packing stacks the next unit by that size. Copying their live
+// positions into the snapshot froze a filter-dependent layout — after Undo,
+// lifting the filter grew a frame back while the unit under it stayed put,
+// and the two overlapped. Restoring the record verbatim (possibly `{}`) keeps
+// those units natural, so they re-flow when the filter changes, as before the
+// arrange. Applies to both layouts (Tier and Collection).
+
+import type { TierPlacement } from './types';
+
+type PositionRecord = Record<string, { x: number; y: number }>;
+
+export interface ArrangeUndoSnapshot {
+  /** The saved positions record before the arrange. */
+  positions: PositionRecord;
+  /** The tier captions (`graph-tier-labels`) before the arrange. */
+  tierLabels: TierPlacement[];
+}
+
+/** Copy the pre-arrange state; later mutation of the inputs cannot leak in. */
+export function takeArrangeSnapshot(
+  savedPositions: PositionRecord,
+  tierLabels: TierPlacement[]
+): ArrangeUndoSnapshot {
+  const positions: PositionRecord = {};
+  Object.entries(savedPositions).forEach(([key, pos]) => { positions[key] = { x: pos.x, y: pos.y }; });
+  return { positions, tierLabels: tierLabels.map(label => ({ ...label })) };
+}
+
+/** What Undo writes back: the snapshot itself, verbatim — nothing frozen. */
+export function restoreArrangeSnapshot(snapshot: ArrangeUndoSnapshot): ArrangeUndoSnapshot {
+  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels);
+}

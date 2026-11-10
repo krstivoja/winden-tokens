@@ -77,9 +77,13 @@ function normalizeGridLayoutSettings(value: unknown): GridLayoutSettings {
   // Settings persisted while the column cap existed also carry a
   // `maxColumnHeight`. Rebuilding the object field by field rather than
   // spreading `candidate` drops it: an old record loads as a valid
-  // {gapX, gapY} and the dead key never reaches state, the draft or storage
-  // (the next Apply writes the two-field shape back).
-  return { gapX, gapY };
+  // {gapX, gapY, sortBy} and the dead key never reaches state, the draft or
+  // storage (the next Apply writes the current shape back).
+  //
+  // `sortBy` predates nothing: every record stored before it existed (and any
+  // garbage) loads as 'tier', the original layout.
+  const sortBy = candidate.sortBy === 'collection' ? 'collection' : 'tier';
+  return { gapX, gapY, sortBy };
 }
 
 /** Settings → the string-backed draft the Grid Settings inputs edit. */
@@ -87,6 +91,7 @@ function toGridLayoutDraft(settings: GridLayoutSettings): GridLayoutDraft {
   return {
     gapX: String(settings.gapX),
     gapY: String(settings.gapY),
+    sortBy: settings.sortBy,
   };
 }
 
@@ -280,6 +285,16 @@ interface ArrangeGridOptions {
    * it always did.
    */
   depthConnections?: ConnectionRecord[];
+  /**
+   * Collection mode (Grid Settings "Sort by: Collection"): collection ids in
+   * display order. Inside every column, units then stack by this order first
+   * and by the usual within-column order second (title, then barycenter
+   * sweeps that never move a unit past another collection's), and managed
+   * chains take their collection's turn instead of all going first. Columns
+   * (tiers), captions and spacing are unchanged. Absent = Tier mode, exactly
+   * as before.
+   */
+  collectionOrder?: string[];
 }
 
 /** What Arrange Grid produces: where every unit goes, and where the tier
@@ -299,7 +314,14 @@ function arrangeGroupsByConnectedBlocks(
   gapY: number,
   options: ArrangeGridOptions = {}
 ): ArrangeGridResult {
-  const { heightOverrides, depthConnections } = options;
+  const { heightOverrides, depthConnections, collectionOrder } = options;
+  // Collection-order rank of a unit; 0 for every unit in Tier mode, which
+  // leaves every comparison below exactly as it was.
+  const collectionRank = (group: GroupData | undefined): number => {
+    if (!collectionOrder || !group) return 0;
+    const index = collectionOrder.indexOf(group.collectionId);
+    return index < 0 ? collectionOrder.length : index;
+  };
   // One lane == one tier == one column, so this is both the tier-to-tier step
   // and the full caption pitch.
   const columnStep = GROUP_WIDTH + gapX;
@@ -474,7 +496,7 @@ function arrangeGroupsByConnectedBlocks(
   sortedLanes.forEach(lane => {
     const columnGroups = (standaloneColumns.get(lane) || [])
       .slice()
-      .sort((a, b) => a.title.localeCompare(b.title));
+      .sort((a, b) => collectionRank(a) - collectionRank(b) || a.title.localeCompare(b.title));
     laneOrder.set(lane, columnGroups.map(group => group.key));
   });
 
@@ -501,10 +523,12 @@ function arrangeGroupsByConnectedBlocks(
         const barycenter = neighborKeys.length > 0
           ? neighborKeys.reduce((sum, n) => sum + (adjacentIndex.get(n) || 0), 0) / neighborKeys.length
           : originalIndex;
-        return { key, barycenter, originalIndex };
+        return { key, barycenter, originalIndex, rank: collectionRank(groupMap.get(key)) };
       });
 
       withBarycenter.sort((a, b) => {
+        // Collection mode: reordering stays inside each collection's block.
+        if (a.rank !== b.rank) return a.rank - b.rank;
         if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
         return a.originalIndex - b.originalIndex;
       });
@@ -526,6 +550,50 @@ function arrangeGroupsByConnectedBlocks(
     laneStartX.set(lane, x);
     tiers.push({ tier: index + 1, x, width: GROUP_WIDTH });
   });
+
+  // ── Pass 3 (Collection mode): stack collection by collection ──────
+  // Every column still starts at the top. Each collection, in order, places
+  // its managed chains (one line across their lanes, starting below the
+  // lowest of those lanes so far) and then its standalone units, each lane
+  // stacking under whatever that lane already holds.
+  if (collectionOrder) {
+    const bottoms = new Map<number, number>();
+    const chainsByRank = new Map<number, GroupData[][]>();
+    sortedChains.forEach(([, chainGroups]) => {
+      const rank = collectionRank(chainGroups[0]);
+      const list = chainsByRank.get(rank) || [];
+      list.push(chainGroups);
+      chainsByRank.set(rank, list);
+    });
+    const ranks = Array.from(new Set([
+      ...chainsByRank.keys(),
+      ...standaloneGroups.map(group => collectionRank(group)),
+    ])).sort((a, b) => a - b);
+    ranks.forEach(rank => {
+      (chainsByRank.get(rank) || []).forEach(chainGroups => {
+        const lanes = chainGroups.map(group => getManagedLane(group) ?? 0);
+        const y = Math.max(0, ...lanes.map(lane => bottoms.get(lane) ?? 0));
+        let lineHeight = 0;
+        chainGroups.forEach((group, index) => {
+          positions.set(group.key, { x: laneStartX.get(lanes[index]) ?? 0, y });
+          lineHeight = Math.max(lineHeight, heightOf(group));
+        });
+        lanes.forEach(lane => bottoms.set(lane, y + lineHeight + gapY));
+      });
+      sortedLanes.forEach(lane => {
+        const startX = laneStartX.get(lane) ?? 0;
+        let nextY = bottoms.get(lane) ?? 0;
+        (laneOrder.get(lane) || []).forEach(key => {
+          const group = groupMap.get(key);
+          if (!group || collectionRank(group) !== rank) return;
+          positions.set(group.key, { x: startX, y: nextY });
+          nextY += heightOf(group) + gapY;
+        });
+        bottoms.set(lane, nextY);
+      });
+    });
+    return { positions, tiers };
+  }
 
   // ── Pass 3: emit positions ───────────────────────────────────────
   chainPlacements.forEach(placement => {
@@ -1038,6 +1106,36 @@ function buildArrangeUnits(
   return { units, hiddenUnits, heightOverrides, unitKeyByGroupKey, hiddenByKey };
 }
 
+/**
+ * Card-level connections remapped onto the arrange units their ends were
+ * folded into. A connection that becomes a self-loop within one unit is
+ * dropped. Two lists, and the difference matters:
+ *  - `visible` drives the packing: an edge that isn't drawn must not shape
+ *    where the cards land.
+ *  - `all` drives the tier (topological depth), hidden endpoints included —
+ *    dropping those made deselecting `_global` turn every token referencing it
+ *    into a root.
+ */
+function remapConnectionsToUnits(
+  connections: ConnectionRecord[],
+  unitKeyByGroupKey: Map<string, string>,
+  hiddenByKey: Map<string, boolean>
+): { all: ConnectionRecord[]; visible: ConnectionRecord[] } {
+  const all: ConnectionRecord[] = [];
+  const visible: ConnectionRecord[] = [];
+  connections.forEach(conn => {
+    const fromUnit = unitKeyByGroupKey.get(conn.fromGroup);
+    const toUnit = unitKeyByGroupKey.get(conn.toGroup);
+    if (!fromUnit || !toUnit) return;
+    if (fromUnit === toUnit) return;
+    const remapped: ConnectionRecord = { ...conn, fromGroup: fromUnit, toGroup: toUnit };
+    all.push(remapped);
+    if (hiddenByKey.get(conn.fromGroup) || hiddenByKey.get(conn.toGroup)) return;
+    visible.push(remapped);
+  });
+  return { all, visible };
+}
+
 // ── Card visibility ────────────────────────────────────────────────
 
 /**
@@ -1242,6 +1340,7 @@ export {
   bucketUnmanagedVariables,
   isCardHidden,
   buildArrangeUnits,
+  remapConnectionsToUnits,
   outermostGroupedAncestor,
   isAbsorbedCard,
   getCardNodeId,

@@ -77,33 +77,22 @@ interface Unit {
 const wrapperId = (collectionId: string, path: string) =>
   `${WRAPPER_NODE_PREFIX}${getWrapperKey(collectionId, path)}`;
 
+interface UnitForest {
+  roots: Unit[];
+  unitId: (unit: Unit) => string;
+}
+
 /**
- * Build placements for standard cards, putting each inside the frame that
- * contains it.
- *
- * `groupedPaths` holds wrapper KEYS (`<collectionId>::<path>`), not bare
- * paths — a frame belongs to exactly one collection. Frames are one level:
- * when keys of one collection nest (which `flattenGroupedPaths` prevents on
- * every write), the OUTERMOST one is the frame and the inner key draws
- * nothing, so a card is never inside a frame inside a frame.
- *
- * `savedPositions` maps a top-level unit's id (card key or
- * `wrapper:<collectionId>::<path>`) to its absolute position. A frame's cards
- * have no saved position: they are always auto-stacked.
- *
- * `hiddenCardKeys` are cards a filter currently hides. A frame is sized and
- * stacked from its VISIBLE cards only, so it hugs them instead of keeping the
- * room of the hidden ones; hidden cards take no space (they are not drawn
- * anyway) and the frame grows back when the filter is lifted.
+ * The frames and loose cards `cards` fold into, sized: a frame's cards
+ * stacked inside it (visible ones only), every root sized exactly as it is
+ * drawn. Shared by the layout and by `measureWrapperFrames`, so the Collection
+ * row layout packs frames by the very sizes they render at.
  */
-export function buildWrapperLayout(
+function buildUnitForest(
   cards: GroupData[],
   groupedPaths: Set<string>,
-  savedPositions: Record<string, { x: number; y: number }>,
-  hiddenCardKeys: ReadonlySet<string> = new Set()
-): Placement[] {
-  if (cards.length === 0) return [];
-
+  hiddenCardKeys: ReadonlySet<string>
+): UnitForest {
   // Frames actually needed: the outermost grouped frame of some card, as
   // `<collectionId>::<path>` keys. The walk includes the card's own path (a
   // card whose own path is grouped needs that frame to exist, and is absorbed
@@ -204,6 +193,44 @@ export function buildWrapperLayout(
   };
   roots.forEach(sizeUnit);
 
+  return { roots, unitId };
+}
+
+/**
+ * Build placements for standard cards, putting each inside the frame that
+ * contains it.
+ *
+ * `groupedPaths` holds wrapper KEYS (`<collectionId>::<path>`), not bare
+ * paths — a frame belongs to exactly one collection. Frames are one level:
+ * when keys of one collection nest (which `flattenGroupedPaths` prevents on
+ * every write), the OUTERMOST one is the frame and the inner key draws
+ * nothing, so a card is never inside a frame inside a frame.
+ *
+ * `savedPositions` maps a top-level unit's id (card key or
+ * `wrapper:<collectionId>::<path>`) to its absolute position. A frame's cards
+ * have no saved position: they are always auto-stacked.
+ *
+ * `hiddenCardKeys` are cards a filter currently hides. A frame is sized and
+ * stacked from its VISIBLE cards only, so it hugs them instead of keeping the
+ * room of the hidden ones; hidden cards take no space (they are not drawn
+ * anyway) and the frame grows back when the filter is lifted.
+ *
+ * `naturalPositions` (Collection mode only) is a precomputed absolute spot per
+ * top-level unit id — the collection row layout. When given it REPLACES the
+ * natural-origin packing below for every unit it covers; saved positions
+ * still win over it. Absent (Tier mode), the packing is exactly as before.
+ */
+export function buildWrapperLayout(
+  cards: GroupData[],
+  groupedPaths: Set<string>,
+  savedPositions: Record<string, { x: number; y: number }>,
+  hiddenCardKeys: ReadonlySet<string> = new Set(),
+  naturalPositions?: ReadonlyMap<string, { x: number; y: number }>
+): Placement[] {
+  if (cards.length === 0) return [];
+
+  const { roots, unitId } = buildUnitForest(cards, groupedPaths, hiddenCardKeys);
+
   // Natural absolute origin for a unit (used for top-level placement).
   const naturalPos = (unit: Unit): { x: number; y: number } => {
     if (unit.kind === 'card' && unit.group) {
@@ -251,9 +278,12 @@ export function buildWrapperLayout(
   const columnBottoms = new Map<number, number>();
   sortedRoots.forEach(unit => {
     const saved = savedPositions[unitId(unit)];
+    const precomputed = naturalPositions?.get(unitId(unit));
     let pos: { x: number; y: number };
     if (saved) {
       pos = saved;
+    } else if (precomputed) {
+      pos = precomputed;
     } else {
       const natural = naturalPos(unit);
       const colKey = Math.round(natural.x);
@@ -265,4 +295,21 @@ export function buildWrapperLayout(
   });
 
   return placements;
+}
+
+/**
+ * The exact drawn size of every top-level unit `cards` fold into, keyed by
+ * its node id (card key or `wrapper:<collectionId>::<path>`): the same sizing
+ * buildWrapperLayout renders with, frames hugging their visible cards.
+ */
+export function measureWrapperFrames(
+  cards: GroupData[],
+  groupedPaths: Set<string>,
+  hiddenCardKeys: ReadonlySet<string> = new Set()
+): Map<string, { width: number; height: number }> {
+  const sizes = new Map<string, { width: number; height: number }>();
+  if (cards.length === 0) return sizes;
+  const { roots, unitId } = buildUnitForest(cards, groupedPaths, hiddenCardKeys);
+  roots.forEach(unit => sizes.set(unitId(unit), { width: unit.width, height: unit.height }));
+  return sizes;
 }

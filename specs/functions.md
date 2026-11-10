@@ -122,6 +122,16 @@
 - On load `graph-grouped-paths` is flattened to the outermost key per collection (`flattenGroupedPaths`) and `rel:*` entries of `graph-positions` are dropped (`stripRelPositions`), each written back only when changed. A frame promoted to top level without a saved position appears at its natural position; there is no auto-arrange
 - Card and frame titles are breadcrumbs (`font > size > body`), the tooltip is the full slash path; collection and managed/external cards stay plain
 - Card menu "Hide unused" (just above Delete): highlights that card's path and turns hiding on in one step; reads "Show all" while hiding is active
+- Grid Settings "Sort by": Tier (default) or Collection, persisted with the gaps in `graph-layout-settings` (a record without it loads as Tier)
+- Both modes use the same tier columns, left to right, every column starting at the top, with a "Tier N" caption above each (`graph-tier-labels`)
+- Tier: inside a column, cards by title, then reordered to reduce wire crossings
+- Collection: inside a column, cards stack by collection order first (the order of the collections in the file), then by Tier mode's order within each collection; managed chains stay one line across their columns in their collection's turn. No collection labels
+- Collection default layout (nothing saved) follows the filters (hidden cards get no slot); Hide unused never moves cards. With no stored captions it shows its own; a drag freezes them with the positions
+- The "Sort by" control only edits the dropdown's draft: Cancel discards a switch, Apply saves it and arranges at once in the new mode, with Undo Arrange to get the previous positions back (the mode itself stays, like the gaps)
+- Arrange Grid follows the mode; saved positions always win over the default layout; hidden (filtered) units are parked in a spare column right of the grid in both modes
+- Undo Arrange (both modes) restores the SAVED record and the captions from before the arrange, never the live positions: cards that had no saved position re-flow with the filters again (Arrange with a filter → Undo → clear the filter no longer overlaps frames). Known and accepted: Arrange with a filter, then clearing the filter WITHOUT Undo can still grow a partly-filtered frame into the next unit — Arrange again
+- Collection mode: a sidebar collection click and the quick-search collection jump move the camera to the collection's first card (topmost of the leftmost column it appears in) instead of fitting all its cards; Tier mode fits them all
+- `graph-layout-labels` (collection row labels of an earlier Collection design) is retired: a stored record is cleared on load, and label ids are stripped from `graph-positions`
 
 **Selection card:**
 - The selected Figma node appears as a card; bound tokens are connected to its property rows

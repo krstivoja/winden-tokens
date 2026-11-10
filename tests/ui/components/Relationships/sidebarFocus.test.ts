@@ -4,6 +4,7 @@ import {
   collectFocusableRowKeys,
   isPathInScope,
   selectFocusScope,
+  selectFirstCollectionNodeId,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/sidebarFocus';
 import {
   computeHighlightPath,
@@ -307,5 +308,31 @@ describe('isSingleTarget', () => {
 
   it('does not match a wider focus that includes the card, so a click narrows instead of clearing', () => {
     expect(isSingleTarget({ groupKeys: ['A', 'D'], varName: null }, 'A', null)).toBe(false);
+  });
+});
+
+describe('selectFirstCollectionNodeId (Collection mode)', () => {
+  const at = (node: Node, x: number, y: number): Node => ({ ...node, position: { x, y } });
+
+  it('picks the topmost card of the leftmost column the collection appears in', () => {
+    const nodes = [
+      at(cardNode(badge), 440, 0),
+      at(cardNode(badgeColor), 0, 300),
+      at(cardNode(badgeX), 0, 100),
+      at(cardNode(otherBadge), 0, 0),
+    ];
+    expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('group:c1::badge-x');
+    expect(selectFirstCollectionNodeId(nodes, 'c2')).toBe('group:c2::badge');
+  });
+
+  it('skips hidden nodes, cards inside frames and library cards; null when nothing is visible', () => {
+    const nodes = [
+      at(cardNode(badge, true), 0, 0),
+      { ...at(cardNode(badgeColor), 0, 10), parentId: 'wrapper:c1::badge' },
+      at(cardNode(external), 0, 20),
+      at(cardNode(badgeX), 440, 50),
+    ];
+    expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('group:c1::badge-x');
+    expect(selectFirstCollectionNodeId([at(cardNode(badge, true), 0, 0)], 'c1')).toBe(null);
   });
 });

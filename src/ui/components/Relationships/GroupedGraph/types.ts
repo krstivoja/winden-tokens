@@ -83,14 +83,23 @@ export interface ConnectionFlags {
 
 // ── Grid Layout ────────────────────────────────────────────────────
 
+/**
+ * How the canvas is laid out. Both use one column per dependency tier;
+ * `tier` orders a column by title, `collection` by collection order first
+ * (arrangeGroupsByConnectedBlocks `collectionOrder`).
+ */
+export type GraphSortBy = 'tier' | 'collection';
+
 export interface GridLayoutSettings {
   gapX: number;
   gapY: number;
+  sortBy: GraphSortBy;
 }
 
 export interface GridLayoutDraft {
   gapX: string;
   gapY: string;
+  sortBy: GraphSortBy;
 }
 
 // ── Tier captions ──────────────────────────────────────────────────

@@ -90,6 +90,28 @@ export function selectFocusScope(nodes: Node[], collectionId: string, path: stri
 }
 
 /**
+ * Collection mode's camera target for a collection: its FIRST card — the
+ * topmost visible top-level card or frame of the collection in the leftmost
+ * column it appears in. A collection's cards are spread over every tier
+ * column there, so fitting all of them would zoom far out. Null when nothing
+ * of it is visible.
+ */
+export function selectFirstCollectionNodeId(nodes: Node[], collectionId: string): string | null {
+  let best: Node | null = null;
+  nodes.forEach(node => {
+    if (node.parentId) return;
+    const entry = getFocusEntry(node);
+    if (!entry || entry.collectionId !== collectionId) return;
+    if (!best
+      || node.position.x < best.position.x
+      || (node.position.x === best.position.x && node.position.y < best.position.y)) {
+      best = node;
+    }
+  });
+  return best ? (best as Node).id : null;
+}
+
+/**
  * Every sidebar row key (`<collectionId>::<path>`, the shape of
  * `focusedRowKey`) with at least one visible target in scope: each visible
  * entry enables its own path and every ancestor up to the collection row.

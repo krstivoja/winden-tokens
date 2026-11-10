@@ -231,6 +231,20 @@ Dependency graph in `src/ui/components/Relationships/`
 
 ---
 
+### SegmentedControl
+**File:** `common/SegmentedControl/SegmentedControl.tsx`
+
+**Purpose:** iOS-style tab group for picking one of a few options
+
+**Props:**
+- `options: { value, label, badge?, onBadgeClick? }[]`
+- `value`, `onChange(value)`
+- `variant?: 'bordered' | 'filled'`, `fullWidth?: boolean`, `className?: string`
+
+**Used in:** `ColorPickerModal`, `ShadesModal`, Grid Settings "Sort by" (`GroupedGraph.tsx`)
+
+---
+
 ### Dropdown
 **File:** `common/Dropdown/Dropdown.tsx`
 
@@ -855,8 +869,12 @@ Colors, primary, COLOR, #FF0000
 - Component selections (component, component set, instance) show one collapsible section per visible layer (root + descendants, indented by depth)
 - Component sections list only bound/styled rows and rows with a real value; "Add property" (per section) reveals a hidden bindable row for the session
 - Rows are pure-helper driven: `GroupedGraph/propertyLayers.ts` (flatten, visibility, card height); handle ids `prop:<layerIndex>:<entryIndex>::in|out`
-- Arrange Grid separates dependency tiers by `gapX * TIER_GAP_MULTIPLIER`, and a tier's own wrapped sub-columns by plain `gapX`, so a wrapped tier no longer reads as several tiers
-- Tier captions (`GroupedGraph/TierLabelNode.tsx`) sit above each tier, spanning its sub-columns; inert nodes (`tier-label:` ids) that never enter `savedPositions`, arrange or `isCardHidden`
+- Tier mode Arrange Grid (`arrangeGroupsByConnectedBlocks`): one column per tier, columns step by `GROUP_WIDTH + gapX`; depth over the full connection graph, packing over visible cards only
+- Tier captions (`GroupedGraph/TierLabelNode.tsx`) sit above each column, one column wide; inert nodes (`tier-label:` ids) that never enter `savedPositions`, arrange or `isCardHidden`
+- Collection mode (Grid Settings "Sort by"): the same `arrangeGroupsByConnectedBlocks` with `collectionOrder` (collection ids in display order) — units stack by collection inside each column, chains in their collection's turn; absent = Tier mode unchanged. Used by Arrange Grid and by the `collectionNaturalLayout` memo (the default layout, handed to `buildWrapperLayout` as `naturalPositions`)
+- `GroupedGraph/sidebarFocus.ts` `selectFirstCollectionNodeId`: Collection mode's camera target for a collection (topmost visible top-level node in its leftmost column)
+- `wrapperLayout.ts`: `buildWrapperLayout(..., naturalPositions?)` (absent = Tier packing, unchanged) and `measureWrapperFrames` (exact drawn size per top-level unit)
+- `GroupedGraph/arrangeUndo.ts`: `takeArrangeSnapshot` / `restoreArrangeSnapshot` — Undo Arrange's snapshot is the saved record plus the tier captions, never live node positions
 - `CardHeaderRow` (`GroupedGraph/GraphNode.tsx`) renders the title as a breadcrumb (`font > size > body`): props `title` (full slash path, the tooltip), `segments` (one segment is plain text), `draggable` (false drops the `cursor-move` on a frozen card). Ancestors are dimmed, the leaf is bold and shrinks last, separators use `ChevronRightIcon`, header actions are `shrink-0`
 - `GraphWrapperNode` (frame): ONE level, holds cards and never another frame; a multi-segment path shows the same breadcrumb, a single segment or the collection name is plain. It keeps the level-up button (widens the frame)
 - `GroupNodeData.inFrame`: the card sits in a frame, so it offers no level-up and its header has no move cursor

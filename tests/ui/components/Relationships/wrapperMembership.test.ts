@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWrapperLayout } from '../../../../src/ui/components/Relationships/GroupedGraph/wrapperLayout';
+import { buildWrapperLayout, measureWrapperFrames } from '../../../../src/ui/components/Relationships/GroupedGraph/wrapperLayout';
 import type { Placement } from '../../../../src/ui/components/Relationships/GroupedGraph/wrapperLayout';
 import {
   buildArrangeUnits,
@@ -12,6 +12,7 @@ import {
   migrateGraphPositions,
   getGroupCardKey,
   bucketUnmanagedVariables,
+  getGroupHeight,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import type { CardVisibilityFilters } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import { STANDARD_GROUP_HEADER_FILL } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
@@ -598,5 +599,44 @@ describe('Arrange folds the self-path card into the same frame', () => {
     expect(unitKeyByGroupKey.get('collection:c1')).toBe('wrapper:c1::');
     expect(unitKeyByGroupKey.get('group:test')).toBe('wrapper:c1::');
     expect(units.map(u => u.key)).toEqual(['wrapper:c1::']);
+  });
+});
+
+// ── Collection mode: precomputed natural positions ─────────────────
+
+describe('buildWrapperLayout naturalPositions (Collection mode)', () => {
+  const cards = [card('a', { collectionId: 'c1', initialY: 0 }), card('b', { collectionId: 'c1', initialY: 500 })];
+
+  it('replaces the natural-origin packing for the units it covers', () => {
+    const natural = new Map([['group:a', { x: 10, y: 20 }]]);
+    const placements = buildWrapperLayout(cards, new Set(), {}, new Set(), natural);
+    expect(placements.find(p => p.id === 'group:a')!.position).toEqual({ x: 10, y: 20 });
+    // Not covered: the old packing.
+    expect(placements.find(p => p.id === 'group:b')!.position).toEqual({ x: 0, y: 500 });
+  });
+
+  it('saved positions still win over it', () => {
+    const natural = new Map([['group:a', { x: 10, y: 20 }]]);
+    const placements = buildWrapperLayout(cards, new Set(), { 'group:a': { x: 7, y: 8 } }, new Set(), natural);
+    expect(placements.find(p => p.id === 'group:a')!.position).toEqual({ x: 7, y: 8 });
+  });
+
+  it('absent, the layout is identical to the four-argument call', () => {
+    const frames = new Set(['c1::']);
+    expect(buildWrapperLayout(cards, frames, {}, new Set(), undefined))
+      .toEqual(buildWrapperLayout(cards, frames, {}, new Set()));
+  });
+});
+
+describe('measureWrapperFrames', () => {
+  it('reports every top-level unit at the size it is drawn', () => {
+    const cards = [card('a', { collectionId: 'c1' }), card('b', { collectionId: 'c1' }), card('z', { collectionId: 'c2' })];
+    const frames = new Set(['c1::']);
+    const sizes = measureWrapperFrames(cards, frames, new Set(['group:b']));
+    const placements = buildWrapperLayout(cards, frames, {}, new Set(['group:b']));
+    const frame = placements.find(p => p.id === 'wrapper:c1::');
+    expect(frame && frame.kind === 'wrapper' ? { width: frame.width, height: frame.height } : null)
+      .toEqual(sizes.get('wrapper:c1::'));
+    expect(sizes.get('group:z')).toEqual({ width: 260, height: getGroupHeight(cards[2]) });
   });
 });

@@ -102,7 +102,12 @@ winden-tokens/
 │   │   │   │
 │   │   │   ├── Relationships/       # Dependency graph view
 │   │   │   │   ├── RelationshipsView.tsx
-│   │   │   │   └── GroupedGraph.tsx
+│   │   │   │   ├── GroupedGraph.tsx
+│   │   │   │   └── GroupedGraph/    # Graph nodes, layout and pure helpers
+│   │   │   │       ├── wrapperLayout.ts  # Frames + default packing
+│   │   │   │       ├── arrangeUndo.ts    # Undo Arrange snapshot
+│   │   │   │       ├── hideUnused.ts     # Highlight path + Hide unused
+│   │   │   │       └── sidebarFocus.ts   # Sidebar row → canvas focus
 │   │   │   │
 │   │   │   ├── Icons.tsx            # SVG icon components
 │   │   │   ├── icons/               # Icon utilities (svg/ holds the 24x24 currentColor icons, e.g. filter.svg, chevron-right.svg)
