@@ -112,10 +112,55 @@ describe('SidebarFilter row selection', () => {
     currentVariables = variables;
   });
 
-  it('plain click on a collection selects only it and its groups', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+  it('plain click on a collection hides nothing: it clears filters, rings the row and focuses it', () => {
+    const onFocusPath = vi.fn();
+    const onSelectAllCollections = vi.fn();
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']), {
+      selectedGroups: new Set(['c1::color']),
+      onFocusPath,
+      onSelectAllCollections,
+    });
     fireEvent.click(rowOf('Primitives'));
-    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c2'], groups: ['c2::space'] });
+    expect(lastCall(onSelectionChange)).toEqual({
+      collections: ['c1', 'c2'],
+      groups: ['c1::color', 'c2::space'],
+    });
+    expect(onFocusPath.mock.calls).toEqual([['c2', '']]);
+    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
+    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('Primitives').className).toContain('ring-primary');
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
+    // Clicking another collection moves the mark.
+    fireEvent.click(rowOf('Theme'));
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('Cmd-click on a collection toggles only its mark: no selection write, no focus', () => {
+    const onFocusPath = vi.fn();
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']), { onFocusPath });
+    fireEvent.click(rowOf('Theme'), { metaKey: true });
+    fireEvent.click(rowOf('Primitives'), { ctrlKey: true });
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(rowOf('Theme'), { metaKey: true });
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
+    // The last mark stays while nothing is narrowed.
+    fireEvent.click(rowOf('Primitives'), { metaKey: true });
+    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(onFocusPath).not.toHaveBeenCalled();
+  });
+
+  it('a plain click on a group or All variables clears the collection marks', () => {
+    renderSidebar(new Set(['c1', 'c2']));
+    fireEvent.click(rowOf('Theme'));
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(rowOf('space'));
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
+    fireEvent.click(rowOf('Theme'));
+    fireEvent.click(rowOf('All variables'));
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
   });
 
   it('plain click on a group keeps every collection selected (others stay unfiltered)', () => {
@@ -180,20 +225,6 @@ describe('SidebarFilter row selection', () => {
     });
   });
 
-  it('Cmd-click on a collection in a collection subset adds it, again removes it', () => {
-    const add = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
-    fireEvent.click(rowOf('Theme'), { metaKey: true });
-    expect(lastCall(add.onSelectionChange)).toEqual({
-      collections: ['c1', 'c2'],
-      groups: ['c1::color', 'c2::space'],
-    });
-    document.body.innerHTML = '';
-    const remove = renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
-    fireEvent.click(rowOf('Theme'), { ctrlKey: true });
-    // Both collections are merely visible here (nothing picked): no-op.
-    expect(remove.onSelectionChange).not.toHaveBeenCalled();
-  });
-
   it('Cmd-click cannot remove the last selected collection', () => {
     const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
     fireEvent.click(rowOf('Primitives'), { metaKey: true });
@@ -205,12 +236,14 @@ describe('SidebarFilter row selection', () => {
     const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
     // fireEvent returns false when the handler called preventDefault (no scroll).
     expect(fireEvent.keyDown(rowOf('Primitives'), { key: 'Enter' })).toBe(false);
-    expect(lastCall(onSelectionChange).collections).toEqual(['c2']);
-    expect(fireEvent.keyDown(rowOf('Theme'), { key: ' ', metaKey: true })).toBe(false);
     expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
-    expect(onSelectionChange).toHaveBeenCalledTimes(2);
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    // A modified collection row only flips its mark.
+    expect(fireEvent.keyDown(rowOf('Theme'), { key: ' ', metaKey: true })).toBe(false);
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
     fireEvent.keyDown(rowOf('Theme'), { key: 'a' });
-    expect(onSelectionChange).toHaveBeenCalledTimes(2);
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
   });
 
   it('chevrons expand and collapse without changing the selection', () => {

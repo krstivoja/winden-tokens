@@ -82,6 +82,10 @@ export function FilterIcon() {
   return <Icon name="filter" />;
 }
 
+export function ChevronRightIcon() {
+  return <Icon name="chevron-right" />;
+}
+
 export function EditIcon() {
   return <Icon name="edit" />;
 }

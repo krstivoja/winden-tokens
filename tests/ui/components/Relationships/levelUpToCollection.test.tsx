@@ -125,3 +125,20 @@ describe('level up — wrapper frame', () => {
     expect(onUngroup).toHaveBeenCalledWith('c1', '');
   });
 });
+
+describe('level up — one-level frames', () => {
+  it('is hidden on a card inside a frame: it is already grouped', () => {
+    renderCard(groupCard('test/test2'), { inFrame: true });
+    expect(screen.queryByLabelText('Group test/test2 with its siblings')).toBeNull();
+    // The rest of the header actions are untouched.
+    expect(screen.getByLabelText('Add variable to test/test2')).toBeTruthy();
+  });
+
+  it('is kept on a frame header, to widen the frame', () => {
+    const onLevelUp = vi.fn();
+    renderWrapper({ path: 'test/test2', title: 'test/test2', onLevelUp });
+
+    fireEvent.click(screen.getByLabelText('Group test/test2 with its siblings'));
+    expect(onLevelUp).toHaveBeenCalledWith('c1', 'test/test2');
+  });
+});

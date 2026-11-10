@@ -105,7 +105,7 @@ winden-tokens/
 │   │   │   │   └── GroupedGraph.tsx
 │   │   │   │
 │   │   │   ├── Icons.tsx            # SVG icon components
-│   │   │   ├── icons/               # Icon utilities
+│   │   │   ├── icons/               # Icon utilities (svg/ holds the 24x24 currentColor icons, e.g. filter.svg, chevron-right.svg)
 │   │   │   │   └── Icon.tsx
 │   │   │   └── ResizeHandles.tsx    # Panel resize handles
 │   │   │

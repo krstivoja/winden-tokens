@@ -146,12 +146,20 @@ export type GroupNodeData = {
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
+  /**
+   * The card sits inside a frame: it is already grouped, so it offers no
+   * level-up, and it is frozen (only the whole frame moves).
+   */
+  inFrame?: boolean;
 };
 
 // ── Wrapper Node Data Type ─────────────────────────────────────────
 
 export type WrapperNodeData = {
-  /** Bare path; empty for a collection's own frame, which has no level-up. */
+  /**
+   * Bare path; empty for a collection's own frame, which has no level-up.
+   * Frames are one level: a frame holds cards and never another frame.
+   */
   path: string;
   /** The collection this frame belongs to — the other half of its key. */
   collectionId: string;
@@ -168,13 +176,12 @@ export type WrapperNodeData = {
   card: GroupNodeData | null;
   /**
    * The absorbed card is filtered out while the container still has visible
-   * children. The rows are withheld, exactly as a hidden card NODE vanishes;
-   * the space buildWrapperLayout reserved for them stays, the same way a
-   * hidden member card's slot inside a frame does.
+   * children. The rows are withheld, exactly as a hidden card NODE vanishes,
+   * and buildWrapperLayout reserves no space for them.
    */
   cardHidden?: boolean;
   /**
-   * The container holds child cards (or nested containers) below its own
+   * The container holds child cards below its own
    * rows. The last own row then keeps its bottom border — it is no longer the
    * last thing in the box, and without the separator the rows and the
    * children read as one undifferentiated stack.

@@ -14,6 +14,7 @@ export type IconName =
   | 'collapse-all'
   | 'search'
   | 'filter'
+  | 'chevron-right'
   | 'trash'
   | 'close'
   | 'drag'
@@ -48,6 +49,7 @@ import ExpandAllSvg from './svg/expand-all.svg?raw';
 import CollapseAllSvg from './svg/collapse-all.svg?raw';
 import SearchSvg from './svg/search.svg?raw';
 import FilterSvg from './svg/filter.svg?raw';
+import ChevronRightSvg from './svg/chevron-right.svg?raw';
 import TrashSvg from './svg/trash.svg?raw';
 import CloseSvg from './svg/close.svg?raw';
 import DragSvg from './svg/drag.svg?raw';
@@ -76,6 +78,7 @@ const svgMap: Record<IconName, string> = {
   'collapse-all': CollapseAllSvg,
   search: SearchSvg,
   filter: FilterSvg,
+  'chevron-right': ChevronRightSvg,
   trash: TrashSvg,
   close: CloseSvg,
   drag: DragSvg,

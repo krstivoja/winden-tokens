@@ -342,8 +342,8 @@ type PositionRecord = Record<string, { x: number; y: number }>;
  * in GroupedGraph), and is dropped as soon as that activation ends, which
  * brings the saved layout back exactly as it was.
  *
- * `positions` uses the saved record's key shapes (top-level unit keys, plus
- * `rel:` keys from a drag), so it can be laid over that record as is.
+ * `positions` uses the saved record's key shapes (top-level unit keys
+ * only), so it can be laid over that record as is.
  */
 export interface HidingLayout {
   activation: string;

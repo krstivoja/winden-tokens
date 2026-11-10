@@ -14,6 +14,7 @@ import { Dropdown } from '../../common/Dropdown/Dropdown';
 import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { GroupNodeData } from './types';
 import { GraphHandle } from './GraphHandle';
+import { getCardTitleSegments } from './utils';
 import {
   GENERATED_CONNECTION_COLOR,
   REFERENCE_CONNECTION_COLOR,
@@ -38,27 +39,55 @@ function getGroupHeight(variableCount: number): number {
  */
 export function CardHeaderRow({
   title,
+  segments,
   headerFill,
+  draggable = true,
   className = '',
   children,
 }: {
+  /** Full title: the tooltip, and the label when no segments are given. */
   title: string;
+  /** Breadcrumb parts (`font › size › body`); one part renders as plain text. */
+  segments?: string[];
   headerFill: string;
+  /** False on a frozen card (inside a frame): no move cursor, nothing promises a drag. */
+  draggable?: boolean;
   className?: string;
   children?: React.ReactNode;
 }) {
+  const parts = segments && segments.length > 0 ? segments : [title];
+  const last = parts.length - 1;
   return (
     <div
-      className={`group-header flex items-center justify-between px-3 cursor-move select-none h-9 ${className}`}
+      className={`group-header flex items-center justify-between gap-1 px-3 ${draggable ? 'cursor-move' : ''} select-none h-9 ${className}`}
       style={{ background: headerFill }}
     >
       <span
-        className="text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap"
+        className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap text-[13px]"
         title={title}
+        data-testid="card-title"
       >
-        {title}
+        {parts.map((part, index) => (
+          <React.Fragment key={index}>
+            {index > 0 && (
+              <span className="shrink-0 px-0.5 text-text/40 leading-0" data-testid="card-title-separator">
+                <Icon name="chevron-right" size={12} />
+              </span>
+            )}
+            <span
+              className={`overflow-hidden text-ellipsis ${
+                index === last
+                  ? 'min-w-[3ch] shrink-[3] font-semibold text-text'
+                  : 'min-w-0 shrink font-normal text-text/60'
+              }`}
+              data-testid={index === last ? 'card-title-leaf' : 'card-title-ancestor'}
+            >
+              {part}
+            </span>
+          </React.Fragment>
+        ))}
       </span>
-      <div className="flex gap-1 items-center">{children}</div>
+      <div className="flex shrink-0 gap-1 items-center">{children}</div>
     </div>
   );
 }
@@ -119,7 +148,7 @@ export function CardHeaderActions({
 
   return (
     <>
-      {showLevelUp && group.canGroup && group.sourceGroupName && (
+      {showLevelUp && !data.inFrame && group.canGroup && group.sourceGroupName && (
         <IconButton
           icon={<Icon name="collapse-all" size={18} />}
           size="sm"
@@ -354,7 +383,12 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
       className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-xs w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-highlight-path ring-offset-2 ring-offset-canvas' : ''}`}
       style={{ height }}
     >
-      <CardHeaderRow title={group.title} headerFill={group.headerFill}>
+      <CardHeaderRow
+        title={group.title}
+        segments={getCardTitleSegments(group)}
+        headerFill={group.headerFill}
+        draggable={!data.inFrame}
+      >
         <CardHeaderActions data={data} />
       </CardHeaderRow>
       <CardRows data={data} />

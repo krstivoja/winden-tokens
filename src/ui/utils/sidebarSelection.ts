@@ -47,15 +47,18 @@ export function rowKeys(row: SidebarRow, universe: SidebarUniverse): RowKeys {
 }
 
 /**
- * Plain click. Root: everything. Collection: only that collection (the other
- * collections hide). Group: every collection stays selected and every other
- * collection keeps all its groups, only the clicked collection narrows to the
- * clicked group's keys, so a group click never hides another collection.
+ * Plain click. Root and collection: everything (a collection row hides
+ * nothing and clears any group narrowing; the row is only marked and jumped
+ * to, see `isRowMarked`). Group: every collection stays selected and every
+ * other collection keeps all its groups, only the clicked collection narrows
+ * to the clicked group's keys, so a group click never hides another
+ * collection.
  */
 export function selectOnly(row: SidebarRow, universe: SidebarUniverse): SidebarSelection {
   const keys = rowKeys(row, universe);
   if (row.kind !== 'group') {
-    return { collections: new Set(keys.collectionIds), groups: new Set(keys.groupKeys) };
+    const all = rowKeys({ kind: 'root' }, universe);
+    return { collections: new Set(all.collectionIds), groups: new Set(all.groupKeys) };
   }
   const groups = new Set<string>();
   universe.collectionIds.forEach(id => {
@@ -78,7 +81,8 @@ const allCollectionsSelected = (current: SidebarSelection, universe: SidebarUniv
 
 /**
  * Whether the row is one the user picked (as opposed to merely visible).
- * With every collection selected a collection is only "visible", and a group
+ * A collection in `markedCollections` (a plain or Cmd/Ctrl-click on its row,
+ * which filters nothing) is always picked. Otherwise: with every collection selected a collection is only "visible", and a group
  * is picked when it is fully selected inside a narrowed collection. With a
  * collection subset, a collection with all its groups is picked and so is
  * every group under it. Nothing is picked while everything is selected.
@@ -86,9 +90,11 @@ const allCollectionsSelected = (current: SidebarSelection, universe: SidebarUniv
 export function isRowMarked(
   current: SidebarSelection,
   row: SidebarRow,
-  universe: SidebarUniverse
+  universe: SidebarUniverse,
+  markedCollections?: ReadonlySet<string>
 ): boolean {
   if (row.kind === 'root') return isEverythingSelected(current, universe);
+  if (row.kind === 'collection' && markedCollections?.has(row.collectionId)) return true;
   if (isEverythingSelected(current, universe)) return false;
   const id = row.collectionId;
   if (!current.collections.has(id)) return false;
@@ -126,12 +132,16 @@ export function isEverythingSelected(current: SidebarSelection, universe: Sideba
  * - group of a collection that is fully visible alongside the others:
  *   the collection narrows to that group.
  * A removal that would empty the selection or fall back to everything
- * returns `current` unchanged, so the last picked row stays.
+ * returns `current` unchanged, so the last picked row stays (unless
+ * `hasOtherPick`: a marked collection is still picked, so falling back to
+ * everything is fine). A collection row never reaches here: it only toggles
+ * its mark (`toggleCollectionMark`).
  */
 export function toggleRow(
   current: SidebarSelection,
   row: SidebarRow,
-  universe: SidebarUniverse
+  universe: SidebarUniverse,
+  hasOtherPick = false
 ): SidebarSelection {
   if (row.kind === 'root') return current;
   const keys = rowKeys(row, universe);
@@ -169,5 +179,21 @@ export function toggleRow(
   const next = { collections, groups };
   if (collections.size === 0) return current;
   // Un-picking the last picked row would fall back to "everything": keep it.
-  return marked && isEverythingSelected(next, universe) ? current : next;
+  return marked && !hasOtherPick && isEverythingSelected(next, universe) ? current : next;
+}
+
+/**
+ * Cmd/Ctrl-click on a collection row: flips only its highlight mark, the
+ * selection is untouched. Removing the last pick (no other mark, nothing
+ * narrowed) returns `marks` unchanged.
+ */
+export function toggleCollectionMark(
+  marks: ReadonlySet<string>,
+  collectionId: string,
+  current: SidebarSelection,
+  universe: SidebarUniverse
+): ReadonlySet<string> {
+  const next = new Set(marks);
+  if (!next.delete(collectionId)) return next.add(collectionId) && next;
+  return next.size === 0 && isEverythingSelected(current, universe) ? marks : next;
 }

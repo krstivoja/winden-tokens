@@ -13,6 +13,7 @@ import {
   isRowMarked,
   selectOnly,
   toggleRow,
+  toggleCollectionMark,
   type SidebarRow,
   type SidebarSelection,
   type SidebarUniverse,
@@ -184,6 +185,7 @@ interface GroupNodeRowProps {
   highlightedGroupKey?: string | null;
   focusedRowKey?: string | null;
   canFocus: boolean;
+  focusNoun: string;
   isPathFocusable?: (collectionId: string, path: string) => boolean;
   forceExpanded?: boolean;
 }
@@ -202,6 +204,7 @@ function GroupNodeRow({
   highlightedGroupKey,
   focusedRowKey,
   canFocus,
+  focusNoun,
   isPathFocusable,
   forceExpanded = false,
 }: GroupNodeRowProps) {
@@ -256,7 +259,7 @@ function GroupNodeRow({
           })
         }
         muted={muted}
-        title={canFocus ? (muted ? 'Not shown in graph' : 'Click to select and find in graph') : undefined}
+        title={canFocus ? (muted ? 'Not shown in graph' : `Click to select and find in ${focusNoun}`) : undefined}
         onActivate={activation => onActivate(row, activation, node.path)}
       />
 
@@ -278,6 +281,7 @@ function GroupNodeRow({
               highlightedGroupKey={highlightedGroupKey}
               focusedRowKey={focusedRowKey}
               canFocus={canFocus}
+              focusNoun={focusNoun}
               isPathFocusable={isPathFocusable}
               forceExpanded={forceExpanded}
             />
@@ -306,6 +310,8 @@ interface SidebarFilterProps {
    *  A plain row click selects, then calls this. Absent in views with no
    *  canvas, where a click only selects. */
   onFocusPath?: (collectionId: string, path: string) => void;
+  /** What a click finds the row in, for the tooltip ('graph' or 'table'). */
+  focusNoun?: string;
   /** False when nothing under the row is visible on the canvas: the label is
    *  then muted (a click still selects it, which may bring it back). Absent =
    *  every row is focusable. */
@@ -329,6 +335,7 @@ export function SidebarFilter({
   onSelectionChange,
   highlightedGroupKey,
   onFocusPath,
+  focusNoun = 'graph',
   isPathFocusable,
   focusedRowKey,
   onSelectAllCollections,
@@ -491,6 +498,9 @@ export function SidebarFilter({
     () => ({ collections: selectedCollections, groups: selectedGroups }),
     [selectedCollections, selectedGroups]
   );
+  // Collections the user picked without filtering anything (plain or
+  // Cmd/Ctrl-click on the row): ringed, nothing hidden.
+  const [markedCollections, setMarkedCollections] = useState<ReadonlySet<string>>(new Set());
   const everythingSelected = collections.length > 0 && isEverythingSelected(selection, universe);
 
   // Plain click: select only the row, then find it in the graph. Cmd/Ctrl:
@@ -502,15 +512,30 @@ export function SidebarFilter({
     focus: { collectionId: string; path: string } | null
   ) => {
     if (row.kind === 'root') {
+      setMarkedCollections(new Set());
       onSelectionChange(selectOnly(row, universe));
       onSelectAllCollections?.();
       return;
     }
+    if (row.kind === 'collection') {
+      // A collection row never filters. Cmd/Ctrl flips its mark; a plain
+      // click clears every filter and mark, marks this one and jumps to it.
+      if (additive) {
+        setMarkedCollections(toggleCollectionMark(markedCollections, row.collectionId, selection, universe));
+        return;
+      }
+      setMarkedCollections(new Set([row.collectionId]));
+      onSelectionChange(selectOnly(row, universe));
+      onSelectAllCollections?.();
+      if (focus) onFocusPath?.(focus.collectionId, focus.path);
+      return;
+    }
     if (additive) {
-      const next = toggleRow(selection, row, universe);
+      const next = toggleRow(selection, row, universe, markedCollections.size > 0);
       if (next !== selection) onSelectionChange(next);
       return;
     }
+    setMarkedCollections(new Set());
     onSelectionChange(selectOnly(row, universe));
     if (focus) onFocusPath?.(focus.collectionId, focus.path);
   };
@@ -674,7 +699,7 @@ export function SidebarFilter({
 
             const isExpanded = isSearching ? true : expandedCollections.has(collection.id);
             const collectionRow: SidebarRow = { kind: 'collection', collectionId: collection.id };
-            const collectionSelected = isRowMarked(selection, collectionRow, universe);
+            const collectionSelected = isRowMarked(selection, collectionRow, universe, markedCollections);
             const collectionMuted = !!onFocusPath && !!isPathFocusable && !isPathFocusable(collection.id, '');
 
             return (
@@ -704,7 +729,7 @@ export function SidebarFilter({
                     onFocusPath
                       ? collectionMuted
                         ? 'Not shown in graph'
-                        : 'Click to select and find in graph'
+                        : `Click to select and find in ${focusNoun}`
                       : undefined
                   }
                   onActivate={activation =>
@@ -733,6 +758,7 @@ export function SidebarFilter({
                         highlightedGroupKey={highlightedGroupKey}
                         focusedRowKey={focusedRowKey}
                         canFocus={!!onFocusPath}
+                        focusNoun={focusNoun}
                         isPathFocusable={isPathFocusable}
                         forceExpanded={isSearching}
                       />

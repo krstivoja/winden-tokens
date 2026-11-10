@@ -583,18 +583,18 @@ function parseWrapperKey(key: string): { collectionId: string; path: string } | 
   return { collectionId: key.slice(0, index), path: key.slice(index + 2) };
 }
 
-// Shallowest (outermost) grouped ancestor of `(collectionId, path)` — the
-// top-level wrapper that ultimately contains it, even when wrappers are
-// nested inside one another. Mirrors wrapperLayout.ts's path-prefix walk but
-// stops at the FIRST match (ascending depth) instead of the deepest one,
-// since Arrange treats a whole nested wrapper frame as a single movable unit.
+// The frame of `(collectionId, path)`: the shallowest (outermost) grouped
+// ancestor, as a wrapper key. Frames are ONE level (see addFrame /
+// flattenGroupedPaths), so this is simply "the" frame a card is in; the walk
+// still stops at the first match so a stray nested key can never create a
+// second level. Mirrors wrapperLayout.ts, and Arrange treats the whole frame
+// as a single movable unit.
 //
 // Depth 0 is the collection's own frame, which contains every card of that
 // collection — including the collection ROOT card, whose path is empty and
 // which belongs to no other frame. `path` itself also counts as a match: the
 // card for path `p` lives INSIDE the frame named `p`, it is not a sibling of
-// it. Only the wrapper→parent walk in wrapperLayout.ts stays strict, so a
-// frame can never parent itself.
+// it.
 //
 // Returns the wrapper KEY (`<collectionId>::<path>`), not a bare path.
 function outermostGroupedAncestor(
@@ -629,7 +629,11 @@ function isAbsorbedCard(group: GroupData, groupedPaths: Set<string>): boolean {
   // Only the cards buildWrapperLayout lays out can ever be absorbed; managed
   // source/shader/shades cards are never nested.
   if (group.kind !== 'standard' && group.kind !== 'collection') return false;
-  return groupedPaths.has(getWrapperKey(group.collectionId, group.sourceGroupName || ''));
+  const ownKey = getWrapperKey(group.collectionId, group.sourceGroupName || '');
+  // Only the OUTERMOST key is a frame; an inner key a stray nested record
+  // still holds draws nothing (see outermostGroupedAncestor).
+  return groupedPaths.has(ownKey)
+    && outermostGroupedAncestor(group.collectionId, group.sourceGroupName || '', groupedPaths) === ownKey;
 }
 
 /**
@@ -644,6 +648,83 @@ function getCardNodeId(group: GroupData, groupedPaths: Set<string>): string {
   return isAbsorbedCard(group, groupedPaths)
     ? `${WRAPPER_NODE_PREFIX}${getWrapperKey(group.collectionId, group.sourceGroupName || '')}`
     : group.key;
+}
+
+// ── One-level frames ───────────────────────────────────────────────
+
+/** Whether wrapper key `outer` is `inner` itself or an ancestor path of it, in one collection. */
+function isAncestorOrEqualKey(outer: string, inner: string): boolean {
+  const o = parseWrapperKey(outer);
+  const i = parseWrapperKey(inner);
+  if (!o || !i || o.collectionId !== i.collectionId) return false;
+  return o.path === '' || o.path === i.path || i.path.startsWith(`${o.path}/`);
+}
+
+/**
+ * Add a frame key, keeping frames one level: an add under an existing
+ * ancestor-or-equal key is ignored (the card is in that frame already), and
+ * every same-collection key that is a strict descendant of the new one is
+ * swallowed (its cards are inside the new frame). Returns the SAME set when
+ * nothing changes.
+ */
+function addFrame(groupedPaths: Set<string>, key: string): Set<string> {
+  for (const existing of groupedPaths) {
+    if (isAncestorOrEqualKey(existing, key)) return groupedPaths;
+  }
+  const next = new Set<string>();
+  groupedPaths.forEach(existing => {
+    if (!isAncestorOrEqualKey(key, existing)) next.add(existing);
+  });
+  next.add(key);
+  return next;
+}
+
+/**
+ * Keep only the outermost key of every nested chain, per collection. Used on
+ * hydration so a record saved while frames could nest becomes one-level.
+ * Order-independent, idempotent; keys without `::` pass through untouched.
+ */
+function flattenGroupedPaths(keys: string[]): string[] {
+  const set = new Set(keys);
+  return keys.filter((key, index) => {
+    if (keys.indexOf(key) !== index) return false;
+    if (!parseWrapperKey(key)) return true;
+    for (const other of set) {
+      if (other !== key && isAncestorOrEqualKey(other, key)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Drop every `rel:` entry from a saved positions record. Cards inside a
+ * frame are frozen and auto-stacked, so a manual nested position means
+ * nothing. Returns the SAME object when there is nothing to drop.
+ */
+function stripRelPositions<T>(positions: Record<string, T>): Record<string, T> {
+  if (!Object.keys(positions).some(key => key.startsWith('rel:'))) return positions;
+  const out: Record<string, T> = {};
+  Object.entries(positions).forEach(([key, value]) => {
+    if (!key.startsWith('rel:')) out[key] = value;
+  });
+  return out;
+}
+
+/**
+ * The breadcrumb segments of a card's title: `font/size/body` becomes
+ * `['font', 'size', 'body']`. A collection root card, and managed or external
+ * cards (whose titles are not paths), are one segment.
+ */
+function getCardTitleSegments(group: Pick<GroupData, 'kind' | 'title' | 'sourceGroupName'>): string[] {
+  if (group.kind !== 'standard' || !group.sourceGroupName) return [group.title];
+  const segments = group.sourceGroupName.split('/').filter(Boolean);
+  return segments.length > 0 ? segments : [group.title];
+}
+
+/** Breadcrumb segments of a frame title (its path, or the collection name). */
+function getPathTitleSegments(title: string): string[] {
+  const segments = title.split('/').filter(Boolean);
+  return segments.length > 0 ? segments : [title];
 }
 
 // ── 3a migration: bare wrapper paths → collection-scoped keys ──────
@@ -829,11 +910,9 @@ export interface ArrangeUnits {
  *   gap this split exists to remove.
  * - A wrapper unit is hidden only when EVERY member is hidden. One visible
  *   member means the frame is on screen and still needs a slot.
- * - A wrapper's height counts ALL its members, hidden ones included:
- *   buildWrapperLayout stacks members without consulting visibility, so a
- *   hidden member's space inside the frame stays reserved and the frame drawn
- *   on the canvas is that tall. Measuring only the visible members would
- *   under-size the unit and overlap whatever is placed after it.
+ * - A wrapper's height counts only its VISIBLE members, matching
+ *   buildWrapperLayout, which sizes the frame from the cards on screen so it
+ *   hugs them (a hidden member reserves no room).
  *
  * `alsoHidden` is OR'd on top of the filters for what they cannot express —
  * hide-unused's own hiding — so the caller passes the exact predicate the
@@ -897,6 +976,9 @@ function buildArrangeUnits(
         y: frame?.position.y ?? group.y,
       });
     }
+    // A hidden member takes no room: buildWrapperLayout sizes the frame from
+    // its visible members only.
+    if (hidden) return;
     if (isAbsorbedCard(group, groupedPaths)) {
       wrapperOwnRowsHeight.set(
         unitKey,
@@ -1168,6 +1250,11 @@ export {
   buildWrapperPathOwners,
   migrateGroupedPaths,
   migrateGraphPositions,
+  addFrame,
+  flattenGroupedPaths,
+  stripRelPositions,
+  getCardTitleSegments,
+  getPathTitleSegments,
   getCollectionCardKey,
   getGroupCardKey,
   getDefaultVariableValue,

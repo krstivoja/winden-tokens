@@ -237,10 +237,10 @@ describe('buildArrangeUnits', () => {
 
     expect(units.map(u => u.key)).toEqual(['wrapper:color::color']);
     expect(hiddenUnits).toEqual([]);
-    // buildWrapperLayout stacks hidden members too, so the frame on screen is
-    // as tall as ALL of its members — the override must say so.
+    // buildWrapperLayout sizes the frame from its VISIBLE members only, so the
+    // hidden one reserves no room — the override must say so.
     expect(heightOverrides.get('wrapper:color::color')).toBe(
-      getGroupHeight(visible) + WRAPPER_GAP + getGroupHeight(hidden)
+      getGroupHeight(visible)
       + CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
   });
@@ -347,7 +347,7 @@ describe('Arrange Grid over filtered cards', () => {
 
     expect(Array.from(positions.keys()).sort()).toEqual(['group:other', 'wrapper:color::w']);
     // The wrapper is first in the column (title 'other' vs 'w'), and the card
-    // after it clears the frame's FULL height, hidden member included.
+    // after it clears the frame's height, which counts the visible member only.
     const wrapperHeight = heightOverrides.get('wrapper:color::w')!;
     expect(positions.get('group:other')).toEqual({ x: 0, y: 0 });
     expect(positions.get('wrapper:color::w')).toEqual({
@@ -355,7 +355,7 @@ describe('Arrange Grid over filtered cards', () => {
       y: getGroupHeight(other) + GROUP_GAP_Y,
     });
     expect(wrapperHeight).toBe(
-      getGroupHeight(visible) + WRAPPER_GAP + getGroupHeight(hidden)
+      getGroupHeight(visible)
       + CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2
     );
   });

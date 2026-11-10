@@ -144,6 +144,7 @@ export const TableRow = memo(function TableRow({
   return (
     <tr
       data-id={variable.id}
+      data-collection-id={variable.collectionId}
       className={`group ${groupedClass} ${hiddenClass}`.trim()}
       data-parent-group={groupName || undefined}
     >

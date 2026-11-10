@@ -6,6 +6,7 @@ import {
   rowKeys,
   selectOnly,
   toggleRow,
+  toggleCollectionMark,
   type SidebarRow,
   type SidebarUniverse,
 } from '../../../src/ui/utils/sidebarSelection';
@@ -42,11 +43,9 @@ describe('selectOnly', () => {
   it('root selects everything', () => {
     expect(selectOnly(root, universe)).toEqual(everything);
   });
-  it('a collection selects it and all its groups only', () => {
-    expect(selectOnly(c1, universe)).toEqual({
-      collections: new Set(['c1']),
-      groups: new Set(['c1::color', 'c1::color/dark']),
-    });
+  it('a collection hides nothing: it clears every narrowing and selects everything', () => {
+    expect(selectOnly(c1, universe)).toEqual(everything);
+    expect(selectOnly(c3, universe)).toEqual(everything);
   });
   it('a group keeps every collection selected and narrows only its own collection', () => {
     expect(selectOnly(colorDark, universe)).toEqual({
@@ -57,9 +56,6 @@ describe('selectOnly', () => {
     expect(selectOnly(colorFolder, universe).groups).toEqual(
       new Set(['c1::color', 'c1::color/dark', 'c2::space'])
     );
-  });
-  it('a collection without groups selects just the collection', () => {
-    expect(selectOnly(c3, universe)).toEqual({ collections: new Set(['c3']), groups: new Set() });
   });
 });
 
@@ -90,11 +86,11 @@ describe('isRowMarked', () => {
     expect(isRowMarked(groupClick, { kind: 'collection', collectionId: 'c2' }, universe)).toBe(false);
     expect(isRowMarked(groupClick, { kind: 'group', collectionId: 'c2', groupKeys: ['c2::space'] }, universe)).toBe(false);
   });
-  it('after a collection click the collection and its groups are marked', () => {
-    const sel = selectOnly(c1, universe);
-    expect(isRowMarked(sel, c1, universe)).toBe(true);
-    expect(isRowMarked(sel, colorDark, universe)).toBe(true);
-    expect(isRowMarked(sel, { kind: 'collection', collectionId: 'c2' }, universe)).toBe(false);
+  it('a collection is marked by its mark alone, even while everything is selected', () => {
+    const marks = new Set(['c1']);
+    expect(isRowMarked(everything, c1, universe, marks)).toBe(true);
+    expect(isRowMarked(everything, { kind: 'collection', collectionId: 'c2' }, universe, marks)).toBe(false);
+    expect(isRowMarked(everything, colorDark, universe, marks)).toBe(false);
   });
 });
 
@@ -113,15 +109,24 @@ describe('toggleRow', () => {
     expect(narrowed.groups).toEqual(new Set(['c1::color/dark', 'c2::space']));
   });
   it('adds a collection to a collection subset with all its groups', () => {
-    const next = toggleRow(selectOnly(c1, universe), { kind: 'collection', collectionId: 'c2' }, universe);
+    const sub = { collections: new Set(['c1']), groups: new Set(['c1::color', 'c1::color/dark']) };
+    const next = toggleRow(sub, { kind: 'collection', collectionId: 'c2' }, universe);
     expect(next.collections).toEqual(new Set(['c1', 'c2']));
     expect(next.groups).toEqual(new Set(['c1::color', 'c1::color/dark', 'c2::space']));
   });
-  it('removes a picked collection with its groups', () => {
-    const two = toggleRow(selectOnly(c1, universe), { kind: 'collection', collectionId: 'c2' }, universe);
+  it('removes a picked collection of a subset with its groups', () => {
+    const two = {
+      collections: new Set(['c1', 'c2']),
+      groups: new Set(['c1::color', 'c1::color/dark', 'c2::space']),
+    };
     const next = toggleRow(two, c1, universe);
     expect(next.collections).toEqual(new Set(['c2']));
     expect(next.groups).toEqual(new Set(['c2::space']));
+  });
+  it('a group removal that falls back to everything is allowed when a collection is marked', () => {
+    const narrowed = toggleRow(everything, colorDark, universe);
+    expect(toggleRow(narrowed, colorDark, universe)).toBe(narrowed);
+    expect(toggleRow(narrowed, colorDark, universe, true).groups).toEqual(everything.groups);
   });
   it('removing a picked group removes the collection in a subset', () => {
     const sel = { collections: new Set(['c1', 'c2']), groups: new Set(['c1::color/dark', 'c2::space']) };
@@ -130,12 +135,27 @@ describe('toggleRow', () => {
   });
   it('never removes the last picked row', () => {
     expect(toggleRow(groupClick, colorDark, universe)).toBe(groupClick);
-    const only = selectOnly(c1, universe);
+    const only = { collections: new Set(['c1']), groups: new Set(['c1::color', 'c1::color/dark']) };
     expect(toggleRow(only, c1, universe)).toBe(only);
-    const single = selectOnly({ kind: 'collection', collectionId: 'c2' }, universe);
-    expect(toggleRow(single, { kind: 'collection', collectionId: 'c2' }, universe)).toBe(single);
   });
   it('a collection that is merely visible next to the others is a no-op', () => {
     expect(toggleRow(everything, c3, universe)).toBe(everything);
+  });
+});
+
+describe('toggleCollectionMark', () => {
+  it('flips only the mark and never touches the selection', () => {
+    const one = toggleCollectionMark(new Set(), 'c1', everything, universe);
+    expect(one).toEqual(new Set(['c1']));
+    expect(toggleCollectionMark(one, 'c2', everything, universe)).toEqual(new Set(['c1', 'c2']));
+    expect(toggleCollectionMark(new Set(['c1', 'c2']), 'c1', everything, universe)).toEqual(new Set(['c2']));
+  });
+  it('keeps the last pick: removing the only mark of an unfiltered selection is a no-op', () => {
+    const marks = new Set(['c1']);
+    expect(toggleCollectionMark(marks, 'c1', everything, universe)).toBe(marks);
+  });
+  it('can remove the last mark while a group narrowing is still picked', () => {
+    const narrowed = selectOnly(colorDark, universe);
+    expect(toggleCollectionMark(new Set(['c2']), 'c2', narrowed, universe)).toEqual(new Set());
   });
 });

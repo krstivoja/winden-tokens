@@ -258,7 +258,13 @@ describe('Arrange sizes a unit whose card was absorbed', () => {
     // path neither of them owns are still stacked with a gap between them.
     const a = card('test/one');
     const b = card('test/two');
-    const { heightOverrides } = buildArrangeUnits([a, b], new Set(['c1::test']), filters, new Map());
+    const v = (path: string) => [`v:${path}`, { id: `v:${path}`, collectionId: 'c1', name: `${path}/leaf`, resolvedType: 'COLOR', value: '#fff', valuesByMode: {} }] as const;
+    const both = {
+      ...filters,
+      selectedGroups: new Set(['c1::test/one', 'c1::test/two']),
+      variablesById: new Map([v('test/one'), v('test/two')]),
+    } as typeof filters;
+    const { heightOverrides } = buildArrangeUnits([a, b], new Set(['c1::test']), both, new Map());
     expect(heightOverrides.get('wrapper:c1::test')).toBe(
       getGroupHeight(a) + WRAPPER_GAP + getGroupHeight(b)
       + CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2

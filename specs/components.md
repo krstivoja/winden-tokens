@@ -479,13 +479,13 @@ Dependency graph in `src/ui/components/Relationships/`
 
 **Collections tree (click-to-select, no checkboxes):**
 - Rows ("All variables", collections, folders, groups) are `role="treeitem"` inside a `role="tree"`, with `aria-selected`, `tabIndex=0`, Enter/Space to activate
-- Plain click on a collection shows only that collection (the others hide); plain click on a group or folder shows only that group (and subgroups) inside its own collection while every other collection stays fully visible and unfiltered; "All variables" selects everything (and fires `onSelectAllCollections`)
-- Cmd/Ctrl-click (or Enter/Space with it) toggles the row: a picked row leaves, an unpicked one joins (a group joins within its collection and keeps the other collections visible; a fully visible group narrows its collection to it); the last picked row can never be removed
+- Plain click on a collection hides nothing (no filter, every collection stays fully visible): it clears any group narrowing and every other mark (`selectOnly` = everything, `onSelectAllCollections` fires so Hide unused ends), rings the row (local `markedCollections` state, `isRowMarked(..., markedCollections)`) and jumps to it via `onFocusPath(id, '')` (graph: fit the collection; table: `TableView` scrolls the collection's first visible row into view via `data-collection-id`, using `scrollIntoView`; group rows do not scroll in the table). Filtering starts at group level: plain click on a group or folder shows only that group (and subgroups) inside its own collection while every other collection stays fully visible and unfiltered; "All variables" selects everything (and fires `onSelectAllCollections`)
+- Cmd/Ctrl-click (or Enter/Space with it) on a collection row only flips its mark (`toggleCollectionMark`, no filter, no camera move; the last mark stays while nothing is narrowed). On a group row it toggles the row: a picked row leaves, an unpicked one joins (a group joins within its collection and keeps the other collections visible; a fully visible group narrows its collection to it); the last picked row can never be removed
 - Chevrons are separate buttons and never change the selection
 - Only rows the user picked are marked (`isRowMarked`), never rows that are merely visible: the clicked row gets `bg-primary/10 ring-1 ring-primary` (also the canvas-focus ring), its descendants only the `bg-primary/10` fill; while everything is selected only "All variables" is marked
 - In the graph a plain click also finds the row on the canvas via `onFocusPath`; Cmd/Ctrl-click does not move the camera
 
-**Props:** `selectedCollections`, `selectedGroups`, `onSelectionChange({ collections, groups })` (one atomic write per click), optional `onFocusPath`, `isPathFocusable`, `focusedRowKey`, `highlightedGroupKey`, `onSelectAllCollections`
+**Props:** `selectedCollections`, `selectedGroups`, `onSelectionChange({ collections, groups })` (one atomic write per click), optional `onFocusPath`, `focusNoun` (tooltip, 'graph' default / 'table'), `isPathFocusable`, `focusedRowKey`, `highlightedGroupKey`, `onSelectAllCollections`
 
 **Table filtering:** ungrouped (collection root) variables show only while every group of their collection is selected, so picking a group shows just that group (`isVariableVisibleForGroupFilters` with `getGroupKeysByCollection`)
 
@@ -857,6 +857,9 @@ Colors, primary, COLOR, #FF0000
 - Rows are pure-helper driven: `GroupedGraph/propertyLayers.ts` (flatten, visibility, card height); handle ids `prop:<layerIndex>:<entryIndex>::in|out`
 - Arrange Grid separates dependency tiers by `gapX * TIER_GAP_MULTIPLIER`, and a tier's own wrapped sub-columns by plain `gapX`, so a wrapped tier no longer reads as several tiers
 - Tier captions (`GroupedGraph/TierLabelNode.tsx`) sit above each tier, spanning its sub-columns; inert nodes (`tier-label:` ids) that never enter `savedPositions`, arrange or `isCardHidden`
+- `CardHeaderRow` (`GroupedGraph/GraphNode.tsx`) renders the title as a breadcrumb (`font > size > body`): props `title` (full slash path, the tooltip), `segments` (one segment is plain text), `draggable` (false drops the `cursor-move` on a frozen card). Ancestors are dimmed, the leaf is bold and shrinks last, separators use `ChevronRightIcon`, header actions are `shrink-0`
+- `GraphWrapperNode` (frame): ONE level, holds cards and never another frame; a multi-segment path shows the same breadcrumb, a single segment or the collection name is plain. It keeps the level-up button (widens the frame)
+- `GroupNodeData.inFrame`: the card sits in a frame, so it offers no level-up and its header has no move cursor
 
 ---
 
@@ -869,7 +872,7 @@ Colors, primary, COLOR, #FF0000
 
 **Icons:**
 - ChevronDownIcon
-- ChevronRightIcon
+- ChevronRightIcon (custom `chevron-right` icon, `icons/svg/chevron-right.svg`; breadcrumb separator)
 - PlusIcon
 - TrashIcon
 - DuplicateIcon

@@ -104,6 +104,9 @@ import {
   buildWrapperPathOwners,
   migrateGroupedPaths,
   migrateGraphPositions,
+  addFrame,
+  flattenGroupedPaths,
+  stripRelPositions,
   isAbsorbedCard,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
@@ -514,7 +517,8 @@ function GroupedGraphInner() {
 
     if (pending.groupedPaths !== null) {
       const raw = pending.groupedPaths;
-      const migrated = migrateGroupedPaths(raw, owners);
+      // One-level frames: nested keys collapse to the outermost.
+      const migrated = flattenGroupedPaths(migrateGroupedPaths(raw, owners));
       pending.groupedPaths = null;
       setGroupedPaths(new Set(migrated));
       // Write the migrated shape back only when it actually changed, so the
@@ -527,7 +531,9 @@ function GroupedGraphInner() {
 
     if (pending.positions !== null) {
       const raw = pending.positions;
-      const migrated = migrateGraphPositions(raw, owners, cardOwners);
+      // `rel:` entries (manual positions of cards inside frames) are retired:
+      // those cards are frozen and auto-stacked.
+      const migrated = stripRelPositions(migrateGraphPositions(raw, owners, cardOwners));
       pending.positions = null;
       setSavedPositions(migrated);
       setSavedPositionsRevision(rev => rev + 1);
@@ -564,7 +570,7 @@ function GroupedGraphInner() {
     });
   }, []);
 
-  // "Level up": wrap a card/wrapper together with its siblings into a frame
+  // "Level up": wrap a card/frame together with its siblings into a frame
   // for their shared parent.
   //
   // A top-level path yields the EMPTY parent, which is the collection's own
@@ -572,17 +578,18 @@ function GroupedGraphInner() {
   // with nowhere to rise to. The empty path itself has no parent (a
   // collection frame is the root), which is also why neither the collection
   // frame nor the collection root card offers the button.
+  //
+  // Frames are one level: when the new frame is the parent of a frame level-up
+  // was fired from, it REPLACES that frame, and it swallows every other
+  // deeper frame under it (addFrame). Nothing is lost — their cards are
+  // inside the new frame already.
   const handleLevelUp = useCallback((collectionId: string, path: string) => {
     if (!collectionId || !path) return;
     const parent = path.split('/').slice(0, -1).join('/');
-    persistGroupedPaths(prev => {
-      const next = new Set(prev);
-      next.add(getWrapperKey(collectionId, parent));
-      return next;
-    });
+    persistGroupedPaths(prev => addFrame(prev, getWrapperKey(collectionId, parent)));
   }, [persistGroupedPaths]);
 
-  // Remove a wrapper frame (its cards/sub-wrappers pop back out).
+  // Remove a wrapper frame (its cards pop back out).
   const handleUngroup = useCallback((collectionId: string, path: string) => {
     if (!collectionId) return;
     persistGroupedPaths(prev => {
@@ -1627,8 +1634,11 @@ function GroupedGraphInner() {
       // even when the active filters would otherwise hide them (folded into
       // the shared predicate via cardVisibilityFilters).
       hidden: cardHidden(group),
-      ...(parentId ? { parentId, extent: 'parent' as const } : {}),
-      data: buildCardData(group),
+      // A card inside a frame is frozen: only the whole frame moves, so it
+      // keeps its parentId (its position is frame-relative) but is not
+      // draggable, and has no extent to be kept within.
+      ...(parentId ? { parentId, draggable: false } : {}),
+      data: parentId ? { ...buildCardData(group), inFrame: true } : buildCardData(group),
       dragHandle: '.group-header',
     });
 
@@ -1674,9 +1684,10 @@ function GroupedGraphInner() {
     });
 
     // Standard cards, nested inside wrapper frames for expanded groups.
-    const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions);
     const cardHiddenByKey = new Map<string, boolean>();
     standardCards.forEach(g => cardHiddenByKey.set(g.key, cardHidden(g)));
+    const hiddenCardKeys = new Set(standardCards.filter(g => cardHiddenByKey.get(g.key)).map(g => g.key));
+    const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions, hiddenCardKeys);
 
     // Card key → the node that draws it. A card a container absorbed is no
     // longer a node of its own, and every edge endpoint names a CARD key, so
@@ -1687,7 +1698,7 @@ function GroupedGraphInner() {
     const containerChildCount = new Map<string, number>();
     placements.forEach(p => {
       if (p.kind === 'wrapper' && p.group) cardNodeId.set(p.group.key, p.id);
-      if (p.parentId) {
+      if (p.parentId && !(p.kind === 'card' && hiddenCardKeys.has(p.group.key))) {
         containerChildCount.set(p.parentId, (containerChildCount.get(p.parentId) || 0) + 1);
       }
     });
@@ -1728,7 +1739,6 @@ function GroupedGraphInner() {
           id: p.id,
           type: 'groupWrapper',
           position: p.position,
-          ...(p.parentId ? { parentId: p.parentId, extent: 'parent' as const } : {}),
           hidden: !hasVisibleChild,
           selectable: false,
           style: { width: p.width, height: p.height },
@@ -2029,16 +2039,11 @@ function GroupedGraphInner() {
           // persisted record: on the next hydration they would come back as
           // phantom cards.
           if (isTierLabelNodeId(n.id)) return;
-          // Top-level nodes save their absolute position as-is. Nested
-          // cards/wrappers are normally auto-stacked inside their parent each
-          // render, but a manual drag is remembered under a `rel:` key (same
-          // record, namespaced) so buildWrapperLayout can honor it instead —
-          // applies uniformly at every nesting depth.
-          if (n.parentId) {
-            positionsObj[`rel:${n.id}`] = { x: n.position.x, y: n.position.y };
-          } else {
-            positionsObj[n.id] = { x: n.position.x, y: n.position.y };
-          }
+          // Top-level nodes save their absolute position as-is. A card inside
+          // a frame is frozen and auto-stacked each render, so it is never
+          // saved: only the frame it belongs to has a position.
+          if (n.parentId) return;
+          positionsObj[n.id] = { x: n.position.x, y: n.position.y };
         });
         if (temporary) {
           setHidingLayout(prev => (prev ? { ...prev, positions: positionsObj } : prev));
@@ -2246,8 +2251,7 @@ function GroupedGraphInner() {
     const positionsObj: Record<string, { x: number; y: number }> = {};
     newPositions.forEach((pos, key) => { positionsObj[key] = pos; });
     setSavedPositions(positionsObj);
-    // Arrange also drops the `rel:` overrides of manually moved nested cards,
-    // so the graph must be re-laid out from the new record.
+    // The graph must be re-laid out from the new record.
     setSavedPositionsRevision(rev => rev + 1);
     post({ type: 'set-client-storage', key: `graph-positions`, value: positionsObj });
 

@@ -74,7 +74,13 @@ const isEmitted = (placements: Placement[], id: string): boolean =>
 
 // Every acyclicity assertion in this file runs through here: no placement is
 // its own parent, and every parent chain terminates at a root rather than
-// looping. `<cid>::a/b` → `<cid>::a` → `<cid>::` → nothing.
+// looping. With one-level frames a chain is at most card → frame.
+const expectNoFrameInFrame = (placements: Placement[]) => {
+  placements.forEach(p => {
+    if (p.kind === 'wrapper') expect(p.parentId).toBeNull();
+  });
+};
+
 const expectAcyclic = (placements: Placement[]) => {
   placements.forEach(p => expect(p.parentId).not.toBe(p.id));
   const byId = new Map(placements.map(p => [p.id, p]));
@@ -119,41 +125,78 @@ describe('wrapper membership — a frame contains the card at its own path', () 
     expect(placements).toHaveLength(1);
   });
 
-  it('never makes a frame its own parent, at any nesting depth', () => {
+  it('keeps frames one level: a nested key draws nothing, the outermost is the frame', () => {
+    // Frames never nest. When a stray record still holds a nested pair, the
+    // outermost key is the frame, every card below it is a plain child, and
+    // the inner key is not a frame at all.
     const placements = buildWrapperLayout(
       [card('a'), card('a/b'), card('a/b/c')],
       new Set(['c1::a', 'c1::a/b']),
       {}
     );
 
-    // Wrappers nest strictly: a/b under a, a at the top.
-    expect(parentOf(placements, 'wrapper:c1::a/b')).toBe('wrapper:c1::a');
+    expect(isEmitted(placements, 'wrapper:c1::a/b')).toBe(false);
     expect(parentOf(placements, 'wrapper:c1::a')).toBeNull();
-    // A card whose own path is framed IS that frame…
     expect(absorbedBy(placements, 'group:a')).toBe('wrapper:c1::a');
-    expect(absorbedBy(placements, 'group:a/b')).toBe('wrapper:c1::a/b');
-    // …and one whose path is not framed stays a leaf card inside the deepest
-    // frame that contains it.
-    expect(absorbedBy(placements, 'group:a/b/c')).toBeNull();
-    expect(parentOf(placements, 'group:a/b/c')).toBe('wrapper:c1::a/b');
-    expectAcyclic(placements);
+    expect(absorbedBy(placements, 'group:a/b')).toBeNull();
+    expect(parentOf(placements, 'group:a/b')).toBe('wrapper:c1::a');
+    expect(parentOf(placements, 'group:a/b/c')).toBe('wrapper:c1::a');
+    expectNoFrameInFrame(placements);
   });
 
-  it('emits every nested node after its parent frame', () => {
-    // React Flow stacks in array order and requires a child to follow its
-    // parentId node.
+  it('never places a frame inside a frame, and emits every card after its frame', () => {
     const placements = buildWrapperLayout(
-      [card('a'), card('a/b'), card('a/b/c')],
-      new Set(['c1::a', 'c1::a/b']),
+      [collectionCard(), card('a'), card('a/b'), card('x'), card('x/y')],
+      new Set(['c1::', 'c1::a', 'c1::x']),
       {}
     );
 
+    expectNoFrameInFrame(placements);
     placements.forEach((p, index) => {
       if (!p.parentId) return;
       const parentIndex = placements.findIndex(q => q.id === p.parentId);
       expect(parentIndex).toBeGreaterThanOrEqual(0);
       expect(parentIndex).toBeLessThan(index);
     });
+  });
+
+  it('ignores saved `rel:` positions: cards in a frame are always auto-stacked', () => {
+    const grouped = new Set(['c1::a']);
+    const plain = buildWrapperLayout([card('a'), card('a/b'), card('a/c')], grouped, {});
+    const withRel = buildWrapperLayout([card('a'), card('a/b'), card('a/c')], grouped, {
+      'rel:group:a/b': { x: 500, y: 500 },
+    });
+
+    expect(withRel).toEqual(plain);
+  });
+
+  it('sizes the frame and stacks cards from the VISIBLE members only', () => {
+    const grouped = new Set(['c1::a']);
+    const cards = [card('a/b'), card('a/c'), card('a/d')];
+    const full = buildWrapperLayout(cards, grouped, {});
+    const frame = (ps: Placement[]) => ps.find(p => p.id === 'wrapper:c1::a') as Extract<Placement, { kind: 'wrapper' }>;
+    const rel = (ps: Placement[], key: string) => ps.find(p => p.id === key)!.position;
+
+    // Hide the first two members: the survivor sits where the FIRST card sat
+    // and the frame is as tall as a frame holding only that card.
+    const filtered = buildWrapperLayout(cards, grouped, {}, new Set(['group:a/b', 'group:a/c']));
+    const alone = buildWrapperLayout([card('a/d')], grouped, {});
+    expect(rel(filtered, 'group:a/d')).toEqual(rel(full, 'group:a/b'));
+    expect(frame(filtered).height).toBe(frame(alone).height);
+    expect(frame(filtered).height).toBeLessThan(frame(full).height);
+
+    // Lifting the filter grows the frame back.
+    expect(buildWrapperLayout(cards, grouped, {}, new Set())).toEqual(full);
+  });
+
+  it('uses the natural position for a frame with no saved position', () => {
+    const placements = buildWrapperLayout(
+      [card('a', { initialX: 40, initialY: 60 }), card('a/b', { initialX: 10, initialY: 20 })],
+      new Set(['c1::a']),
+      {}
+    );
+
+    expect(placements.find(p => p.id === 'wrapper:c1::a')?.position).toEqual({ x: 10, y: 20 });
   });
 
   it('leaves a collection root card at the top level while its collection is not framed', () => {
@@ -188,23 +231,21 @@ describe('collection frames', () => {
     expectAcyclic(placements);
   });
 
-  it('nests a path frame inside its collection frame, deepest wins for cards', () => {
+  it('lets the collection frame swallow a path frame: one level only', () => {
     const placements = buildWrapperLayout(
       [collectionCard(), card('test'), card('test/test2'), card('other')],
       new Set(['c1::', 'c1::test']),
       {}
     );
 
-    expect(parentOf(placements, 'wrapper:c1::test')).toBe('wrapper:c1::');
+    // The collection frame is the only frame; `c1::test` draws nothing.
+    expect(isEmitted(placements, 'wrapper:c1::test')).toBe(false);
     expect(parentOf(placements, 'wrapper:c1::')).toBeNull();
-    // The collection frame is the root: it never becomes its own parent even
-    // though depth 0 is a match for it too. It absorbs the collection's root
-    // card instead.
     expect(absorbedBy(placements, 'collection:c1')).toBe('wrapper:c1::');
-    // The `test` card IS the nested container, not a card inside it.
-    expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
-    expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::test');
+    expect(parentOf(placements, 'group:test')).toBe('wrapper:c1::');
+    expect(parentOf(placements, 'group:test/test2')).toBe('wrapper:c1::');
     expect(parentOf(placements, 'group:other')).toBe('wrapper:c1::');
+    expectNoFrameInFrame(placements);
     expectAcyclic(placements);
   });
 
@@ -234,21 +275,6 @@ describe('collection frames', () => {
     expect(absorbedBy(placements, 'group:test')).toBe('wrapper:c1::test');
     expect(absorbedBy(placements, 'group:c2:test')).toBe('wrapper:c2::test');
     expectAcyclic(placements);
-  });
-
-  it('emits nested nodes after their parent even with a collection frame', () => {
-    const placements = buildWrapperLayout(
-      [collectionCard(), card('a'), card('a/b')],
-      new Set(['c1::', 'c1::a']),
-      {}
-    );
-
-    placements.forEach((p, index) => {
-      if (!p.parentId) return;
-      const parentIndex = placements.findIndex(q => q.id === p.parentId);
-      expect(parentIndex).toBeGreaterThanOrEqual(0);
-      expect(parentIndex).toBeLessThan(index);
-    });
   });
 });
 

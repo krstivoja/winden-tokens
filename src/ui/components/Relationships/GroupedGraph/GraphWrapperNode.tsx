@@ -1,10 +1,12 @@
 // GraphWrapperNode — a CONTAINER card.
 //
+// Frames are one level: a container holds cards and never another container.
+//
 // Part 4: the card IS the container. A grouped path used to produce two
 // things — a dashed frame with its own header, and a card with the SAME name
 // and a second header inside it. This node is now both: it draws the header,
 // the header actions and the rows of the card it absorbed, and holds its
-// child cards (and nested containers) as React Flow child nodes.
+// child cards as React Flow child nodes.
 //
 // The only visual difference from a leaf card is the outline: a container is
 // DASHED, a leaf is SOLID. Same header, same rows, same actions.
@@ -16,6 +18,7 @@ import { IconButton } from '../../common/Button/IconButton/IconButton';
 import { WrapperNodeData } from './types';
 import { CardHeaderRow, CardHeaderActions, CardRows } from './GraphNode';
 import { STANDARD_GROUP_HEADER_FILL } from './constants';
+import { getPathTitleSegments } from './utils';
 
 function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) {
   const card = data.card;
@@ -33,6 +36,7 @@ function GroupWrapperComponentInner({ data }: NodeProps<Node<WrapperNodeData>>) 
       <div className="rf-group-wrapper w-full h-full rounded-sm border border-text/40 bg-base shadow-xs p-0.5">
         <CardHeaderRow
           title={data.title}
+          segments={data.path ? getPathTitleSegments(data.path) : [data.title]}
           headerFill={card?.group.headerFill ?? STANDARD_GROUP_HEADER_FILL}
           className="rounded-t-sm"
         >

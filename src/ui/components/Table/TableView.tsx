@@ -52,6 +52,17 @@ export function TableView({ status }: TableViewProps) {
     [setSelectedCollectionIds, setSelectedGroups]
   );
 
+  // A collection row click scrolls the table to the collection's first
+  // visible row (rows of a collection are spread over the group sections).
+  const handleFocusPath = useCallback((collectionId: string, path: string) => {
+    if (path !== '') return;
+    const rows = tableContainerRef.current?.querySelectorAll<HTMLElement>('tr[data-collection-id]');
+    const target = Array.from(rows ?? []).find(
+      row => row.dataset.collectionId === collectionId && !row.classList.contains('hidden')
+    );
+    target?.scrollIntoView?.({ block: 'start' });
+  }, []);
+
   // Group variables by path prefix (use sidebar-filtered variables)
   const { grouped, ungrouped, sortedGroups } = React.useMemo(() => {
     const grouped: Record<string, VariableData[]> = {};
@@ -116,6 +127,8 @@ export function TableView({ status }: TableViewProps) {
         selectedCollections={selectedCollections}
         selectedGroups={selectedGroups}
         onSelectionChange={handleSelectionChange}
+        onFocusPath={handleFocusPath}
+        focusNoun="table"
       />
 
       {/* Main content area with header and table */}

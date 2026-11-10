@@ -1,10 +1,12 @@
 // Layout for expanded group "wrapper" frames.
 //
 // Given the flat list of standard (unmanaged) cards plus the collection root
-// cards, and the set of expanded frames, this builds a nested tree of wrapper
-// frames containing cards and computes React-Flow positions. Cards/wrappers
-// inside a wrapper use positions relative to that wrapper (React Flow
-// parent-node coordinates); top-level units use absolute positions.
+// cards, and the set of frames, this builds the frames, each holding cards
+// and nothing else — frames are ONE level, never nested — and computes
+// React-Flow positions. Cards inside a frame use positions relative to that
+// frame (React Flow parent-node coordinates) and are auto-stacked; they are
+// frozen, only the whole frame moves. Top-level units (frames and loose
+// cards) use absolute positions.
 //
 // A frame is identified by `<collectionId>::<path>`, where the empty path is
 // the collection's own frame — see getWrapperKey in ./utils.
@@ -18,7 +20,13 @@ import {
   WRAPPER_GAP,
   WRAPPER_NODE_PREFIX,
 } from './constants';
-import { getCardRowsHeight, getGroupHeight, getWrapperKey, parseWrapperKey } from './utils';
+import {
+  getCardRowsHeight,
+  getGroupHeight,
+  getWrapperKey,
+  parseWrapperKey,
+  outermostGroupedAncestor,
+} from './utils';
 
 export interface WrapperPlacement {
   kind: 'wrapper';
@@ -27,7 +35,8 @@ export interface WrapperPlacement {
   /** Bare path, empty for a collection's own frame. */
   path: string;
   collectionId: string;
-  parentId: string | null;
+  /** Always null: a frame is never inside another frame. */
+  parentId: null;
   position: { x: number; y: number };
   width: number;
   height: number;
@@ -61,84 +70,50 @@ interface Unit {
   children: Unit[];
   width: number;
   height: number;
+  /** Position inside the parent frame; only meaningful for a frame's cards. */
   rel: { x: number; y: number };
-}
-
-/**
- * Deepest grouped frame containing `(collectionId, path)` — the wrapper it
- * belongs in, as a wrapper KEY (`<collectionId>::<path>`).
- *
- * Depth 0 is the collection's own frame: every card of that collection is in
- * it, including the collection ROOT card whose path is empty and which
- * belongs to no other frame.
- *
- * `includeSelf` decides whether `path` itself counts:
- * - Cards pass `true`. The card for path `p` lives INSIDE the frame named `p`
- *   (a card `test` and a card `test/test` are both members of frame `test`);
- *   treating it as a sibling is what parked it thousands of pixels away.
- * - Wrapper units pass `false`, and must. A wrapper's own path is grouped by
- *   definition, so a self-match would make frame `p` its own parent — and the
- *   deepest-match walk would pick that self-match over the real parent `p`'s
- *   ancestor. Strict prefixes are strictly shorter and the chain bottoms out
- *   at the collection frame (`<cid>::`), which has no candidates at all, so
- *   the wrapper→parent walk always terminates:
- *   `<cid>::a/b` → `<cid>::a` → `<cid>::` → nothing.
- */
-function deepestGroupedAncestor(
-  collectionId: string,
-  path: string,
-  grouped: Set<string>,
-  includeSelf: boolean
-): string | null {
-  const parts = path ? path.split('/') : [];
-  const maxDepth = includeSelf ? parts.length : parts.length - 1;
-  let result: string | null = null;
-  for (let depth = 0; depth <= maxDepth; depth++) {
-    const key = getWrapperKey(collectionId, parts.slice(0, depth).join('/'));
-    if (grouped.has(key)) result = key;
-  }
-  return result;
 }
 
 const wrapperId = (collectionId: string, path: string) =>
   `${WRAPPER_NODE_PREFIX}${getWrapperKey(collectionId, path)}`;
 
 /**
- * Build placements for standard cards, nesting them inside wrapper frames for
- * every expanded ancestor path. Managed groups are not handled here.
+ * Build placements for standard cards, putting each inside the frame that
+ * contains it.
  *
  * `groupedPaths` holds wrapper KEYS (`<collectionId>::<path>`), not bare
- * paths — a frame belongs to exactly one collection.
+ * paths — a frame belongs to exactly one collection. Frames are one level:
+ * when keys of one collection nest (which `flattenGroupedPaths` prevents on
+ * every write), the OUTERMOST one is the frame and the inner key draws
+ * nothing, so a card is never inside a frame inside a frame.
  *
- * `savedPositions` holds two namespaces in one record: a top-level unit's id
- * (card key or `wrapper:<collectionId>::<path>`) maps to its absolute position, while
- * `rel:<id>` maps a *nested* unit to a manually-dragged position relative to
- * its parent wrapper — used instead of the auto vertical stack for that one
- * child, at whatever nesting depth it lives.
+ * `savedPositions` maps a top-level unit's id (card key or
+ * `wrapper:<collectionId>::<path>`) to its absolute position. A frame's cards
+ * have no saved position: they are always auto-stacked.
+ *
+ * `hiddenCardKeys` are cards a filter currently hides. A frame is sized and
+ * stacked from its VISIBLE cards only, so it hugs them instead of keeping the
+ * room of the hidden ones; hidden cards take no space (they are not drawn
+ * anyway) and the frame grows back when the filter is lifted.
  */
 export function buildWrapperLayout(
   cards: GroupData[],
   groupedPaths: Set<string>,
-  savedPositions: Record<string, { x: number; y: number }>
+  savedPositions: Record<string, { x: number; y: number }>,
+  hiddenCardKeys: ReadonlySet<string> = new Set()
 ): Placement[] {
   if (cards.length === 0) return [];
 
-  // Collect wrapper frames actually needed (grouped ancestors of some card),
-  // as `<collectionId>::<path>` keys.
+  // Frames actually needed: the outermost grouped frame of some card, as
+  // `<collectionId>::<path>` keys. The walk includes the card's own path (a
+  // card whose own path is grouped needs that frame to exist, and is absorbed
+  // by it) and starts at depth 0, the collection's own frame, which a
+  // collection ROOT card joins. Arrange (outermostGroupedAncestor) uses the
+  // same walk, so the two always agree.
   const wrapperKeys = new Set<string>();
   cards.forEach(card => {
-    const path = card.sourceGroupName || '';
-    const parts = path ? path.split('/') : [];
-    // From depth 0 (the collection's own frame, which a collection ROOT card
-    // joins) through `parts.length`: a card whose own path is grouped needs
-    // that frame to exist, otherwise attach() below would look for a wrapper
-    // that was never created and the card would silently pop back out to the
-    // top level — and Arrange (outermostGroupedAncestor) would still fold it
-    // into the missing frame's unit. The two walks have to agree.
-    for (let depth = 0; depth <= parts.length; depth++) {
-      const key = getWrapperKey(card.collectionId, parts.slice(0, depth).join('/'));
-      if (groupedPaths.has(key)) wrapperKeys.add(key);
-    }
+    const key = outermostGroupedAncestor(card.collectionId, card.sourceGroupName || '', groupedPaths);
+    if (key) wrapperKeys.add(key);
   });
 
   // Create units.
@@ -168,37 +143,27 @@ export function buildWrapperLayout(
     });
   });
 
-  // Link units to parents.
+  // Link cards to their frame; everything else is a root. Frames are roots
+  // by construction.
   const roots: Unit[] = [];
-  const attach = (unit: Unit) => {
-    // Cards may land in the frame named after their own path; wrappers may
-    // not (see deepestGroupedAncestor) — that is what keeps the tree acyclic.
-    const parentKey = deepestGroupedAncestor(
-      unit.collectionId, unit.path, groupedPaths, unit.kind === 'card'
-    );
-    const parentId = parentKey ? `${WRAPPER_NODE_PREFIX}${parentKey}` : null;
-    if (parentId && units.has(parentId)) {
-      units.get(parentId)!.children.push(unit);
-    } else {
+  units.forEach(unit => {
+    if (unit.kind === 'wrapper') {
       roots.push(unit);
+      return;
     }
-  };
-  units.forEach(unit => attach(unit));
+    const parentKey = outermostGroupedAncestor(unit.collectionId, unit.path, groupedPaths);
+    const parent = parentKey ? units.get(`${WRAPPER_NODE_PREFIX}${parentKey}`) : undefined;
+    if (parent) parent.children.push(unit);
+    else roots.push(unit);
+  });
 
   // Stable ordering by collection then path. Within one frame every child
-  // shares the collection, so this reduces to the path comparison it was.
+  // shares the collection, so this reduces to the path comparison.
   const sortKey = (unit: Unit) => getWrapperKey(unit.collectionId, unit.path);
-  const sortChildren = (unit: Unit) => {
-    unit.children.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-    unit.children.forEach(sortChildren);
-  };
   roots.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  roots.forEach(sortChildren);
+  roots.forEach(unit => unit.children.sort((a, b) => sortKey(a).localeCompare(sortKey(b))));
 
-  // Size + relative layout: cards/sub-wrappers stacked vertically,
-  // left-aligned, inside the wrapper — unless the user dragged one to a
-  // manual spot (rel:<id> in savedPositions), in which case that position
-  // wins and the auto-stack skips over it for the *other* children.
+  // Size + relative layout: a frame's cards stacked vertically, left-aligned.
   const unitId = (unit: Unit) =>
     unit.kind === 'card' && unit.group ? unit.group.key : wrapperId(unit.collectionId, unit.path);
   const sizeUnit = (unit: Unit) => {
@@ -210,35 +175,32 @@ export function buildWrapperLayout(
     // The container's own body: the absorbed card's rows, directly under the
     // header, exactly where a leaf card draws them. Zero when nothing was
     // absorbed.
-    const ownRows = getCardRowsHeight(unit.group);
+    const ownRows = unit.group && hiddenCardKeys.has(unit.group.key) ? 0 : getCardRowsHeight(unit.group);
     let y = CONTAINER_INSET + WRAPPER_HEADER_HEIGHT + ownRows + WRAPPER_PADDING;
     let maxW = 0;
-    let maxRight = 0;
-    let maxBottom = 0;
+    const visibleChildren = unit.children.filter(child => !(child.group && hiddenCardKeys.has(child.group.key)));
     unit.children.forEach(child => {
-      sizeUnit(child);
-      const manualRel = savedPositions[`rel:${unitId(child)}`];
-      if (manualRel) {
-        child.rel = manualRel;
-      } else {
-        child.rel = { x: CONTAINER_INSET + WRAPPER_PADDING, y };
-        y += child.height + WRAPPER_GAP;
+      if (!visibleChildren.includes(child)) {
+        // Not drawn: parked at the first slot, taking no room.
+        child.width = GROUP_WIDTH;
+        child.height = 0;
+        child.rel = { x: CONTAINER_INSET + WRAPPER_PADDING, y: CONTAINER_INSET + WRAPPER_HEADER_HEIGHT + ownRows + WRAPPER_PADDING };
+        return;
       }
+      sizeUnit(child);
+      child.rel = { x: CONTAINER_INSET + WRAPPER_PADDING, y };
+      y += child.height + WRAPPER_GAP;
       maxW = Math.max(maxW, child.width);
-      maxRight = Math.max(maxRight, child.rel.x + child.width);
-      maxBottom = Math.max(maxBottom, child.rel.y + child.height);
     });
     const minWidth = Math.max(maxW + (CONTAINER_INSET + WRAPPER_PADDING) * 2, GROUP_WIDTH);
     // A container with rows and no children is exactly a card's box — header
     // plus rows, no trailing dead space; only the dashed outline tells the
     // two apart. With nothing at all it keeps the empty frame's minimum.
-    const minHeight = unit.children.length > 0
+    const minHeight = visibleChildren.length > 0
       ? y - WRAPPER_GAP + WRAPPER_PADDING + CONTAINER_INSET
       : CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + (ownRows > 0 ? ownRows : WRAPPER_PADDING * 2);
-    // Bounding box of all children (auto-stacked and manually placed) never
-    // shrinks the wrapper below what the auto-stack alone would need.
-    unit.width = Math.max(minWidth, maxRight + WRAPPER_PADDING + CONTAINER_INSET);
-    unit.height = Math.max(minHeight, maxBottom + WRAPPER_PADDING + CONTAINER_INSET);
+    unit.width = minWidth;
+    unit.height = minHeight;
   };
   roots.forEach(sizeUnit);
 
@@ -271,7 +233,7 @@ export function buildWrapperLayout(
       const id = wrapperId(unit.collectionId, unit.path);
       placements.push({
         kind: 'wrapper', id, path: unit.path,
-        collectionId: unit.collectionId, parentId, position,
+        collectionId: unit.collectionId, parentId: null, position,
         width: unit.width, height: unit.height,
         ...(unit.group ? { group: unit.group } : {}),
       });

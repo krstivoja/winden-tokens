@@ -105,7 +105,7 @@
 - Visualize variable aliases
 - Show reference chains
 - Detect circular dependencies
-- Sidebar Collections tree is click-to-select (no checkboxes), at every level (All variables, collection, folder such as `badge` or `badge > color`, group): a plain click or Enter/Space on a collection shows only that collection, on a group or folder only that group (and subgroups) within its own collection while all other collections stay fully visible; Cmd/Ctrl-click toggles it in the selection (the last picked row stays), "All variables" selects everything
+- Sidebar Collections tree is click-to-select (no checkboxes), at every level (All variables, collection, folder such as `badge` or `badge > color`, group): a plain click or Enter/Space on a collection hides nothing (it clears any group narrowing, rings the row and pans the graph / scrolls the table to it), on a group or folder it shows only that group (and subgroups) within its own collection while all other collections stay fully visible; Cmd/Ctrl-click on a collection only toggles its ring mark, on a group it toggles it in the selection (the last picked row stays), "All variables" selects everything
 - In the graph a plain click then highlights every visible card under that row, fits the view to them, and rings the row once the new selection is laid out; it always focuses, never toggles (click the empty canvas to clear). Cmd/Ctrl-click does not move the camera. The Table view only selects
 - The clicked row gets the primary fill and ring, its descendants only the fill, merely visible rows nothing; while everything is selected only "All variables" is marked. A row with nothing visible on the canvas has a muted label but still selects. Expand arrows never change the selection
 - Table and graph (same helper): ungrouped (collection root) variables, and the root card holding them, show only while all groups of their collection are selected; other collections are never affected by a group click. Group keys Hide unused unchecked count as selected for this rule, so Hide unused never hides root cards by itself
@@ -117,6 +117,10 @@
 - The uncheck is one write per activation (toggle on with a highlight, card menu, or the highlight moving while on); re-ticking a group while hiding shows it again, and "Show all" re-checks nothing
 - A later activation re-checks only groups Hide unused itself unchecked that are now on the path; groups the user unchecked are never re-checked
 - What the tree cannot express stays hidden by Hide unused itself: library cards, a collection root card next to an on-path group, a card sharing its group with an on-path card; off-path wires stay hidden too
+- Frames (`graph-grouped-paths`, keys `<collectionId>::<path>`) are ONE level: a frame holds cards and never another frame. Level-up on a card outside a frame creates the parent frame and silently swallows deeper frames under it (`addFrame`); level-up on a frame header widens it the same way; a card inside a frame has no level-up. Ungroup removes only that frame (swallowed frames do not come back)
+- Cards inside a frame are fixed (`draggable: false`, auto-stacked); only the whole frame moves. Positions of cards in frames are never saved
+- On load `graph-grouped-paths` is flattened to the outermost key per collection (`flattenGroupedPaths`) and `rel:*` entries of `graph-positions` are dropped (`stripRelPositions`), each written back only when changed. A frame promoted to top level without a saved position appears at its natural position; there is no auto-arrange
+- Card and frame titles are breadcrumbs (`font > size > body`), the tooltip is the full slash path; collection and managed/external cards stay plain
 - Card menu "Hide unused" (just above Delete): highlights that card's path and turns hiding on in one step; reads "Show all" while hiding is active
 
 **Selection card:**
