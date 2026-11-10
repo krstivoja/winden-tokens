@@ -880,6 +880,9 @@ Colors, primary, COLOR, #FF0000
 - `CardHeaderRow` (`GroupedGraph/GraphNode.tsx`) renders the title as a breadcrumb (`font > size > body`): props `title` (full slash path, the tooltip), `segments` (one segment is plain text), `draggable` (false drops the `cursor-move` on a frozen card). Ancestors are dimmed, the leaf is bold and shrinks last, separators use `ChevronRightIcon`, header actions are `shrink-0`
 - `GraphWrapperNode` (frame): ONE level, holds cards and never another frame; a multi-segment path shows the same breadcrumb, a single segment or the collection name is plain. It keeps the level-up button (widens the frame)
 - `GroupNodeData.inFrame`: the card sits in a frame, so it offers no level-up and its header has no move cursor
+- Rebuild reconciliation (`GroupedGraph/utils.ts`): the layout effect hands xyflow `reconcileNodes(prev, next)` / `reconcileEdges(prev, next)` instead of fresh arrays — the previous object for every node/edge whose content is unchanged (`isStructurallyEqual`: plain data, Sets and Maps by content, callbacks by identity; xyflow's `measured` and cleared `selected`/`dragging` ignored), and `carryMeasured` for a changed node (keeps its last size and handle bounds, so it is not hidden to re-measure; not carried across hidden, type or explicit style-size changes)
+- A card's `connectedVars` / `highlightedVars` / `highlightedVarSeed` are cut down to its own rows (`cardRowState` in the layout effect), so a change elsewhere in the graph does not change its data
+- `CardRows` passes highlight props only to a card on the chain into the memoized `CardRowsList` (content comparator); `CardHeaderActions` is memoized on the fields it reads (`HEADER_ACTION_FIELDS`). A highlight that only dims a card re-renders its box, not its rows or handles
 
 ---
 

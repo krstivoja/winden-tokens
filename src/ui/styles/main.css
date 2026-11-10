@@ -118,6 +118,24 @@
     z-index: 1000 !important;
 }
 
+/*
+ * Paint containment keeps pan/zoom/drag hit-testing and paint per card.
+ * The clip margin leaves room for the highlight ring, shadow and the
+ * hover-grown edge handles; a node with an open menu drops containment so
+ * the menu can overflow. Engines without overflow-clip-margin keep today's
+ * unclipped behaviour.
+ */
+@supports (overflow-clip-margin: 1px) {
+    .react-flow__node {
+        contain: layout paint style;
+        overflow-clip-margin: 12px;
+    }
+
+    .react-flow__node:has([data-dropdown-open]) {
+        contain: none;
+    }
+}
+
 /* React Flow chrome (dots, MiniMap, Controls) on theme tokens */
 .react-flow {
     --xy-background-pattern-color-default: var(--color-border);

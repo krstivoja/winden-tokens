@@ -8,8 +8,7 @@
 // nothing visible takes no column and no gap.
 //
 // No depth walk, no connections, no node positions: the order is the path
-// order, so the layout is deterministic and a drag never recomputes it (see
-// plans/graph-drag-perf.md).
+// order, so the layout is deterministic and a drag never recomputes it.
 //
 // Units keep only their y when moved: the column x always comes from here
 // (resolveColumnPositions for stored records, lockChangesToColumns for live

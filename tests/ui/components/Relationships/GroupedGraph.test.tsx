@@ -7,7 +7,7 @@
 // messages. Node geometry is read back off the rendered xyflow nodes.
 
 import React from 'react';
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import type { CollectionData, VariableData } from '../../../../src/ui/types';
 
@@ -35,6 +35,19 @@ vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
 }));
 
 vi.mock('../../../../src/ui/components/Table/SidebarFilter', () => ({ SidebarFilter: () => null }));
+
+// Counts every render of a row handle, by handle id: a card's rows rendering
+// again is what a rebuild that keeps an unchanged card must avoid.
+const handleRenders = vi.hoisted(() => new Map<string, number>());
+vi.mock('../../../../src/ui/components/Relationships/GroupedGraph/GraphHandle', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../src/ui/components/Relationships/GroupedGraph/GraphHandle')>();
+  return {
+    GraphHandle: (props: Parameters<typeof real.GraphHandle>[0]) => {
+      handleRenders.set(props.id, (handleRenders.get(props.id) ?? 0) + 1);
+      return real.GraphHandle(props);
+    },
+  };
+});
 
 import { GroupedGraph } from '../../../../src/ui/components/Relationships/GroupedGraph';
 import {
@@ -346,5 +359,163 @@ describe('Collection mode: one column per collection', () => {
     fireEvent.click(screen.getByText('Apply'));
     await waitFor(() => expect(nodeBox('wrapper:c2::')).toMatchObject({ x: 1000, y: 40 }));
     expect(headerIds()).toEqual([]);
+  });
+});
+
+// ── Rebuild reconciliation ─────────────────────────────────────────
+//
+// A highlight, a hide-unused toggle or a data reload rebuilds every node and
+// edge. Cards whose content did not change must keep their node objects (no
+// render of their rows), changed cards must still update, and no node may
+// lose its measurement (xyflow hides an unmeasured node).
+
+// c1: `a/two` references `b/one`, so a highlight of `b` lights up `a` too.
+// c2's `x` card is on no chain.
+const linkedVariables: VariableData[] = [
+  variable('v1', 'c1', 'a/one'),
+  { ...variable('v2', 'c1', 'a/two'), value: '{b/one}', valuesByMode: { m1: '{b/one}' } },
+  variable('v3', 'c1', 'b/one'), variable('v4', 'c1', 'b/two'),
+  variable('v5', 'c2', 'x/one'), variable('v6', 'c2', 'x/two'),
+];
+
+// The sidebar selection the graph asked for (hide-unused unchecks what it
+// hides there), applied on the next `applySidebar`.
+const sidebarWrites = { groups: null as Set<string> | null, collections: null as Set<string> | null };
+
+async function mountLinked(vars: VariableData[] = linkedVariables) {
+  setContext(allGroups);
+  sidebarWrites.groups = null;
+  sidebarWrites.collections = null;
+  ctx.value = {
+    ...ctx.value,
+    variables: vars,
+    setSelectedGroups: (groups: Set<string>) => { sidebarWrites.groups = groups; },
+    setSelectedCollectionIds: (ids: Set<string>) => { sidebarWrites.collections = ids; },
+  };
+  const view = render(<GroupedGraph />);
+  storage('graph-grouped-paths', ['c1::', 'c2::']);
+  storage('graph-positions', {});
+  storage('graph-positions-collection', {});
+  storage('graph-tier-labels', []);
+  storage('graph-layout-labels', null);
+  storage('graph-layout-settings', null);
+  await waitFor(() => nodeBox('group:c2::x'));
+  return view;
+}
+
+const cardRoot = (id: string) =>
+  document.querySelector(`.react-flow__node[data-id="${id}"] .rf-group-box`) as HTMLElement | null;
+const rendersOf = (...ids: string[]) => ids.reduce((sum, id) => sum + (handleRenders.get(id) ?? 0), 0);
+const rowName = (name: string) => screen.getByTitle(`${name} (double-click to rename)`);
+
+/** What the real sidebar does with the graph's writes: the context changes. */
+function applySidebar(view: ReturnType<typeof render>) {
+  ctx.value = {
+    ...ctx.value,
+    ...(sidebarWrites.groups ? { selectedGroups: sidebarWrites.groups } : {}),
+    ...(sidebarWrites.collections ? { selectedCollectionIds: sidebarWrites.collections } : {}),
+  };
+  view.rerender(<GroupedGraph />);
+}
+
+describe('Rebuilds keep unchanged cards', () => {
+  beforeEach(() => handleRenders.clear());
+
+  it('a highlight re-renders the rows on the chain only; the card off the chain is just dimmed', async () => {
+    await mountLinked();
+    handleRenders.clear();
+
+    fireEvent.click(rowName('b/one'));
+
+    // The chain updated: b and a are highlighted, x is dimmed.
+    await waitFor(() => expect(cardRoot('group:c1::b')?.className).toContain('ring-highlight-path'));
+    expect(cardRoot('group:c1::a')?.className).toContain('ring-highlight-path');
+    expect(cardRoot('group:c2::x')?.className).toContain('opacity-55');
+    expect(rendersOf('b/one::in', 'b/two::in')).toBeGreaterThan(0);
+    // x's rows look the same whatever is highlighted: not rendered again.
+    expect(rendersOf('x/one::in', 'x/one::out', 'x/two::in', 'x/two::out')).toBe(0);
+
+    // Clearing (the same row again) restores every card.
+    fireEvent.click(rowName('b/one'));
+    await waitFor(() => expect(cardRoot('group:c2::x')?.className).not.toContain('opacity-55'));
+    expect(cardRoot('group:c1::b')?.className).not.toContain('ring-highlight-path');
+    expect(rendersOf('x/one::in', 'x/two::in')).toBe(0);
+  });
+
+  it('Hide unused hides the card off the chain without re-rendering the rows that stay', async () => {
+    const view = await mountLinked();
+    fireEvent.click(rowName('b/one'));
+    await waitFor(() => expect(cardRoot('group:c2::x')?.className).toContain('opacity-55'));
+    handleRenders.clear();
+
+    fireEvent.click(screen.getByText('Hide unused'));
+    await waitFor(() => expect(sidebarWrites.groups ?? sidebarWrites.collections).not.toBe(null));
+    applySidebar(view);
+    await waitFor(() => expect(document.querySelector('.react-flow__node[data-id="group:c2::x"]')).toBe(null));
+    expect(screen.getByText('Show all')).toBeTruthy();
+    expect(cardRoot('group:c1::b')?.className).toContain('ring-highlight-path');
+    expect(rendersOf('a/one::in', 'a/two::in', 'b/one::in', 'b/two::in')).toBe(0);
+  });
+
+  it('a value edit re-renders the edited card only, and shows the new value', async () => {
+    const view = await mountLinked();
+    handleRenders.clear();
+
+    // A reload with every variable rebuilt from scratch (as the plugin's poll
+    // sends it), one value changed.
+    ctx.value = {
+      ...ctx.value,
+      variables: linkedVariables.map(v => (v.id === 'v5' ? { ...v, value: '42', valuesByMode: { m2: '42' } } : { ...v })),
+    };
+    view.rerender(<GroupedGraph />);
+
+    await waitFor(() => expect(screen.getByTitle('42')).toBeTruthy());
+    expect(rendersOf('x/one::in')).toBeGreaterThan(0);
+    expect(rendersOf('a/one::in', 'a/two::in', 'b/one::in', 'b/two::in')).toBe(0);
+  });
+});
+
+describe('Rebuilds keep node measurements', () => {
+  const originalResizeObserver = window.ResizeObserver;
+  const sizeDescriptors = {
+    width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
+    height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
+  };
+
+  beforeEach(() => {
+    // A ResizeObserver that reports every observed node on the next
+    // microtask, and a layout with real sizes, so xyflow measures nodes.
+    (window as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+      constructor(private callback: (entries: Array<{ target: Element }>) => void) {}
+      observe(target: Element) { queueMicrotask(() => this.callback([{ target }])); }
+      unobserve() {}
+      disconnect() {}
+    };
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 260 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 120 });
+  });
+
+  afterEach(() => {
+    (window as unknown as { ResizeObserver: unknown }).ResizeObserver = originalResizeObserver;
+    if (sizeDescriptors.width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', sizeDescriptors.width);
+    if (sizeDescriptors.height) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', sizeDescriptors.height);
+  });
+
+  const hiddenNodes = () => [...document.querySelectorAll<HTMLElement>('.react-flow__node')]
+    .filter(el => el.style.visibility === 'hidden')
+    .map(el => el.dataset.id);
+
+  it('no node is hidden for re-measuring after a highlight or a clear-highlight rebuild', async () => {
+    await mountLinked();
+    await waitFor(() => expect(hiddenNodes()).toEqual([]));
+
+    // Checked synchronously, right after the rebuild committed.
+    fireEvent.click(rowName('b/one'));
+    expect(cardRoot('group:c1::b')?.className).toContain('ring-highlight-path');
+    expect(hiddenNodes()).toEqual([]);
+
+    fireEvent.click(rowName('b/one'));
+    expect(cardRoot('group:c1::b')?.className).not.toContain('ring-highlight-path');
+    expect(hiddenNodes()).toEqual([]);
   });
 });

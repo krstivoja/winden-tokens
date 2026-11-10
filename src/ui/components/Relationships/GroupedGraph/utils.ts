@@ -1277,6 +1277,164 @@ function getGroupCardKey(collectionId: string, groupName: string): string {
   return `${GROUP_NODE_PREFIX}${getWrapperKey(collectionId, groupName)}`;
 }
 
+// ── Rebuild reconciliation ─────────────────────────────────────────
+//
+// The layout effect builds every node and edge from scratch. Handing those
+// fresh objects straight to xyflow has two costs on a graph that is already
+// on screen:
+//
+// 1. xyflow drops `measured` (and every node's handle bounds) for a node
+//    object it has not seen, so EVERY node renders `visibility: hidden` until
+//    its ResizeObserver fires and all of its handles are re-measured; edges
+//    vanish for that frame. `carryMeasured` copies the last measurement over.
+// 2. A new object means a new internal node / edge lookup entry, so xyflow
+//    re-renders every NodeWrapper / EdgeWrapper and every memoized custom
+//    node and edge (new `data`). `reconcileNodes` / `reconcileEdges` hand back
+//    the PREVIOUS object for every element whose content did not change, which
+//    xyflow's `adoptUserNodes` (checkEquality) and the edge selectors keep as
+//    is — those elements do not render at all.
+
+/** Proven-equal object pairs within one reconcile pass: the shared objects
+ *  (callbacks, a card's group, a frame's absorbed card) are compared once. */
+type EqualityCache = WeakMap<object, WeakSet<object>>;
+
+const isPlainObject = (value: object): boolean => {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
+/**
+ * Structural equality for node/edge payloads: plain objects and arrays by
+ * content, Sets and Maps by content, everything else (functions included)
+ * by identity. Built for the acyclic data the layout effect produces.
+ */
+function isStructurallyEqual(a: unknown, b: unknown, cache: EqualityCache = new WeakMap()): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (cache.get(a)?.has(b)) return true;
+  let equal: boolean;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    equal = Array.isArray(a) && Array.isArray(b) && a.length === b.length
+      && a.every((item, i) => isStructurallyEqual(item, b[i], cache));
+  } else if (a instanceof Set || b instanceof Set) {
+    equal = a instanceof Set && b instanceof Set && a.size === b.size
+      && [...a].every(item => b.has(item));
+  } else if (a instanceof Map || b instanceof Map) {
+    equal = a instanceof Map && b instanceof Map && a.size === b.size
+      && [...a].every(([key, value]) => b.has(key) && isStructurallyEqual(value, b.get(key), cache));
+  } else if (isPlainObject(a) && isPlainObject(b)) {
+    const aRecord = a as Record<string, unknown>;
+    const bRecord = b as Record<string, unknown>;
+    const keys = Object.keys(aRecord);
+    equal = keys.length === Object.keys(bRecord).length
+      && keys.every(key => Object.prototype.hasOwnProperty.call(bRecord, key)
+        && isStructurallyEqual(aRecord[key], bRecord[key], cache));
+  } else {
+    equal = false;
+  }
+  if (equal) {
+    const known = cache.get(a) ?? new WeakSet<object>();
+    known.add(b);
+    cache.set(a, known);
+  }
+  return equal;
+}
+
+/** Fields xyflow writes onto our node objects itself. `measured` is its
+ *  measurement (never ours); a cleared `selected` / `dragging` is the same as
+ *  the field being absent. */
+const XYFLOW_FLAG_KEYS = new Set(['selected', 'dragging', 'resizing']);
+
+/**
+ * True when `prev` (a node or edge as xyflow holds it) carries exactly the
+ * content of the freshly built `next`, ignoring xyflow's own `measured` and
+ * cleared selection/drag flags. A still-SET flag counts as a difference: the
+ * rebuilt object does not carry it, and the rebuild has always cleared it.
+ */
+function isSameElement(prev: object, next: object, cache: EqualityCache): boolean {
+  const prevRecord = prev as Record<string, unknown>;
+  const nextRecord = next as Record<string, unknown>;
+  const keys = new Set([...Object.keys(prevRecord), ...Object.keys(nextRecord)]);
+  for (const key of keys) {
+    if (key === 'measured') continue;
+    const prevValue = prevRecord[key];
+    const nextValue = nextRecord[key];
+    if (XYFLOW_FLAG_KEYS.has(key)) {
+      if (!!prevValue !== !!nextValue) return false;
+      continue;
+    }
+    if (!isStructurallyEqual(prevValue, nextValue, cache)) return false;
+  }
+  return true;
+}
+
+/** The parts of an xyflow node `carryMeasured` reads. */
+interface MeasurableNode {
+  id: string;
+  type?: string;
+  hidden?: boolean;
+  style?: { width?: unknown; height?: unknown } | object;
+  measured?: { width?: number; height?: number };
+}
+
+const styleSize = (node: MeasurableNode, key: 'width' | 'height') =>
+  (node.style as { width?: unknown; height?: unknown } | undefined)?.[key];
+
+/**
+ * `next` with `prev`'s measurement copied over, so xyflow keeps the node's
+ * size and handle bounds instead of hiding the node to re-measure it.
+ *
+ * Not carried (`next` comes back unchanged) when there is no previous
+ * measurement, when either node is hidden (a hidden node is unmounted and
+ * must measure on its way back), when the type changed, or when an explicit
+ * style size changed (frames, tier captions). Never mutates its inputs.
+ */
+function carryMeasured<T extends MeasurableNode>(prev: T | undefined, next: T): T {
+  if (!prev?.measured || prev.hidden || next.hidden || prev.type !== next.type
+    || styleSize(prev, 'width') !== styleSize(next, 'width')
+    || styleSize(prev, 'height') !== styleSize(next, 'height')) return next;
+  return { ...next, measured: prev.measured };
+}
+
+/**
+ * The node array to hand xyflow after a rebuild: the previous object for
+ * every node whose content is unchanged, the rebuilt one (with its last
+ * measurement carried, see carryMeasured) for every other. Returns `prev`
+ * itself when nothing at all changed, so the state update is a no-op.
+ */
+function reconcileNodes<T extends MeasurableNode>(prev: T[], next: T[]): T[] {
+  const prevById = new Map(prev.map(node => [node.id, node]));
+  const cache: EqualityCache = new WeakMap();
+  let allReused = prev.length === next.length;
+  const out = next.map((node, i) => {
+    const before = prevById.get(node.id);
+    if (before && isSameElement(before, node, cache)) {
+      if (prev[i] !== before) allReused = false;
+      return before;
+    }
+    allReused = false;
+    return carryMeasured(before, node);
+  });
+  return allReused ? prev : out;
+}
+
+/** reconcileNodes for edges: same reuse rule, nothing to carry. */
+function reconcileEdges<T extends { id: string }>(prev: T[], next: T[]): T[] {
+  const prevById = new Map(prev.map(edge => [edge.id, edge]));
+  const cache: EqualityCache = new WeakMap();
+  let allReused = prev.length === next.length;
+  const out = next.map((edge, i) => {
+    const before = prevById.get(edge.id);
+    if (before && isSameElement(before, edge, cache)) {
+      if (prev[i] !== before) allReused = false;
+      return before;
+    }
+    allReused = false;
+    return edge;
+  });
+  return allReused ? prev : out;
+}
+
 export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult, UnmanagedGroupBucket };
 
 export {
@@ -1318,4 +1476,8 @@ export {
   arrangeGroupsByConnectedBlocks,
   isTierLabelNodeId,
   isCollectionHeader,
+  isStructurallyEqual,
+  carryMeasured,
+  reconcileNodes,
+  reconcileEdges,
 };

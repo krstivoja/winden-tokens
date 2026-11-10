@@ -36,7 +36,7 @@ Problem with Revision 2: Collection mode was still the tier grid, so one collect
 
 - New pure `GroupedGraph/columnLayout.ts`: `layoutCollectionColumns(input)` → `{ positions: Map<unitId,{x,y}>, columns: { collectionId, x, width }[], maxRight }`.
   Input: the top-level units (id, collectionId, sort path, width, height, visible), managed chains, collection order, `gapX`, `gapY`.
-  No depth walk, no barycenter, no connections: the order is the path order, so it is deterministic and independent of node positions (drag-perf rule, `plans/graph-drag-perf.md`).
+  No depth walk, no barycenter, no connections: the order is the path order, so it is deterministic and independent of node positions.
   Collections not in the order (should not happen) go last, by id.
 - `arrangeGroupsByConnectedBlocks` loses its `collectionOrder` option (Revision 2's Pass 3 becomes dead); the Tier path returns to exactly its pre-Revision-2 code, which `arrangeTiers.test.ts` / `arrangeVisibility.test.ts` already guard.
 
@@ -292,7 +292,7 @@ Confirm Decision 8: switch takes effect on Apply (with Undo), not on the next ma
 - `src/ui/components/Relationships/GroupedGraph/sidebarFocus.ts`: collection scope adds the visible row label.
 - `src/ui/components/Relationships/GroupedGraph.tsx`:
   - Grid Settings dropdown: "Sort by" `SegmentedControl` bound to the draft.
-  - `naturalRowLayout` memo, Collection mode only (deps: `groupsData`, `connectionData`, `groupedPaths`, `cardVisibilityFilters`, `gridLayoutSettings`, `collections` order — never node positions, per `plans/graph-drag-perf.md`).
+  - `naturalRowLayout` memo, Collection mode only (deps: `groupsData`, `connectionData`, `groupedPaths`, `cardVisibilityFilters`, `gridLayoutSettings`, `collections` order — never node positions).
   - Layout effect: in Collection mode, managed groups and `buildWrapperLayout` take natural positions from it, row label nodes are added, `maxRight` from it; Tier mode unchanged.
   - `handleArrangeGrid`: branch on `settings.sortBy` (the override passed by Apply wins); Tier branch = today's code; Collection branch = `layoutCollectionRows` + parking below rows + `graph-layout-labels`. Both branches use the new undo snapshot.
   - `handleUndoArrange`: restore saved record + both label records verbatim.

@@ -14,7 +14,7 @@ import { Dropdown } from '../../common/Dropdown/Dropdown';
 import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { GroupNodeData } from './types';
 import { GraphHandle } from './GraphHandle';
-import { getCardTitleSegments } from './utils';
+import { getCardTitleSegments, isStructurallyEqual } from './utils';
 import {
   GENERATED_CONNECTION_COLOR,
   REFERENCE_CONNECTION_COLOR,
@@ -92,6 +92,15 @@ export function CardHeaderRow({
   );
 }
 
+/** Everything the header actions read from a card's data — and so all a
+ *  re-render of them is compared on (see CardHeaderActions below). Typed as
+ *  a Pick, so reading any other field is a type error, not a stale header. */
+const HEADER_ACTION_FIELDS = [
+  'group', 'inFrame', 'isHidingUnused', 'onHighlightPath', 'onHideUnused', 'onAddVariable',
+  'onRenameGroup', 'onDuplicateGroup', 'onEditAsText', 'onLevelUp', 'onDeleteGroup',
+] as const;
+type HeaderActionData = Pick<GroupNodeData, typeof HEADER_ACTION_FIELDS[number]>;
+
 /**
  * The header actions of a card: level up, add variable, and the actions
  * dropdown. A container renders these for the card it absorbed, with
@@ -99,11 +108,11 @@ export function CardHeaderRow({
  * one even when it absorbed no card at all), and two buttons firing the same
  * `onLevelUp(collectionId, path)` would just be the old duplication again.
  */
-export function CardHeaderActions({
+function CardHeaderActionsInner({
   data,
   showLevelUp = true,
 }: {
-  data: GroupNodeData;
+  data: HeaderActionData;
   showLevelUp?: boolean;
 }) {
   const {
@@ -204,6 +213,14 @@ export function CardHeaderActions({
   );
 }
 
+// A highlight dims or un-dims every card without changing what its header
+// actions show, so they compare on their own fields only (Hide unused does
+// re-render them: `isHidingUnused` picks the menu label).
+export const CardHeaderActions = React.memo(CardHeaderActionsInner, (prev, next) => (
+  prev.showLevelUp === next.showLevelUp
+  && HEADER_ACTION_FIELDS.every(key => isStructurallyEqual(prev.data[key], next.data[key]))
+));
+
 /**
  * The variable rows, with their connection handles. Identical on a card and
  * on a container: the rows a container shows are the rows of the card it
@@ -226,20 +243,67 @@ export function CardRows({
   showEmptyState?: boolean;
   keepLastBorder?: boolean;
 }) {
-  const {
-    group,
-    connectedVars,
-    isHighlighted,
-    highlightActive,
-    highlightedVars,
-    highlightedVarSeed,
-    onHighlightVariable,
-    onGeneratorOpen,
-    onShowColorMenu,
-    onRenameVariable,
-    onDeleteVariable,
-  } = data;
+  // Row-level highlight only applies inside a card that is itself on the
+  // highlighted chain; everywhere else the rows look the same whatever is
+  // highlighted. Passing the highlight props only in that case lets the
+  // memoized rows (and their ~2 handles each) skip re-rendering when a
+  // highlight merely dims or un-dims the card as a whole.
+  const rowsHighlighted = !!(data.highlightActive && data.isHighlighted);
+  return (
+    <CardRowsList
+      group={data.group}
+      connectedVars={data.connectedVars}
+      rowsHighlighted={rowsHighlighted}
+      highlightedVars={rowsHighlighted ? data.highlightedVars : undefined}
+      highlightedVarSeed={rowsHighlighted ? data.highlightedVarSeed ?? null : null}
+      onHighlightVariable={data.onHighlightVariable}
+      onGeneratorOpen={data.onGeneratorOpen}
+      onShowColorMenu={data.onShowColorMenu}
+      onRenameVariable={data.onRenameVariable}
+      onDeleteVariable={data.onDeleteVariable}
+      showEmptyState={showEmptyState}
+      keepLastBorder={keepLastBorder}
+    />
+  );
+}
 
+type CardRowsListProps = Pick<GroupNodeData,
+  'group' | 'connectedVars' | 'onHighlightVariable' | 'onGeneratorOpen'
+  | 'onShowColorMenu' | 'onRenameVariable' | 'onDeleteVariable'> & {
+  rowsHighlighted: boolean;
+  highlightedVars: Set<string> | undefined;
+  highlightedVarSeed: string | null;
+  showEmptyState: boolean;
+  keepLastBorder: boolean;
+};
+
+/**
+ * Rows re-render only when something they draw changed. Compared by content,
+ * not identity: the layout effect rebuilds each card's `connectedVars` /
+ * `highlightedVars` (cut down to the card's own rows) on every pass, so a
+ * card that is merely dimmed or un-dimmed hands over equal but new
+ * collections. Callbacks still compare by identity.
+ */
+const areCardRowsPropsEqual = (prev: CardRowsListProps, next: CardRowsListProps) => {
+  const cache = new WeakMap<object, WeakSet<object>>();
+  return (Object.keys(next) as Array<keyof CardRowsListProps>)
+    .every(key => isStructurallyEqual(prev[key], next[key], cache));
+};
+
+const CardRowsList = React.memo(function CardRowsList({
+  group,
+  connectedVars,
+  rowsHighlighted,
+  highlightedVars,
+  highlightedVarSeed,
+  onHighlightVariable,
+  onGeneratorOpen,
+  onShowColorMenu,
+  onRenameVariable,
+  onDeleteVariable,
+  showEmptyState,
+  keepLastBorder,
+}: CardRowsListProps) {
   const isCollectionCard = group.kind === 'collection';
   // True when the row-level highlight seed lives in THIS card — its sibling
   // rows get a faded highlight marker to show group membership.
@@ -273,8 +337,8 @@ export function CardRows({
         const showOutputHandle = !node.connectionsDisabled || node.virtualType === 'shader';
         // Dim off-chain rows only within a card that's on the chain; fully
         // off-chain cards are already dimmed as a whole.
-        const rowDimmed = highlightActive && isHighlighted && !highlightedVars?.has(node.name);
-        const isSeedRow = highlightActive && isHighlighted && highlightedVarSeed === node.name;
+        const rowDimmed = rowsHighlighted && !highlightedVars?.has(node.name);
+        const isSeedRow = rowsHighlighted && highlightedVarSeed === node.name;
         const isSiblingRow = rowDimmed && seedInCard;
 
         return (
@@ -371,7 +435,7 @@ export function CardRows({
       })}
     </div>
   );
-}
+}, areCardRowsPropsEqual);
 
 function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
   const { group, isHighlighted, isDimmed } = data;

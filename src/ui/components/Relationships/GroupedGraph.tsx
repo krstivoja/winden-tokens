@@ -122,6 +122,8 @@ import {
   flattenGroupedPaths,
   stripRelPositions,
   isAbsorbedCard,
+  reconcileNodes,
+  reconcileEdges,
 } from './GroupedGraph/utils';
 import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
 import {
@@ -217,6 +219,11 @@ const stripLabelPositions = <T,>(positions: Record<string, T>): Record<string, T
 // it is open, and this keeps the closed state from minting a new array (and a
 // fresh memo result inside the palette) on every render.
 const EMPTY_SEARCH_ITEMS: GraphSearchItem[] = [];
+
+// Shared empties for a card's row state (see cardRowState in the layout
+// effect): a card with nothing to show gets these exact objects every rebuild.
+const NO_HIGHLIGHTED_VARS: Set<string> = new Set();
+const NO_CONNECTED_VARS: Map<string, ConnectionFlags> = new Map();
 
 const edgeTypes: EdgeTypes = {
   customEdge: CustomEdge,
@@ -1524,8 +1531,7 @@ function GroupedGraphInner() {
   // Hiding unchecks sidebar groups for real, so while it is active the
   // filters are frozen at what they were when it began.
   //
-  // Never depends on node positions (see plans/graph-drag-perf.md): a drag
-  // must not recompute it.
+  // Never depends on node positions: a drag must not recompute it.
   const naturalLayoutFiltersRef = useRef(cardVisibilityFilters);
   if (hidingActivation === null) naturalLayoutFiltersRef.current = cardVisibilityFilters;
   const naturalLayoutFilters = hidingActivation === null ? cardVisibilityFilters : naturalLayoutFiltersRef.current;
@@ -1799,6 +1805,28 @@ function GroupedGraphInner() {
     // Same predicate Arrange Grid uses — see isCardHiddenNow.
     const cardHidden = isCardHiddenNow;
 
+    // A card's row state, cut down to ITS OWN rows: CardRows only ever looks
+    // up its own variable names, and the rebuild reconciliation (see
+    // reconcileNodes) keeps a card's node object — and skips rendering it —
+    // only while its data is unchanged. Graph-wide sets here would make every
+    // card "change" whenever any connection or any highlighted row did.
+    const cardRowState = (group: GroupData, isHighlighted: boolean) => {
+      let cardConnected: Map<string, ConnectionFlags> | null = null;
+      let cardHighlighted: Set<string> | null = null;
+      for (const v of group.variables) {
+        const flags = connectedVars.get(v.name);
+        if (flags) (cardConnected ??= new Map()).set(v.name, flags);
+        if (isHighlighted && highlightedVars.has(v.name)) (cardHighlighted ??= new Set()).add(v.name);
+      }
+      const seedInCard = highlightedVarName !== null
+        && group.variables.some(v => v.name === highlightedVarName);
+      return {
+        connectedVars: cardConnected ?? NO_CONNECTED_VARS,
+        highlightedVars: cardHighlighted ?? NO_HIGHLIGHTED_VARS,
+        highlightedVarSeed: seedInCard ? highlightedVarName : null,
+      };
+    };
+
     // One card's worth of node data. Shared, because a CONTAINER renders the
     // card it absorbed from exactly this object — same header, same rows,
     // same actions (part 4).
@@ -1806,16 +1834,15 @@ function GroupedGraphInner() {
       const firstRealVar = group.variables.find(v => !v.isVirtual);
       const sourceVariable = firstRealVar ? variablesById.get(firstRealVar.id) : null;
       const groupIsColorType = sourceVariable?.resolvedType === 'COLOR';
+      const isHighlighted = hasHighlight && highlightedGroups.has(group.key);
       return {
         group,
         isColorType: groupIsColorType,
         variableType: groupIsColorType ? 'COLOR' : 'FLOAT',
-        connectedVars,
-        isHighlighted: hasHighlight && highlightedGroups.has(group.key),
+        isHighlighted,
         isDimmed: hasHighlight && !highlightedGroups.has(group.key),
         highlightActive: hasHighlight,
-        highlightedVars,
-        highlightedVarSeed: highlightedVarName,
+        ...cardRowState(group, isHighlighted),
         onHighlightPath: handleHighlightPath,
         onHideUnused: handleHideUnusedFromCard,
         isHidingUnused: hidingPath !== null,
@@ -1996,12 +2023,10 @@ function GroupedGraphInner() {
             group,
             isColorType: bucket.nodes.every(n => n.resolvedType === 'COLOR'),
             variableType: 'FLOAT',
-            connectedVars,
             isHighlighted: false,
             isDimmed: false,
             highlightActive: hasHighlight,
-            highlightedVars,
-            highlightedVarSeed: highlightedVarName,
+            ...cardRowState(group, false),
             onHighlightPath: handleHighlightPath,
             onHideUnused: handleHideUnusedFromCard,
             isHidingUnused: hidingPath !== null,
@@ -2154,8 +2179,11 @@ function GroupedGraphInner() {
       });
     }
 
-    setNodes(newNodes);
-    setEdges(newEdges);
+    // Unchanged nodes and edges keep their previous objects (no render, no
+    // re-measure); changed nodes keep their last measurement — see
+    // reconcileNodes in GroupedGraph/utils.
+    setNodes(prev => reconcileNodes(prev, newNodes));
+    setEdges(prev => reconcileEdges(prev, newEdges));
     setFocusableRowSignature(collectFocusableRowKeys(newNodes).join('\n'));
   }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, collectionPositionsHydrated, settingsHydrated,
       savedPositionsRevision, groupedPaths,
