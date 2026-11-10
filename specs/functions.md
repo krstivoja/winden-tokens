@@ -127,10 +127,10 @@
 - Tier: inside a column, cards by title, then reordered to reduce wire crossings
 - Collection: inside a column, cards stack by collection order first (the order of the collections in the file), then by Tier mode's order within each collection; managed chains stay one line across their columns in their collection's turn. No collection labels
 - Collection default layout (nothing saved) follows the filters (hidden cards get no slot); Hide unused never moves cards. With no stored captions it shows its own; a drag freezes them with the positions
-- The "Sort by" control only edits the dropdown's draft: Cancel discards a switch, Apply saves it and arranges at once in the new mode, with Undo Arrange to get the previous positions back (the mode itself stays, like the gaps)
+- The "Sort by" control only edits the dropdown's draft: Cancel discards a switch, Apply saves it and arranges at once in the new mode, with Undo Arrange to get the previous positions back; when that Apply switched the mode, Undo Arrange also switches the mode back (saved), so the canvas returns to the previous mode's layout (the gaps stay as applied); Undo after a plain Arrange never touches the mode
 - Arrange Grid follows the mode; saved positions always win over the default layout; hidden (filtered) units are parked in a spare column right of the grid in both modes
 - Undo Arrange (both modes) restores the SAVED record and the captions from before the arrange, never the live positions: cards that had no saved position re-flow with the filters again (Arrange with a filter → Undo → clear the filter no longer overlaps frames). Known and accepted: Arrange with a filter, then clearing the filter WITHOUT Undo can still grow a partly-filtered frame into the next unit — Arrange again
-- Collection mode: a sidebar collection click and the quick-search collection jump move the camera to the collection's first card (topmost of the leftmost column it appears in) instead of fitting all its cards; Tier mode fits them all
+- Collection mode: a sidebar collection click and the quick-search collection jump move the camera to the collection's first card with variables (topmost of the leftmost column it appears in; an empty collection-root card is skipped, and is the target only when nothing else of the collection is visible) instead of fitting all its cards; Tier mode fits them all
 - `graph-layout-labels` (collection row labels of an earlier Collection design) is retired: a stored record is cleared on load, and label ids are stripped from `graph-positions`
 
 **Selection card:**

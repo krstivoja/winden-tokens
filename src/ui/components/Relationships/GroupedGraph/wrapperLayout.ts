@@ -85,8 +85,9 @@ interface UnitForest {
 /**
  * The frames and loose cards `cards` fold into, sized: a frame's cards
  * stacked inside it (visible ones only), every root sized exactly as it is
- * drawn. Shared by the layout and by `measureWrapperFrames`, so the Collection
- * row layout packs frames by the very sizes they render at.
+ * drawn. Shared by the layout and by `measureWrapperFrames`, so Collection
+ * mode's default layout (the tier columns stacked in collection order) packs
+ * frames by the very sizes they render at.
  */
 function buildUnitForest(
   cards: GroupData[],
@@ -216,7 +217,8 @@ function buildUnitForest(
  * anyway) and the frame grows back when the filter is lifted.
  *
  * `naturalPositions` (Collection mode only) is a precomputed absolute spot per
- * top-level unit id — the collection row layout. When given it REPLACES the
+ * top-level unit id — the default layout's tier columns stacked in collection
+ * order (`arrangeGroupsByConnectedBlocks` with `collectionOrder`). When given it REPLACES the
  * natural-origin packing below for every unit it covers; saved positions
  * still win over it. Absent (Tier mode), the packing is exactly as before.
  */

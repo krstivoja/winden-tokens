@@ -335,4 +335,22 @@ describe('selectFirstCollectionNodeId (Collection mode)', () => {
     expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('group:c1::badge-x');
     expect(selectFirstCollectionNodeId([at(cardNode(badge, true), 0, 0)], 'c1')).toBe(null);
   });
+
+  it('skips the empty collection-root card (always tier 1) for the first card with variables', () => {
+    const emptyRoot = group('collection:c1', 'c1', '', [], 'collection');
+    const nodes = [
+      at(cardNode(emptyRoot), 0, 0),
+      at(cardNode(badge), 440, 200),
+      at(cardNode(badgeX), 440, 50),
+    ];
+    expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('group:c1::badge-x');
+  });
+
+  it('a root card WITH variables still counts; the empty root is the fallback only', () => {
+    expect(selectFirstCollectionNodeId([at(cardNode(root), 0, 0), at(cardNode(badge), 440, 0)], 'c1'))
+      .toBe('collection:c1');
+    const emptyRoot = group('collection:c1', 'c1', '', [], 'collection');
+    const nodes = [at(cardNode(emptyRoot), 0, 0), at(cardNode(badge, true), 440, 0)];
+    expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('collection:c1');
+  });
 });

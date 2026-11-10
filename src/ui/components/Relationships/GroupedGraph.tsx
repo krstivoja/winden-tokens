@@ -2368,7 +2368,10 @@ function GroupedGraphInner() {
       if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
       pendingPositionSaveRef.current();
     }
-    lastArrangeUndoRef.current = takeArrangeSnapshot(savedPositionsRef.current, tierLabelsRef.current);
+    // An Apply that switched "Sort by" also records the mode it left, so Undo
+    // switches back (`gridLayoutSettings` here is still the pre-Apply value).
+    const previousSortBy = settings.sortBy !== gridLayoutSettings.sortBy ? gridLayoutSettings.sortBy : undefined;
+    lastArrangeUndoRef.current = takeArrangeSnapshot(savedPositionsRef.current, tierLabelsRef.current, previousSortBy);
     setHasArrangeUndo(true);
 
     setNodes(prevNodes =>
@@ -2421,9 +2424,17 @@ function GroupedGraphInner() {
     setTierLabels(previous.tierLabels);
     post({ type: 'set-client-storage', key: `graph-tier-labels`, value: previous.tierLabels });
 
+    // The arrange was an Apply that switched "Sort by": switch it back, saved.
+    if (previous.sortBy) {
+      const restored = normalizeGridLayoutSettings({ ...gridLayoutSettings, sortBy: previous.sortBy });
+      setGridLayoutSettings(restored);
+      setGridLayoutDraft(toGridLayoutDraft(restored));
+      post({ type: 'set-client-storage', key: `graph-layout-settings`, value: restored });
+    }
+
     lastArrangeUndoRef.current = null;
     setHasArrangeUndo(false);
-  }, []);
+  }, [gridLayoutSettings]);
 
   const handleFocusSelection = useCallback(() => {
     if (!selectedNode) return;

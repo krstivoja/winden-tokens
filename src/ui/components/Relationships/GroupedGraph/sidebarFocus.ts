@@ -93,22 +93,38 @@ export function selectFocusScope(nodes: Node[], collectionId: string, path: stri
  * Collection mode's camera target for a collection: its FIRST card — the
  * topmost visible top-level card or frame of the collection in the leftmost
  * column it appears in. A collection's cards are spread over every tier
- * column there, so fitting all of them would zoom far out. Null when nothing
- * of it is visible.
+ * column there, so fitting all of them would zoom far out. An empty
+ * collection-root card ("No variables at the collection root") has no
+ * connections, so it always sits in tier 1 — it is skipped for the first card
+ * that has variables, and is the target only when nothing else of the
+ * collection is visible. Null when nothing of it is visible.
  */
 export function selectFirstCollectionNodeId(nodes: Node[], collectionId: string): string | null {
   let best: Node | null = null;
-  nodes.forEach(node => {
-    if (node.parentId) return;
+  let emptyRoot: Node | null = null;
+  for (const node of nodes) {
+    if (node.parentId) continue;
     const entry = getFocusEntry(node);
-    if (!entry || entry.collectionId !== collectionId) return;
+    if (!entry || entry.collectionId !== collectionId) continue;
+    if (isEmptyRootCard(node)) {
+      emptyRoot = emptyRoot ?? node;
+      continue;
+    }
     if (!best
       || node.position.x < best.position.x
       || (node.position.x === best.position.x && node.position.y < best.position.y)) {
       best = node;
     }
-  });
-  return best ? (best as Node).id : null;
+  }
+  const target = best ?? emptyRoot;
+  return target ? target.id : null;
+}
+
+/** A loose collection-root card with no rows — the empty-root placeholder. */
+function isEmptyRootCard(node: Node): boolean {
+  if (node.type !== 'groupNode') return false;
+  const group = (node.data as { group?: GroupData } | undefined)?.group;
+  return !!group && group.kind === 'collection' && group.variables.length === 0;
 }
 
 /**

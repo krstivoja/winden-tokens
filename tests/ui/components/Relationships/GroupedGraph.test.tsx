@@ -213,6 +213,36 @@ describe('Grid Settings "Sort by"', () => {
     expect(screen.getByText('Undo Arrange')).toBeTruthy();
   });
 
+  it('Undo after an Apply that switched the mode restores the previous mode too', async () => {
+    mount(allGroups);
+    await waitFor(() => nodeBox('wrapper:c2::'));
+    openGridSettings();
+    fireEvent.click(screen.getByRole('tab', { name: 'Collection' }));
+    fireEvent.click(screen.getByText('Apply'));
+    posted.length = 0;
+
+    fireEvent.click(await screen.findByText('Undo Arrange'));
+
+    const positions = posted.filter(m => m.type === 'set-client-storage' && m.key === 'graph-positions');
+    expect(positions[positions.length - 1].value).toEqual({});
+    const saved = posted.filter(m => m.type === 'set-client-storage' && m.key === 'graph-layout-settings');
+    expect(saved.length).toBe(1);
+    expect((saved[0].value as { sortBy: string }).sortBy).toBe('tier');
+    // Apply leaves the panel open; its draft follows the restored mode.
+    expect(selectedTab()).toBe('Tier');
+  });
+
+  it('Undo after a plain Arrange leaves the mode alone', async () => {
+    mount(allGroups, { sortBy: 'collection' });
+    await waitFor(() => nodeBox('wrapper:c2::'));
+    fireEvent.click(screen.getByText('Arrange Grid'));
+    posted.length = 0;
+    fireEvent.click(await screen.findByText('Undo Arrange'));
+    expect(posted.some(m => m.type === 'set-client-storage' && m.key === 'graph-layout-settings')).toBe(false);
+    openGridSettings();
+    expect(selectedTab()).toBe('Collection');
+  });
+
   it('Collection default layout follows the filters: hiding c1\'s groups moves c2 up', async () => {
     const view = mount(allGroups, { sortBy: 'collection' });
     await waitFor(() => expect(document.querySelector('[data-id="tier-label:1"]')).not.toBe(null));

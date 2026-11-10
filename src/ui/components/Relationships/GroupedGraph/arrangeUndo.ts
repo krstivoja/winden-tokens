@@ -9,8 +9,14 @@
 // and the two overlapped. Restoring the record verbatim (possibly `{}`) keeps
 // those units natural, so they re-flow when the filter changes, as before the
 // arrange. Applies to both layouts (Tier and Collection).
+//
+// An Apply in Grid Settings that switches "Sort by" is an arrange too, and
+// its Undo must also switch the mode back: positions `{}` under the new mode
+// would still draw the new mode's natural layout. So the snapshot carries the
+// previous `sortBy` then — and only then; a plain Arrange leaves it out and
+// its Undo never touches the mode.
 
-import type { TierPlacement } from './types';
+import type { GraphSortBy, TierPlacement } from './types';
 
 type PositionRecord = Record<string, { x: number; y: number }>;
 
@@ -19,19 +25,27 @@ export interface ArrangeUndoSnapshot {
   positions: PositionRecord;
   /** The tier captions (`graph-tier-labels`) before the arrange. */
   tierLabels: TierPlacement[];
+  /** The "Sort by" mode before the arrange — set only when the arrange
+   *  (an Apply) switched it. */
+  sortBy?: GraphSortBy;
 }
 
 /** Copy the pre-arrange state; later mutation of the inputs cannot leak in. */
 export function takeArrangeSnapshot(
   savedPositions: PositionRecord,
-  tierLabels: TierPlacement[]
+  tierLabels: TierPlacement[],
+  previousSortBy?: GraphSortBy
 ): ArrangeUndoSnapshot {
   const positions: PositionRecord = {};
   Object.entries(savedPositions).forEach(([key, pos]) => { positions[key] = { x: pos.x, y: pos.y }; });
-  return { positions, tierLabels: tierLabels.map(label => ({ ...label })) };
+  return {
+    positions,
+    tierLabels: tierLabels.map(label => ({ ...label })),
+    ...(previousSortBy ? { sortBy: previousSortBy } : {}),
+  };
 }
 
 /** What Undo writes back: the snapshot itself, verbatim — nothing frozen. */
 export function restoreArrangeSnapshot(snapshot: ArrangeUndoSnapshot): ArrangeUndoSnapshot {
-  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels);
+  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels, snapshot.sortBy);
 }
