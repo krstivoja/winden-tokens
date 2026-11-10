@@ -10,7 +10,7 @@
 
 import type { Node } from '@xyflow/react';
 import { getCollectionGroupKey } from '../../../utils/groupFilters';
-import type { GroupData, WrapperNodeData } from './types';
+import type { CollectionHeaderPlacement, GroupData, WrapperNodeData } from './types';
 
 /** Synthetic library cards — not part of any sidebar collection tree. */
 const EXTERNAL_CARD_PREFIX = 'ext-group:';
@@ -91,13 +91,13 @@ export function selectFocusScope(nodes: Node[], collectionId: string, path: stri
 
 /**
  * Collection mode's camera target for a collection: its FIRST card — the
- * topmost visible top-level card or frame of the collection in the leftmost
- * column it appears in. A collection's cards are spread over every tier
- * column there, so fitting all of them would zoom far out. An empty
- * collection-root card ("No variables at the collection root") has no
- * connections, so it always sits in tier 1 — it is skipped for the first card
- * that has variables, and is the target only when nothing else of the
- * collection is visible. Null when nothing of it is visible.
+ * topmost visible top-level card or frame of the collection, leftmost first
+ * (a managed chain's later lanes sit to the right and lose). A collection's
+ * column can be very tall, so fitting all of it would zoom far out. An empty
+ * collection-root card ("No variables at the collection root") is skipped for
+ * the first card that has variables (it is last in its column anyway), and is
+ * the target only when nothing else of the collection is visible. Null when
+ * nothing of it is visible.
  */
 export function selectFirstCollectionNodeId(nodes: Node[], collectionId: string): string | null {
   let best: Node | null = null;
@@ -118,6 +118,22 @@ export function selectFirstCollectionNodeId(nodes: Node[], collectionId: string)
   }
   const target = best ?? emptyRoot;
   return target ? target.id : null;
+}
+
+/**
+ * Collection mode's column header for a collection (`tier-label:collection:`),
+ * when it is on screen. Fitted together with the first card so the camera
+ * lands at the top of the column with its name visible. A header is a fit
+ * target only, never a highlight: it has no card key. Tier captions never
+ * answer, so in Tier mode this is always null.
+ */
+export function selectCollectionHeaderNodeId(nodes: Node[], collectionId: string): string | null {
+  const header = nodes.find(node => {
+    if (node.hidden || node.type !== 'tierLabel') return false;
+    const data = node.data as Partial<CollectionHeaderPlacement> | undefined;
+    return data?.kind === 'collection' && data.collectionId === collectionId;
+  });
+  return header ? header.id : null;
 }
 
 /** A loose collection-root card with no rows — the empty-root placeholder. */

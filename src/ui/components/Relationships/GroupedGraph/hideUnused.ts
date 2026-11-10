@@ -13,7 +13,7 @@
 // (`isCardHidden`), so hide-unused can never un-hide a filtered card.
 
 import { getCollectionGroupKey, getVariableGroupName } from '../../../utils/groupFilters';
-import type { ConnectionRecord, GroupData, TierPlacement } from './types';
+import type { ConnectionRecord, GroupData, TierLabelNodeData } from './types';
 
 export interface HighlightPath {
   /** Cards holding any variable on the path, plus the highlighted card. */
@@ -320,10 +320,11 @@ export function isEdgeOffPath(edgeId: string, hidingPath: HighlightPath | null):
  * is geometric — a caption is one column wide and knows nothing else — so a
  * caption stays while any visible top-level node overlaps its column.
  * `visibleBoxes` are the horizontal extents of the top-level cards and frames
- * still on screen.
+ * still on screen. Collection mode's column headers follow the same rule (a
+ * header is exactly one column wide).
  */
 export function isTierLabelHidden(
-  label: TierPlacement,
+  label: Pick<TierLabelNodeData, 'x' | 'width'>,
   visibleBoxes: Array<{ x: number; width: number }>
 ): boolean {
   const left = label.x;
@@ -348,7 +349,9 @@ type PositionRecord = Record<string, { x: number; y: number }>;
 export interface HidingLayout {
   activation: string;
   positions: PositionRecord;
-  tierLabels: TierPlacement[];
+  /** Tier captions in Tier mode; the temporary layout's column headers in
+   *  Collection mode. */
+  tierLabels: TierLabelNodeData[];
 }
 
 /**

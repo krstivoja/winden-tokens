@@ -5,6 +5,7 @@ import {
   isPathInScope,
   selectFocusScope,
   selectFirstCollectionNodeId,
+  selectCollectionHeaderNodeId,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/sidebarFocus';
 import {
   computeHighlightPath,
@@ -352,5 +353,33 @@ describe('selectFirstCollectionNodeId (Collection mode)', () => {
     const emptyRoot = group('collection:c1', 'c1', '', [], 'collection');
     const nodes = [at(cardNode(emptyRoot), 0, 0), at(cardNode(badge, true), 440, 0)];
     expect(selectFirstCollectionNodeId(nodes, 'c1')).toBe('collection:c1');
+  });
+});
+
+describe('selectCollectionHeaderNodeId (Collection mode)', () => {
+  const header = (collectionId: string, hidden = false): Node => ({
+    id: `tier-label:collection:${collectionId}`,
+    type: 'tierLabel',
+    position: { x: 0, y: -40 },
+    hidden,
+    data: { kind: 'collection', collectionId, name: collectionId, x: 0, width: 260 },
+  });
+  const tierCaption: Node = {
+    id: 'tier-label:1', type: 'tierLabel', position: { x: 0, y: -40 }, data: { tier: 1, x: 0, width: 260 },
+  };
+
+  it('finds the visible header of the collection only', () => {
+    const nodes = [tierCaption, header('c2'), header('c1'), cardNode(badge)];
+    expect(selectCollectionHeaderNodeId(nodes, 'c1')).toBe('tier-label:collection:c1');
+    expect(selectCollectionHeaderNodeId([header('c1', true)], 'c1')).toBe(null);
+  });
+
+  it('Tier mode has no header: tier captions never answer', () => {
+    expect(selectCollectionHeaderNodeId([tierCaption, cardNode(badge)], 'c1')).toBe(null);
+  });
+
+  it('a header is never a focus target: not in cardKeys, not in the scope', () => {
+    const scope = selectFocusScope([header('c1'), cardNode(badge)], 'c1', '');
+    expect(scope).toEqual({ cardKeys: ['group:c1::badge'], nodeIds: ['group:c1::badge'] });
   });
 });

@@ -15,6 +15,11 @@
 // would still draw the new mode's natural layout. So the snapshot carries the
 // previous `sortBy` then — and only then; a plain Arrange leaves it out and
 // its Undo never touches the mode.
+//
+// Each mode keeps its own record (`graph-positions` for Tier,
+// `graph-positions-collection` for Collection), so the snapshot names the
+// store it was taken from and Undo writes it back to THAT store. The tier
+// captions only mean something for a Tier snapshot.
 
 import type { GraphSortBy, TierPlacement } from './types';
 
@@ -23,6 +28,8 @@ type PositionRecord = Record<string, { x: number; y: number }>;
 export interface ArrangeUndoSnapshot {
   /** The saved positions record before the arrange. */
   positions: PositionRecord;
+  /** The mode whose record `positions` is — where Undo writes it back. */
+  store: GraphSortBy;
   /** The tier captions (`graph-tier-labels`) before the arrange. */
   tierLabels: TierPlacement[];
   /** The "Sort by" mode before the arrange — set only when the arrange
@@ -34,6 +41,7 @@ export interface ArrangeUndoSnapshot {
 export function takeArrangeSnapshot(
   savedPositions: PositionRecord,
   tierLabels: TierPlacement[],
+  store: GraphSortBy,
   previousSortBy?: GraphSortBy
 ): ArrangeUndoSnapshot {
   const positions: PositionRecord = {};
@@ -41,11 +49,12 @@ export function takeArrangeSnapshot(
   return {
     positions,
     tierLabels: tierLabels.map(label => ({ ...label })),
+    store,
     ...(previousSortBy ? { sortBy: previousSortBy } : {}),
   };
 }
 
 /** What Undo writes back: the snapshot itself, verbatim — nothing frozen. */
 export function restoreArrangeSnapshot(snapshot: ArrangeUndoSnapshot): ArrangeUndoSnapshot {
-  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels, snapshot.sortBy);
+  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels, snapshot.store, snapshot.sortBy);
 }

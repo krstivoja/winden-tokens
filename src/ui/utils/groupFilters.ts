@@ -9,6 +9,27 @@ export function getVariableGroupName(variableName: string): string | null {
   return parts.slice(0, -1).join('/');
 }
 
+/**
+ * The sidebar tree's order for two group paths of one collection: segment by
+ * segment with `localeCompare`, a parent before everything below it (the tree
+ * is walked depth-first). '' (the collection root) comes first. A whole-string
+ * compare can disagree — it puts `badge-x` before `badge/color`, the tree puts
+ * the `badge` folder first.
+ */
+export function compareGroupPaths(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === '') return -1;
+  if (b === '') return 1;
+  const aParts = a.split('/');
+  const bParts = b.split('/');
+  const shared = Math.min(aParts.length, bParts.length);
+  for (let i = 0; i < shared; i++) {
+    const order = aParts[i].localeCompare(bParts[i]);
+    if (order !== 0) return order;
+  }
+  return aParts.length - bParts.length;
+}
+
 export function getCollectionGroupKey(collectionId: string, groupName: string): string {
   return `${collectionId}::${groupName}`;
 }

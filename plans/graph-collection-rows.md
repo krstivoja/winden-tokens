@@ -1,10 +1,171 @@
 # Graph: "Sort by: Tier / Collection" — collection rows as a second layout
 
-Status: Revision 2 (below) supersedes the row design; Revision 1 was implemented, then replaced. Open: C1 independent verifier, C2 browser QA, C3 manual Figma check, C4 plan deletion.
+Status: Revision 3 (approved by the user, implemented: phases D-F done) replaces Revision 2's Collection-mode design; Revision 2 replaced Revision 1's rows.
+Tier mode is unchanged by every revision.
+Open: Revision 3 Phase G (verification by separate agents, browser QA, manual Figma check); the old C1-C4 are folded into Phase G.
 
 Related: `plans/arrange-tiers-and-wrapping.md` documents the Tier layout, which stays as it is (its open manual Figma check still applies to Tier mode).
 
-## Revision 2 (user feedback after testing Collection mode) — supersedes the row design below
+## Revision 3 (approved by the user) — one column per collection; replaces Revision 2's design
+
+Problem with Revision 2: Collection mode was still the tier grid, so one collection's cards were spread over every tier column and "Collection" did not read as collections.
+
+### Design
+
+- Collection mode = ONE COLUMN PER COLLECTION, left to right in collection order (the `collections` order from the app context, e.g. `_global`, color, typography, components, dimensions).
+- Tier mode is unchanged: tier columns, "Tier N" captions, `graph-tier-labels`, free drag, Arrange/Undo exactly as today.
+- Column header: the existing `TierLabelNode` with a `kind: 'collection'` variant showing the collection name (same classes, `border-b`, ellipsis, no qualifier).
+  The name is resolved at render time from the collection id, so a rename updates it.
+  Node id `tier-label:collection:<collectionId>`: it starts with `TIER_LABEL_NODE_PREFIX`, so `isTierLabelNodeId`, the drag save, the undo snapshot, unit folding and `isCardHidden` keep ignoring it with no code change.
+  Same inert node rules as tier captions (not draggable/selectable/connectable/focusable/deletable, `pointerEvents: none`, pushed first so it draws under cards).
+  Headers are never persisted: they are derived live from the column layout every render.
+- Inside a column, top-level units (loose cards and frames) stack top to bottom by path, in the sidebar tree's order.
+  The sidebar sorts segment-wise (`SidebarFilter.tsx` `buildGroupTree`, `localeCompare` per segment, depth-first); a whole-string `localeCompare` (what `buildUnitForest` uses) can disagree (`badge/color` vs `badge-x`).
+  So the segment-wise comparator is extracted once (`compareGroupPaths` in `src/ui/utils/groupFilters.ts`) and used by both the sidebar and the column layout.
+  The collection root card (path `''`) comes first, like the collection row in the sidebar; the EMPTY root card ("No variables at the collection root") goes last (see Q3).
+  Cards inside a frame keep the frame's own stacking (unchanged).
+- Every column starts at the top (y = 0, headers above it at the existing `TIER_LABEL_Y`).
+  Column width = the widest visible unit in it (card `GROUP_WIDTH` 260, frame width from `measureWrapperFrames`, a managed chain line — see below).
+  Column x = running sum of (previous width + `gapX`); unit spacing in a column = `gapY` (both from Grid Settings).
+  Units are left-aligned in their column; the header is the column's width.
+- Managed chains (source → shader → shades/steps) sit in their source's collection column at the source's path slot, as ONE horizontal line (source at column x, the next lane `GROUP_WIDTH + gapX` right of it, …).
+  The line's width counts toward the column width, so only a column holding a chain widens (see Q2 for the vertical alternative).
+- External/library cards and the selection card stay outside the columns, right of the last column (`maxRight`), free to drag, as today.
+
+### Pure layout function
+
+- New pure `GroupedGraph/columnLayout.ts`: `layoutCollectionColumns(input)` → `{ positions: Map<unitId,{x,y}>, columns: { collectionId, x, width }[], maxRight }`.
+  Input: the top-level units (id, collectionId, sort path, width, height, visible), managed chains, collection order, `gapX`, `gapY`.
+  No depth walk, no barycenter, no connections: the order is the path order, so it is deterministic and independent of node positions (drag-perf rule, `plans/graph-drag-perf.md`).
+  Collections not in the order (should not happen) go last, by id.
+- `arrangeGroupsByConnectedBlocks` loses its `collectionOrder` option (Revision 2's Pass 3 becomes dead); the Tier path returns to exactly its pre-Revision-2 code, which `arrangeTiers.test.ts` / `arrangeVisibility.test.ts` already guard.
+
+### Drag lock (Collection mode only)
+
+Recommendation: rewrite the x of position changes in `handleNodesChangeWrapped`, before `onNodesChange` applies them — NOT a per-node `extent`.
+- A pure helper `lockChangesToColumns(changes, lockedX: ReadonlyMap<nodeId, number>)` returns the changes with `position.x` (and `positionAbsolute`-style fields if present) replaced by the locked x for every id in the map; others pass through untouched.
+- `lockedX` = the x the layout effect gave every column unit (column units only: loose cards, frames, chain cards at their own lane x), kept in a ref written by the layout effect, so it also covers a temporary hide-unused arrange.
+- Why not `extent: [[colX, -Infinity], [colX + w, Infinity]]`: xyflow clamps against the node's MEASURED width, so `w` must equal the drawn width exactly or the node gets slack inside the column; it must be rebuilt per node whenever widths change; and a node narrower than its column would need its own width, not the column's.
+  The change rewrite is width-independent, exact, and covers mouse drag, multi-selection drag and keyboard arrow moves in one place (all arrive as `position` changes); xyflow recomputes each drag frame from the pointer, so the clamp does not accumulate drift.
+- `snapToGrid [8, 8]` still snaps y; x is overwritten after the snap, so a column x that is not a multiple of 8 stays exact.
+- In-frame cards are already `draggable: false` and are not in `lockedX`; their frame is.
+- Headers are not draggable; external/library cards and the selection card are not in `lockedX` (free).
+- Tier mode passes an empty map: nothing is rewritten.
+
+### Saved positions per mode
+
+Recommendation: SEPARATE stores per mode, with x never trusted in Collection mode.
+- `graph-positions` stays the Tier record, untouched by Collection mode.
+- New `graph-positions-collection` (same `{x,y}` shape, same `rel:`/label stripping on load) holds Collection mode's manual moves.
+- Collection layout: a column unit's position = `{ x: column layout x, y: saved.y ?? natural.y }` — the saved x is ignored, so nothing stored (or a stale record) can ever break the columns.
+  Done by a pure merge helper in `columnLayout.ts` (`resolveColumnPositions(saved, natural)`) before `buildWrapperLayout`, so `buildWrapperLayout` itself does not change.
+  Non-column nodes (external, selection) use the saved `{x,y}` as today.
+- Drag save in Collection mode merges ONLY the moved top-level nodes into `graph-positions-collection` (Tier mode keeps saving every top-level position, unchanged).
+  Everything not moved stays natural, so it keeps re-flowing with filters and gap changes (this avoids Revision 2's "a drag freezes the whole layout" class in Collection mode).
+- Arrange Grid in Collection mode = reset: write `{}` to `graph-positions-collection` (every unit natural, columns re-packed with the current gaps).
+  No hidden-unit parking is needed: hidden units have no saved x to lose, and get their natural slot when shown.
+- Why separate stores: switching modes no longer destroys the other mode's manual layout, and a Tier free x can never land in a column.
+  Existing users: `graph-positions` may hold a Revision 2 Collection-mode layout; it simply becomes the Tier record (no migration; an Arrange in Tier mode fixes it).
+- `graph-tier-labels` is Tier-only from now on; Collection mode never reads or writes it.
+  Dead: the Revision 2 live-derived caption freeze in the drag save (`liveDerivedTierLabelsRef`) and Collection mode's use of tier captions.
+
+### Switching, Undo, Sort-by undo (Decision 8 revisited)
+
+- Apply in Grid Settings saves the settings, then arranges the mode it lands in, as today (Decision 8 kept); its Undo restores the previous mode as today.
+  See Q1: with separate stores a switch-only Apply no longer needs to arrange.
+- `ArrangeUndoSnapshot` gains `store: GraphSortBy` — the record it was taken from (`graph-positions` or `graph-positions-collection`); `tierLabels` is only meaningful for `'tier'`.
+  Undo writes the positions back verbatim to THAT store (possibly `{}`), restores tier captions only for a Tier snapshot, and restores `sortBy` when the snapshot carries it (unchanged rule).
+- Flush a pending drag save before the snapshot (unchanged); the flushed save goes to the store of the mode it was made in (decided when the drag happens, like `temporary` today).
+
+### Hidden cards and filters
+
+- The column layout is filter-aware (collections, types, groups, selection force-show), exactly like Revision 2's default layout: hidden units are skipped and take no room.
+- A collection with no visible unit collapses its column entirely: no header, no gap (recommended; consistent with empty tier columns collapsing).
+  The selection-provider force-show counts as visible.
+- Hide unused never moves cards: while hiding is active the layout's filters stay frozen at what they were before (the existing `naturalLayoutFiltersRef` mechanism), so columns keep their x and width and hidden cards just disappear.
+  A header whose column lost every visible card while hiding uses the existing geometric `isTierLabelHidden` rule (a header is one column wide, exactly like a caption).
+- Arrange while hiding (temporary arrange, `hidingLayout`) in Collection mode: the column layout of the visible units, written to `hidingLayout.positions` only, never to a store; "Show all" brings back the saved layout (as today).
+
+### Sidebar and quick search
+
+- Collection click (sidebar collection row and quick-search collection jump), Collection mode only: fit the column header plus the collection's first non-empty card (`fitView({ nodes: [header, first], maxZoom: 1 })`), so the camera lands at the top of the column with its name visible.
+  `selectFirstCollectionNodeId` already picks the topmost-leftmost non-empty card (chain lanes to the right lose on x), skipping the empty root; it stays, and a new `selectCollectionHeaderNodeId(nodes, collectionId)` returns the visible header id or null.
+  Header ids go into `nodeIds` only, never `cardKeys` (nothing to highlight).
+- Group clicks and Tier mode are unchanged.
+
+### Edges
+
+- Handles are fixed: targets (`::in`) on the left, sources (`::out`) on the right (`GraphHandle`, `GraphEdge` `getBezierPath`).
+- Cross-collection aliases now run between columns in either direction: a provider to the RIGHT of its consumer (e.g. `components` reading `dimensions`) draws a backward bezier that leaves right, loops back and crosses the columns in between.
+- Same-collection aliases (very common, e.g. semantic → primitive inside `color`) now connect two cards in ONE column: the edge leaves the right edge and must re-enter the left edge of a card above/below, so it crosses the column's own cards.
+  This is the biggest readability cost of the design (Revision 2's tiers kept every edge left-to-right).
+- v1 recommendation: no edge-routing change; check on the real file (Phase G).
+  Possible follow-up, separate plan: dual-side handles (pick the in/out side facing the other end) or a custom same-column route through the column gutter; both touch every card's handles, so not here.
+- No handle-side or edge-id changes are made; edge memoization and the drag-perf path are untouched.
+
+### Revision 3 steps
+
+Implementation notes (Revision 3):
+- Q1-Q5 decided as recommended: a switch-only Apply just switches (no arrange; it also drops the Undo Arrange step and any temporary arrange, which belong to the layout being left, and fits the view); chain = one line; empty root last; hidden collections collapse; edges unchanged.
+- `buildCollectionColumnItems` (in `columnLayout.ts`) folds `groupsData` into column items (frame sizes from `measureWrapperFrames`, chains grouped by collection + source name, lane order); shared by the natural-layout memo (frozen filters) and the temporary Collection arrange (`isCardHiddenNow`).
+- `isCollectionHeader` type guard lives in `utils.ts` next to `isTierLabelNodeId`.
+- `buildWrapperLayout`'s Revision 2 `naturalPositions` parameter is kept (unchanged, still tested) but no caller passes it any more: Collection mode hands every column unit's spot in through `savedPositions` (`resolveColumnPositions`).
+- `collectionSort.test.ts` deleted (every case tested the removed `collectionOrder`); `arrangeGroupsByConnectedBlocks` diffed equal to its `aaa8d15` (pre-Revision-2) code.
+- Keyboard move in T14: xyflow selects a focused node on Enter, then arrow keys move it (a click does not select in jsdom, no d3-drag).
+
+Phase D — pure pieces (parallel: each owns disjoint files)
+- [x] D1 [parallel] `columnLayout.ts` (`layoutCollectionColumns`, `resolveColumnPositions`, `lockChangesToColumns`) + `compareGroupPaths` extracted to `src/ui/utils/groupFilters.ts` and used by `SidebarFilter.tsx` `buildGroupTree` (no sidebar behaviour change). Tests T8, T9, T10.
+- [x] D2 [parallel] `TierLabelNode` `kind: 'collection'` variant + `TierLabelNodeData` union in `types.ts` (tier variant renders exactly as today). Tests T11.
+- [x] D3 [parallel] `arrangeUndo.ts` `store` field; `sidebarFocus.ts` `selectCollectionHeaderNodeId`. Tests T12, T13.
+- [x] D4 [parallel] `utils.ts`: remove `collectionOrder` from `arrangeGroupsByConnectedBlocks` (Pass 3 Collection branch deleted, Tier path byte-identical to before Revision 2); retire its cases in `collectionSort.test.ts`. Tier tests green with unchanged expectations.
+
+Phase E — wiring in `GroupedGraph.tsx` (sequential, one agent, after D)
+- [x] E1 Storage: load/hydrate `graph-positions-collection` (same stripping as `graph-positions`, joins the hydration gate); an active-store ref chosen by `sortBy`.
+- [x] E2 Layout effect, Collection branch: `collectionNaturalLayout` memo → `layoutCollectionColumns` (same deps rule: never node positions); headers instead of tier captions; `resolveColumnPositions` before `buildWrapperLayout` and for managed chains; `maxRight` from the columns; `lockedXRef` written. Tier branch untouched.
+- [x] E3 Drag: `lockChangesToColumns` in `handleNodesChangeWrapped` (Collection mode only); Collection drag save merges moved nodes into `graph-positions-collection`; delete the live-derived caption freeze.
+- [x] E4 Arrange (Collection = reset to `{}`; temporary arrange while hiding = column layout into `hidingLayout`), Undo per store, Apply/Sort-by undo with the `store` field.
+- [x] E5 Sidebar collection click + quick-search collection jump: header + first card.
+- [x] E6 Dead code: Revision 2 Collection-mode caption derivation, `liveDerivedTierLabelsRef`, the `row-label:` check in the load migration only if nothing stored can still carry it (keep it otherwise — it is the migration).
+
+Phase F — specs (parallel with E, docs agent, mid-tier model)
+- [x] F1 `specs/functions.md` § Variable Relationships: Collection mode = one column per collection, path order, header, vertical-only drag, per-mode stores, Arrange = reset, collapsed columns; drop the Revision 2 bullets ("Both modes use the same tier columns …").
+- [x] F2 `specs/components.md` § GroupedGraph: `columnLayout.ts`, `TierLabelNode` collection variant, `arrangeUndo` `store`; `specs/structure.md`: `columnLayout.ts`.
+
+Phase G — verification (separate agents, never the implementer)
+- [ ] G1 Verifier: diff review (Tier path unchanged: `arrangeGroupsByConnectedBlocks` equal to its pre-Revision-2 code, `buildWrapperLayout` unchanged), `npx vitest run`, `npm run build`, `tsc` count vs a baseline re-measured on this branch first, lint if configured.
+- [ ] G2 Browser QA with mock data, pixel-level: columns in collection order with names, every column top-aligned, widths = widest unit, gaps from settings; drag a card and a frame → only y changes (also multi-select and arrow keys); reload keeps it; switch to Tier → Tier layout untouched by the Collection drag; Apply with switch → Undo; filters collapse columns; Hide unused + Show all moves nothing; sidebar collection click lands on header + first card; edge readability screenshots for same-column and right-to-left aliases.
+- [ ] G3 Manual Figma check (user): real file in both modes, plus the open Tier check in `plans/arrange-tiers-and-wrapping.md`.
+- [ ] G4 Delete this plan once everything passes (keep `plans/arrange-tiers-and-wrapping.md`).
+
+### Revision 3 tests (under `tests/ui/components/Relationships/`; `fireEvent`, plain matchers)
+
+- T8 `columnLayout.test.ts`: columns in collection order; x = running width + `gapX`; width = widest visible unit (frame widens, chain line widens); path order matches `buildGroupTree` order incl. `badge/color` vs `badge-x`; root card first, empty root last; every column starts at y 0, `gapY` between units; hidden units skipped; fully hidden collection → no column, no gap; selection force-show keeps a column; deterministic under shuffled input; unknown collection last.
+- T9 `columnLayout.test.ts` (`resolveColumnPositions`): saved x ignored, saved y kept; unsaved → natural; non-column ids keep saved `{x,y}`; a Tier-style free x never leaves the column.
+- T10 `columnLayout.test.ts` (`lockChangesToColumns`): locked ids get the column x, others and non-position changes untouched, empty map = identity.
+- T11 `TierLabelNode.test.tsx`: collection variant shows the name, no "Tier"/qualifier; tier variant unchanged.
+- T12 `arrangeUndo.test.ts`: snapshot carries `store`; restore round-trips it; existing cases unchanged.
+- T13 `sidebarFocus.test.ts`: header id found only when visible; never in `cardKeys`; Tier mode has no header.
+- T14 `GroupedGraph.test.tsx` (real xyflow): Collection mode renders one header per visible collection in order; a position change (keyboard move) on a card keeps its x; it is saved to `graph-positions-collection` only, `graph-positions` untouched; Arrange writes `{}` and Undo restores the previous Collection record; Apply switch → Undo restores mode and store; the Revision 2 known-bug repro still passes in Tier mode.
+- Existing `arrangeTiers.test.ts`, `arrangeVisibility.test.ts`, `oneLevelFrames.test.tsx`, `wrapperMembership.test.ts`: no expectation changes.
+
+### Revision 3 risks
+
+- Edge readability (see Edges): same-collection aliases now loop inside a column; may be worse than Revision 2 on the real file — G2/G3 decide whether the dual-side-handle follow-up is needed.
+- Free vertical drag can overlap: a moved card keeps its y while unmoved neighbours re-flow (filter or gap change, card growing). Arrange resets; same class as Tier mode's saved positions.
+- Very tall columns (e.g. a big `color` collection) make the first fit zoom far out; sidebar collection click compensates.
+- `GroupedGraph.tsx` (2.7k lines) is the bulk of the diff: E1-E6 sequential, one agent.
+- Removing `collectionOrder` must bring the Tier path back exactly; G1 diffs it against the code from before Revision 2's R1 commit.
+- xyflow internals: if a future xyflow emits drag positions outside `onNodesChange`, the x rewrite would miss them; T14 guards the keyboard path, G2 the mouse path.
+
+### Revision 3 open questions (recommendations in bold)
+
+- Q1 Apply that ONLY switches Sort by: arrange (today, Decision 8) or just switch? **Just switch**: separate stores make switching lossless, and an arrange would wipe the target mode's manual moves; an Apply that changes gaps still arranges the target mode, with Undo.
+- Q2 Managed chain inside a column: **one horizontal line, column widens** (generated edges stay left-to-right) vs stacked vertically (narrow column, but generated edges loop like same-column aliases).
+- Q3 Empty collection-root card ("No variables at the collection root"): **last in its column** (the header already names the collection) vs first (strict sidebar order) vs not drawn in Collection mode.
+- Q4 Fully hidden collection: **column collapses** vs empty header kept as a placeholder.
+- Q5 Same-column / right-to-left edges: **accept for v1, decide after G3** vs dual-side handles in this change.
+
+## Revision 2 (user feedback after testing Collection mode) — REPLACED by Revision 3 (its tier-column Collection layout, `collectionOrder` and live-derived captions go away; its Undo overlap fix and Sort-by undo stay)
 
 Problem: with shared rows, a later collection's tier-2 column started far below the previous row's tall tier-1 column, leaving large empty areas.
 

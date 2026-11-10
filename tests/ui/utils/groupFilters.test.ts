@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  compareGroupPaths,
   getCollectionGroupKey,
   getGroupKeysByCollection,
   isVariableVisibleForGroupFilters,
@@ -61,5 +62,12 @@ describe('isVariableVisibleForGroupFilters - other collections untouched by a gr
     const selected = new Set(['color::color/background', 'dim::spacing']);
     const visible = vars.filter(v => isVariableVisibleForGroupFilters(v, selected, keys)).map(v => v.name);
     expect(visible).toEqual(['color/background/a', 'spacing/s', 'loose']);
+  });
+});
+
+describe('compareGroupPaths', () => {
+  it('orders like the sidebar tree: root first, parent before children, segment-wise', () => {
+    expect(['b', 'a/z', '', 'a', 'a-b'].sort(compareGroupPaths)).toEqual(['', 'a', 'a/z', 'a-b', 'b']);
+    expect(compareGroupPaths('x', 'x')).toBe(0);
   });
 });

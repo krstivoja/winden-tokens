@@ -48,7 +48,7 @@ describe('Arrange → Undo with a filter on, then lift the filter', () => {
 
   it('restoring the pre-arrange SAVED record leaves no overlap', () => {
     const saved = {};
-    const snapshot = takeArrangeSnapshot(saved, []);
+    const snapshot = takeArrangeSnapshot(saved, [], 'tier');
     // Arrange writes its record; Undo writes the snapshot back.
     let record: Record<string, { x: number; y: number }> = arranged;
     record = restoreArrangeSnapshot(snapshot).positions;
@@ -67,11 +67,23 @@ describe('Arrange → Undo with a filter on, then lift the filter', () => {
   it('copies: mutating the inputs after the snapshot cannot change it', () => {
     const saved = { a: { x: 1, y: 2 } };
     const tiers = [{ tier: 1, x: 0, width: 260 }];
-    const snapshot = takeArrangeSnapshot(saved, tiers);
+    const snapshot = takeArrangeSnapshot(saved, tiers, 'tier');
     saved.a.x = 99;
     tiers[0].x = 99;
     expect(snapshot.positions.a.x).toBe(1);
     expect(snapshot.tierLabels[0].x).toBe(0);
     expect(restoreArrangeSnapshot(snapshot)).toEqual(snapshot);
+  });
+});
+
+describe('per-mode store', () => {
+  it('the snapshot carries the store it was taken from, and restore round-trips it', () => {
+    const tier = takeArrangeSnapshot({ a: { x: 1, y: 2 } }, [], 'tier');
+    expect(tier.store).toBe('tier');
+    expect(restoreArrangeSnapshot(tier)).toEqual(tier);
+
+    const collection = takeArrangeSnapshot({}, [], 'collection', 'tier');
+    expect(collection).toEqual({ positions: {}, tierLabels: [], store: 'collection', sortBy: 'tier' });
+    expect(restoreArrangeSnapshot(collection)).toEqual(collection);
   });
 });

@@ -86,8 +86,8 @@ interface UnitForest {
  * The frames and loose cards `cards` fold into, sized: a frame's cards
  * stacked inside it (visible ones only), every root sized exactly as it is
  * drawn. Shared by the layout and by `measureWrapperFrames`, so Collection
- * mode's default layout (the tier columns stacked in collection order) packs
- * frames by the very sizes they render at.
+ * mode's columns (columnLayout.ts) are sized by the very sizes frames render
+ * at.
  */
 function buildUnitForest(
   cards: GroupData[],
@@ -216,11 +216,11 @@ function buildUnitForest(
  * room of the hidden ones; hidden cards take no space (they are not drawn
  * anyway) and the frame grows back when the filter is lifted.
  *
- * `naturalPositions` (Collection mode only) is a precomputed absolute spot per
- * top-level unit id — the default layout's tier columns stacked in collection
- * order (`arrangeGroupsByConnectedBlocks` with `collectionOrder`). When given it REPLACES the
- * natural-origin packing below for every unit it covers; saved positions
- * still win over it. Absent (Tier mode), the packing is exactly as before.
+ * `naturalPositions` is an optional precomputed absolute spot per top-level
+ * unit id. When given it REPLACES the natural-origin packing below for every
+ * unit it covers; saved positions still win over it. Absent, the packing is
+ * exactly as before. (Collection mode does not need it: it hands in every
+ * column unit's spot through `savedPositions`, see resolveColumnPositions.)
  */
 export function buildWrapperLayout(
   cards: GroupData[],

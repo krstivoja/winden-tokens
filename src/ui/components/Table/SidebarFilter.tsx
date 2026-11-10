@@ -7,7 +7,7 @@ import { TypeIcon, PlusIcon, FilterIcon } from '../Icons';
 import { IconTextButton } from '../common/Button';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { useModalContext } from '../Modals/ModalContext';
-import { getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
+import { compareGroupPaths, getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
 import {
   isEverythingSelected,
   isRowMarked,
@@ -60,7 +60,9 @@ function buildGroupTree(groupNames: string[]): GroupTreeNode[] {
 
   const toArray = (map: Map<string, MutableNode>): GroupTreeNode[] =>
     Array.from(map.values())
-      .sort((a, b) => a.label.localeCompare(b.label))
+      // Siblings share their parent path, so this is the label order; the
+      // graph's Collection columns stack by the very same comparator.
+      .sort((a, b) => compareGroupPaths(a.path, b.path))
       .map(n => ({ path: n.path, label: n.label, isGroup: n.isGroup, children: toArray(n.childrenMap) }));
 
   return toArray(rootMap);

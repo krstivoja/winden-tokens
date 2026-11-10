@@ -84,9 +84,9 @@ export interface ConnectionFlags {
 // ── Grid Layout ────────────────────────────────────────────────────
 
 /**
- * How the canvas is laid out. Both use one column per dependency tier;
- * `tier` orders a column by title, `collection` by collection order first
- * (arrangeGroupsByConnectedBlocks `collectionOrder`).
+ * How the canvas is laid out: `tier` = one column per dependency tier
+ * (arrangeGroupsByConnectedBlocks), `collection` = one column per collection
+ * in collection order, units stacked by path (columnLayout.ts).
  */
 export type GraphSortBy = 'tier' | 'collection';
 
@@ -121,7 +121,24 @@ export type TierPlacement = {
   width: number;
 };
 
-export type TierLabelNodeData = TierPlacement;
+/**
+ * Collection mode's column header: the collection's name above its column,
+ * the column's width. Derived live from the column layout on every render,
+ * never persisted. Node id `tier-label:collection:<collectionId>` — the tier
+ * caption namespace, so everything that ignores captions ignores it too.
+ */
+export type CollectionHeaderPlacement = {
+  kind: 'collection';
+  collectionId: string;
+  /** Resolved from the collection id when the layout is built, so a rename
+   *  updates it. */
+  name: string;
+  x: number;
+  width: number;
+};
+
+/** A tier caption (no `kind`) or a collection column header. */
+export type TierLabelNodeData = TierPlacement | CollectionHeaderPlacement;
 
 // ── Node Data Type ─────────────────────────────────────────────────
 

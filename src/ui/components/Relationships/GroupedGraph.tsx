@@ -48,6 +48,8 @@ import {
   GridLayoutDraft,
   GraphSortBy,
   TierPlacement,
+  TierLabelNodeData,
+  CollectionHeaderPlacement,
   GroupNodeData,
   WrapperNodeData,
 } from './GroupedGraph/types';
@@ -75,7 +77,13 @@ import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
 import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
-import { buildWrapperLayout, measureWrapperFrames } from './GroupedGraph/wrapperLayout';
+import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
+import {
+  buildCollectionColumnItems,
+  layoutCollectionColumns,
+  lockChangesToColumns,
+  resolveColumnPositions,
+} from './GroupedGraph/columnLayout';
 import { takeArrangeSnapshot, restoreArrangeSnapshot } from './GroupedGraph/arrangeUndo';
 import type { ArrangeUndoSnapshot } from './GroupedGraph/arrangeUndo';
 import { CustomEdge } from './GroupedGraph/GraphEdge';
@@ -102,6 +110,7 @@ import {
   buildArrangeUnits,
   remapConnectionsToUnits,
   isTierLabelNodeId,
+  isCollectionHeader,
   getWrapperKey,
   parseWrapperKey,
   getGroupCardKey,
@@ -130,7 +139,12 @@ import {
   collectionToggleEndsHiding,
 } from './GroupedGraph/hideUnused';
 import type { HidingLayout, HighlightTarget, SidebarSelection } from './GroupedGraph/hideUnused';
-import { collectFocusableRowKeys, selectFirstCollectionNodeId, selectFocusScope } from './GroupedGraph/sidebarFocus';
+import {
+  collectFocusableRowKeys,
+  selectCollectionHeaderNodeId,
+  selectFirstCollectionNodeId,
+  selectFocusScope,
+} from './GroupedGraph/sidebarFocus';
 
 // ── Node & Edge type registrations ─────────────────────────────────
 
@@ -146,6 +160,17 @@ const nodeTypes: NodeTypes = {
 const TIER_LABEL_Y = -(TIER_LABEL_HEIGHT + TIER_LABEL_GAP_Y);
 
 const PROPERTY_COLUMN_GAP = 220;
+
+/** Node id of a caption: `tier-label:<n>` for a tier, and
+ *  `tier-label:collection:<collectionId>` for a Collection-mode column
+ *  header — one namespace, so everything that ignores captions ignores both. */
+const getTierLabelNodeId = (label: TierLabelNodeData) => (
+  isCollectionHeader(label)
+    ? `${TIER_LABEL_NODE_PREFIX}collection:${label.collectionId}`
+    : `${TIER_LABEL_NODE_PREFIX}${label.tier}`
+);
+
+type PositionRecord = Record<string, { x: number; y: number }>;
 
 // The selection card's xyflow id is derived from the selected Figma node id so
 // that switching elements mounts a *fresh* node. xyflow caches handle geometry
@@ -254,6 +279,14 @@ function GroupedGraphInner() {
   useEffect(() => {
     savedPositionsRef.current = savedPositions;
   }, [savedPositions]);
+  // Collection mode's own record (`graph-positions-collection`): its manual
+  // moves only, by node id. `graph-positions` above is Tier mode's and
+  // Collection mode never touches it, so switching modes loses nothing. Only
+  // the y of a column unit is ever used (see resolveColumnPositions). Read by
+  // the layout effect like savedPositionsRef; written by hydration, the drag
+  // save, Arrange and its undo, the last three bumping the revision as needed.
+  const collectionPositionsRef = useRef<PositionRecord>({});
+  const [collectionPositionsHydrated, setCollectionPositionsHydrated] = useState(false);
   // Highlight target: a set of cards (varName null = their whole chains) or a
   // single variable row inside one card (varName set = only that row's chain).
   // Card clicks, row clicks and quick search pass one key; a sidebar row
@@ -333,8 +366,9 @@ function GroupedGraphInner() {
   // applies it as soon as data lands. Never dropped for arriving early.
   const pendingStorageRef = useRef<{
     positions: unknown;
+    collectionPositions: unknown;
     groupedPaths: unknown;
-  }>({ positions: null, groupedPaths: null });
+  }>({ positions: null, collectionPositions: null, groupedPaths: null });
   const [pendingStorageRevision, setPendingStorageRevision] = useState(0);
   const reactFlowInstance = useReactFlow();
   // One-step undo for the last "Arrange Grid" run: the SAVED record and the
@@ -471,6 +505,36 @@ function GroupedGraphInner() {
     };
   }, [variableType]);
 
+  // Collection mode's record, loaded and migrated exactly like
+  // `graph-positions` (parked until the collections arrive). Part of the
+  // hydration gate, so a reload in Collection mode does not jump.
+  useEffect(() => {
+    const storageKey = `graph-positions-collection`;
+    collectionPositionsRef.current = {};
+    setCollectionPositionsHydrated(false);
+    pendingStorageRef.current.collectionPositions = null;
+    post({ type: 'get-client-storage', key: storageKey });
+
+    const handleStorage = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage;
+      if (msg?.type === 'client-storage-data' && msg.key === storageKey) {
+        pendingStorageRef.current.collectionPositions = msg.value || {};
+        setPendingStorageRevision(rev => rev + 1);
+        setCollectionPositionsHydrated(true);
+      }
+    };
+
+    const fallbackTimeout = setTimeout(() => {
+      setCollectionPositionsHydrated(true);
+    }, 100);
+
+    window.addEventListener('message', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleStorage);
+      clearTimeout(fallbackTimeout);
+    };
+  }, [variableType]);
+
   useEffect(() => {
     const storageKey = `graph-layout-settings`;
     setGridLayoutSettings(normalizeGridLayoutSettings({}));
@@ -541,7 +605,7 @@ function GroupedGraphInner() {
   useEffect(() => {
     if (pendingStorageRevision === 0) return;
     const pending = pendingStorageRef.current;
-    if (pending.positions === null && pending.groupedPaths === null) return;
+    if (pending.positions === null && pending.collectionPositions === null && pending.groupedPaths === null) return;
     if (collections.length === 0) return;
 
     const owners = buildWrapperPathOwners(collections, variables);
@@ -575,6 +639,19 @@ function GroupedGraphInner() {
       setSavedPositionsRevision(rev => rev + 1);
       if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
         post({ type: 'set-client-storage', key: `graph-positions`, value: migrated });
+      }
+    }
+
+    if (pending.collectionPositions !== null) {
+      const raw = pending.collectionPositions;
+      // Same stripping as `graph-positions`: nothing stored can bring back a
+      // caption, a header or a frame-relative card.
+      const migrated = stripLabelPositions(stripRelPositions(migrateGraphPositions(raw, owners, cardOwners)));
+      pending.collectionPositions = null;
+      collectionPositionsRef.current = migrated;
+      setSavedPositionsRevision(rev => rev + 1);
+      if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+        post({ type: 'set-client-storage', key: `graph-positions-collection`, value: migrated });
       }
     }
   }, [pendingStorageRevision, collections, variables]);
@@ -886,15 +963,21 @@ function GroupedGraphInner() {
   // than the `nodes` state, so this keeps one identity across layout passes
   // (see the drag-perf work). Nothing visible in scope → nothing at all, so a
   // stale sidebar can never park the canvas on a hidden node.
-  // Collection mode spreads a collection over every tier column, so a
-  // COLLECTION row (and quick search's collection jump) moves the camera to
-  // the collection's first card instead of fitting all of them (see
-  // selectFirstCollectionNodeId). Group rows and Tier mode fit the scope.
+  // Collection mode: a collection is one (possibly very tall) column, so a
+  // COLLECTION row (and quick search's collection jump) lands at the top of
+  // it instead of fitting all of it — the column header plus the collection's
+  // first card (see selectFirstCollectionNodeId / selectCollectionHeaderNodeId).
+  // Group rows and Tier mode fit the scope.
   const isCollectionSort = gridLayoutSettings.sortBy === 'collection';
   const moveCameraToScope = useCallback((nodes: Node[], collectionId: string, path: string, nodeIds: string[]) => {
     const first = isCollectionSort && path === '' ? selectFirstCollectionNodeId(nodes, collectionId) : null;
-    if (first) zoomToNodeId(first);
-    else fitToNodeIds(nodeIds);
+    if (!first) {
+      fitToNodeIds(nodeIds);
+      return;
+    }
+    const header = selectCollectionHeaderNodeId(nodes, collectionId);
+    if (header) fitToNodeIds([header, first]);
+    else zoomToNodeId(first);
   }, [isCollectionSort, zoomToNodeId, fitToNodeIds]);
 
   const runFocusPath = useCallback((collectionId: string, path: string) => {
@@ -1428,13 +1511,14 @@ function GroupedGraphInner() {
     setTimeout(fitWhenMeasured, 50);
   }, [hidingLayout, activeHidingLayout, hidingActivation, reactFlowInstance]);
 
-  // ── Collection mode: the default layout ──────────────────────────
-  // Where every visible top-level unit sits when it has no saved position, in
-  // Collection mode (null in Tier mode, whose default layout is the
-  // `groupsData` initial columns + buildWrapperLayout's packing, untouched).
-  // It is Arrange Grid's own Tier code path with the collection in-column
-  // order, so an Arrange on a fresh graph lands exactly here. Hidden units get
-  // no slot (they are not drawn; they re-flow once shown).
+  // ── Collection mode: one column per collection ───────────────────
+  // Where every visible top-level unit sits in Collection mode (null in Tier
+  // mode, whose default layout is the `groupsData` initial columns +
+  // buildWrapperLayout's packing, untouched): one column per collection in
+  // collection order, units stacked by path (columnLayout.ts). A column
+  // unit's x always comes from here; a stored record only supplies its y.
+  // The column headers are derived from the same layout, never persisted;
+  // their data objects are built here so a drag does not re-mint them.
   //
   // Filter-aware, but NOT hide-unused-aware: Hide unused never moves cards.
   // Hiding unchecks sidebar groups for real, so while it is active the
@@ -1447,36 +1531,26 @@ function GroupedGraphInner() {
   const naturalLayoutFilters = hidingActivation === null ? cardVisibilityFilters : naturalLayoutFiltersRef.current;
   const collectionNaturalLayout = useMemo(() => {
     if (gridLayoutSettings.sortBy !== 'collection') return null;
-    const isLayoutCard = (g: GroupData) => g.kind === 'standard' || g.kind === 'collection';
-    const { units, unitKeyByGroupKey, hiddenByKey } =
-      buildArrangeUnits(groupsData, groupedPaths, naturalLayoutFilters, new Map());
-    // Exact drawn sizes (frames hug their visible cards), so columns stack by
-    // the size each unit renders at.
-    const hiddenCardKeys = new Set(
-      groupsData.filter(g => isLayoutCard(g) && hiddenByKey.get(g.key)).map(g => g.key)
-    );
-    const sizes = measureWrapperFrames(groupsData.filter(isLayoutCard), groupedPaths, hiddenCardKeys);
-    const heightOverrides = new Map<string, number>();
-    sizes.forEach((size, key) => heightOverrides.set(key, size.height));
-    const { all, visible } = remapConnectionsToUnits(connectionData, unitKeyByGroupKey, hiddenByKey);
-    const { positions, tiers } = arrangeGroupsByConnectedBlocks(
-      units, visible, gridLayoutSettings.gapX, gridLayoutSettings.gapY,
-      {
-        heightOverrides,
-        depthConnections: all,
-        collectionOrder: collections.map(collection => collection.id),
-      }
-    );
-    let maxRight = 0;
-    positions.forEach((pos, key) => {
-      maxRight = Math.max(maxRight, pos.x + (sizes.get(key)?.width ?? GROUP_WIDTH));
+    const items = buildCollectionColumnItems(groupsData, groupedPaths, g => isCardHidden(g, naturalLayoutFilters));
+    const layout = layoutCollectionColumns({
+      items,
+      collectionOrder: collections.map(collection => collection.id),
+      gapX: gridLayoutSettings.gapX,
+      gapY: gridLayoutSettings.gapY,
     });
-    return { positions, tiers, maxRight };
-  }, [gridLayoutSettings, groupsData, connectionData, groupedPaths, naturalLayoutFilters, collections]);
-  // The captions the canvas shows when they come from the live Collection
-  // default layout rather than a persisted record (written by the layout
-  // effect). A drag save freezes them together with the positions.
-  const liveDerivedTierLabelsRef = useRef<TierPlacement[] | null>(null);
+    const headers: CollectionHeaderPlacement[] = layout.columns.map(column => ({
+      kind: 'collection',
+      collectionId: column.collectionId,
+      name: collectionNameById.get(column.collectionId) || column.collectionId,
+      x: column.x,
+      width: column.width,
+    }));
+    return { ...layout, headers };
+  }, [gridLayoutSettings, groupsData, groupedPaths, naturalLayoutFilters, collections, collectionNameById]);
+  // Collection mode's drag lock: node id → the column x the layout effect
+  // gave it (a temporary arrange's included). Empty in Tier mode. Written by
+  // the layout effect, read by the nodes-change handler on every drag frame.
+  const lockedXRef = useRef<ReadonlyMap<string, number>>(new Map());
 
   // Build React Flow nodes/edges when data changes
   // Note: Filtering applied here to hide nodes/edges without removing connections
@@ -1630,23 +1704,33 @@ function GroupedGraphInner() {
   const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   useEffect(() => {
-    if (!positionsHydrated || !settingsHydrated) return;
+    if (!positionsHydrated || !collectionPositionsHydrated || !settingsHydrated) return;
     // Read through the refs: see savedPositionsRef and hidingLayout above.
     // A temporary arrange made while hiding wins over the saved record; one
     // left over from an activation that just ended is already ignored here,
     // in the commit before it is cleared from state.
     const temporaryLayout = getActiveHidingLayout(hidingLayoutRef.current, hidingActivation);
-    const savedPositions = mergeHidingPositions(savedPositionsRef.current, temporaryLayout);
-    // Captions, in order: the temporary arrange's → the persisted record →
-    // Collection mode with none persisted: its live default layout's (Tier
-    // mode with none shows none, as always).
-    let shownTierLabels: TierPlacement[] = temporaryLayout?.tierLabels ?? tierLabels;
-    let liveDerivedTierLabels: TierPlacement[] | null = null;
-    if (!temporaryLayout && tierLabels.length === 0 && collectionNaturalLayout) {
-      liveDerivedTierLabels = collectionNaturalLayout.tiers;
-      shownTierLabels = liveDerivedTierLabels;
-    }
-    liveDerivedTierLabelsRef.current = liveDerivedTierLabels;
+    // Tier mode: the Tier record as is. Collection mode: every column unit at
+    // its column x and its stored (else natural) y; library cards and the
+    // selection card keep their stored spot.
+    const columns = collectionNaturalLayout;
+    const savedPositions = mergeHidingPositions(
+      columns
+        ? resolveColumnPositions(collectionPositionsRef.current, columns.positions)
+        : savedPositionsRef.current,
+      temporaryLayout
+    );
+    // Captions: the temporary arrange's, else Tier mode's persisted record or
+    // Collection mode's live column headers.
+    const shownTierLabels: TierLabelNodeData[] = temporaryLayout?.tierLabels
+      ?? (columns ? columns.headers : tierLabels);
+    // The drag lock: every column unit stays at the x it gets here.
+    const lockedX = new Map<string, number>();
+    columns?.positions.forEach((_pos, id) => {
+      const pos = savedPositions[id];
+      if (pos) lockedX.set(id, pos.x);
+    });
+    lockedXRef.current = lockedX;
 
     // The highlighted lineage — see computeHighlightPath. Empty sets when
     // nothing is highlighted, so the rest of the effect reads them freely.
@@ -1787,7 +1871,7 @@ function GroupedGraphInner() {
     // leaves the relative order of every real node untouched.
     shownTierLabels.forEach(label => {
       newNodes.push({
-        id: `${TIER_LABEL_NODE_PREFIX}${label.tier}`,
+        id: getTierLabelNodeId(label),
         type: 'tierLabel',
         position: { x: label.x, y: TIER_LABEL_Y },
         // `pointerEvents: none` on the node wrapper itself, so panning and
@@ -1807,9 +1891,7 @@ function GroupedGraphInner() {
 
     // Managed groups (shader/steps/source) stay top-level and absolute.
     managedGroups.forEach(group => {
-      const position = savedPositions[group.key]
-        || collectionNaturalLayout?.positions.get(group.key)
-        || { x: group.initialX, y: group.initialY };
+      const position = savedPositions[group.key] || { x: group.initialX, y: group.initialY };
       newNodes.push(buildCardNode(group, position, null));
     });
 
@@ -1817,10 +1899,9 @@ function GroupedGraphInner() {
     const cardHiddenByKey = new Map<string, boolean>();
     standardCards.forEach(g => cardHiddenByKey.set(g.key, cardHidden(g)));
     const hiddenCardKeys = new Set(standardCards.filter(g => cardHiddenByKey.get(g.key)).map(g => g.key));
-    // Collection mode hands in its default layout; Tier mode keeps the packing.
-    const placements = buildWrapperLayout(
-      standardCards, groupedPaths, savedPositions, hiddenCardKeys, collectionNaturalLayout?.positions
-    );
+    // Collection mode's column units are all in `savedPositions` already
+    // (resolveColumnPositions); Tier mode keeps the packing.
+    const placements = buildWrapperLayout(standardCards, groupedPaths, savedPositions, hiddenCardKeys);
 
     // Card key → the node that draws it. A card a container absorbed is no
     // longer a node of its own, and every edge endpoint names a CARD key, so
@@ -1886,9 +1967,9 @@ function GroupedGraphInner() {
     // right of every real token card: external tokens first, then the
     // selection card so its property rows sit beside their providers.
     if (selectedNode) {
-      // Collection mode: right of its default layout.
-      const maxRight = collectionNaturalLayout
-        ? collectionNaturalLayout.maxRight
+      // Collection mode: right of the last column.
+      const maxRight = columns
+        ? columns.maxRight
         : groupsData.reduce((max, g) => Math.max(max, g.initialX + GROUP_WIDTH), 0);
       const externalX = maxRight + PROPERTY_COLUMN_GAP;
       const externalCards = Array.from(externalTokensByCard.entries());
@@ -2052,8 +2133,10 @@ function GroupedGraphInner() {
       }));
     }
 
-    // Tier captions over a column hide-unused emptied go with it. Only while
-    // hiding: a filter-emptied column keeps its caption, as it always has.
+    // Tier captions (and Collection column headers) over a column hide-unused
+    // emptied go with it. Only while hiding: a filter-emptied tier column
+    // keeps its caption, as it always has (a filter-emptied collection column
+    // is not laid out at all).
     if (hidingPath) {
       const visibleBoxes: Array<{ x: number; width: number }> = [];
       newNodes.forEach(node => {
@@ -2067,14 +2150,15 @@ function GroupedGraphInner() {
       });
       newNodes.forEach(node => {
         if (node.type !== 'tierLabel') return;
-        node.hidden = isTierLabelHidden(node.data as TierPlacement, visibleBoxes);
+        node.hidden = isTierLabelHidden(node.data as TierLabelNodeData, visibleBoxes);
       });
     }
 
     setNodes(newNodes);
     setEdges(newEdges);
     setFocusableRowSignature(collectFocusableRowKeys(newNodes).join('\n'));
-  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, settingsHydrated, savedPositionsRevision, groupedPaths,
+  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, collectionPositionsHydrated, settingsHydrated,
+      savedPositionsRevision, groupedPaths,
       tierLabels, collectionNaturalLayout, hidingActivation,
       cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
@@ -2154,31 +2238,59 @@ function GroupedGraphInner() {
   // persist it.
   const pendingPositionSaveRef = useRef<(() => void) | null>(null);
 
-  const handleNodesChangeWrapped = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+  // Collection mode's drag save records only the nodes that actually moved
+  // (collected across the debounce window); everything else stays natural
+  // and keeps re-flowing with filters and gaps.
+  const movedNodeIdsRef = useRef<Set<string>>(new Set());
+  // The mode a drag happens in decides where its save goes.
+  const sortByRef = useRef(gridLayoutSettings.sortBy);
+  sortByRef.current = gridLayoutSettings.sortBy;
+
+  const handleNodesChangeWrapped = useCallback((rawChanges: Parameters<typeof onNodesChange>[0]) => {
+    // Collection mode: a column unit only ever moves vertically. Rewritten
+    // before xyflow applies it, so mouse drags, multi-selection drags and
+    // keyboard moves are all covered; Tier mode's map is empty (identity).
+    const changes = lockChangesToColumns(rawChanges, lockedXRef.current);
     onNodesChange(changes);
 
-    const hasPositionChanges = changes.some(c => c.type === 'position' && c.position);
-    if (hasPositionChanges) {
+    const positionChanges = changes.filter(c => c.type === 'position' && c.position);
+    if (positionChanges.length > 0) {
       if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
+      positionChanges.forEach(c => { if (c.type === 'position') movedNodeIdsRef.current.add(c.id); });
       // Decided when the drag happens, not when the save fires: a drag on a
       // temporary arrange only ever updates that layout, even if hiding ends
       // within the debounce (the layout is gone by then and the save is
-      // dropped) — it must never reach `graph-positions`.
+      // dropped) — it must never reach a saved record. Likewise the record a
+      // drag goes to is the one of the mode it was made in.
       const temporary = hidingLayoutRef.current !== null;
+      const store = sortByRef.current;
       const save = () => {
         pendingPositionSaveRef.current = null;
         savePositionsTimeoutRef.current = null;
+        const moved = movedNodeIdsRef.current;
+        movedNodeIdsRef.current = new Set();
         const currentNodes = reactFlowInstance.getNodes();
-        const positionsObj: Record<string, { x: number; y: number }> = {};
+        // Tier captions and column headers are not part of the graph and must
+        // never enter a persisted record: on the next hydration they would
+        // come back as phantom cards. A card inside a frame is frozen and
+        // auto-stacked each render, so it is never saved: only its frame has
+        // a position.
+        const isSavable = (n: Node) => !isTierLabelNodeId(n.id) && !n.parentId;
+        if (store === 'collection' && !temporary) {
+          // Only the moved top-level nodes, merged into Collection mode's record.
+          const record: PositionRecord = { ...collectionPositionsRef.current };
+          currentNodes.forEach(n => {
+            if (!moved.has(n.id) || !isSavable(n)) return;
+            record[n.id] = { x: n.position.x, y: n.position.y };
+          });
+          collectionPositionsRef.current = record;
+          post({ type: 'set-client-storage', key: `graph-positions-collection`, value: record });
+          return;
+        }
+        const positionsObj: PositionRecord = {};
         currentNodes.forEach(n => {
-          // Tier captions are not part of the graph and must never enter the
-          // persisted record: on the next hydration they would come back as
-          // phantom cards.
-          if (isTierLabelNodeId(n.id)) return;
-          // Top-level nodes save their absolute position as-is. A card inside
-          // a frame is frozen and auto-stacked each render, so it is never
-          // saved: only the frame it belongs to has a position.
-          if (n.parentId) return;
+          if (!isSavable(n)) return;
+          // Top-level nodes save their absolute position as-is.
           positionsObj[n.id] = { x: n.position.x, y: n.position.y };
         });
         if (temporary) {
@@ -2191,14 +2303,6 @@ function GroupedGraphInner() {
         savedPositionsRef.current = positionsObj;
         setSavedPositions(positionsObj);
         post({ type: 'set-client-storage', key: storageKey, value: positionsObj });
-        // A drag saves EVERY top-level position, freezing a live-derived
-        // Collection layout — so the captions shown with it are frozen too.
-        const liveLabels = liveDerivedTierLabelsRef.current;
-        if (liveLabels && tierLabelsRef.current.length === 0) {
-          tierLabelsRef.current = liveLabels;
-          setTierLabels(liveLabels);
-          post({ type: 'set-client-storage', key: `graph-tier-labels`, value: liveLabels });
-        }
       };
       pendingPositionSaveRef.current = save;
       savePositionsTimeoutRef.current = setTimeout(save, 300);
@@ -2251,8 +2355,69 @@ function GroupedGraphInner() {
     post({ type: 'update-variable-value', id: targetVarInfo.node.id, value: newValue, modeId });
   }, [collections, selectedModeId, variableMap, variablesById, selectedLayers]);
 
+  // A drag save still pending belongs to the layout before an arrange: run it
+  // now, against the positions it was meant for.
+  const flushPendingPositionSave = useCallback(() => {
+    if (!pendingPositionSaveRef.current) return;
+    if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
+    pendingPositionSaveRef.current();
+  }, []);
+
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;
+    // An Apply that switched "Sort by" also records the mode it left, so Undo
+    // switches back (`gridLayoutSettings` here is still the pre-Apply value).
+    const previousSortBy = settings.sortBy !== gridLayoutSettings.sortBy ? gridLayoutSettings.sortBy : undefined;
+
+    // ── Collection mode ──────────────────────────────────────────────
+    if (settings.sortBy === 'collection') {
+      if (hidingActivation !== null) {
+        // Temporary, like Tier mode's: the columns of the cards on screen
+        // right now, into `hidingLayout` only — never a saved record.
+        flushPendingPositionSave();
+        const layout = layoutCollectionColumns({
+          items: buildCollectionColumnItems(groupsData, groupedPaths, isCardHiddenNow),
+          collectionOrder: collections.map(collection => collection.id),
+          gapX: settings.gapX,
+          gapY: settings.gapY,
+        });
+        const headers: CollectionHeaderPlacement[] = layout.columns.map(column => ({
+          kind: 'collection',
+          collectionId: column.collectionId,
+          name: collectionNameById.get(column.collectionId) || column.collectionId,
+          x: column.x,
+          width: column.width,
+        }));
+        const packed: PositionRecord = {};
+        layout.positions.forEach((pos, key) => { packed[key] = pos; });
+        setHidingLayout(prev => ({
+          activation: hidingActivation,
+          positions: { ...getActiveHidingLayout(prev, hidingActivation)?.positions, ...packed },
+          tierLabels: headers,
+        }));
+        setSavedPositionsRevision(rev => rev + 1);
+        setTimeout(() => {
+          reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+        }, 50);
+        return;
+      }
+      // Saved: Arrange = reset. Every unit goes back to its natural slot,
+      // the columns re-packed with the current gaps; nothing hidden needs
+      // parking (a hidden unit has no x to lose and gets its slot when
+      // shown). Undo writes the previous record back.
+      flushPendingPositionSave();
+      lastArrangeUndoRef.current = takeArrangeSnapshot(collectionPositionsRef.current, [], 'collection', previousSortBy);
+      setHasArrangeUndo(true);
+      collectionPositionsRef.current = {};
+      post({ type: 'set-client-storage', key: `graph-positions-collection`, value: {} });
+      setSavedPositionsRevision(rev => rev + 1);
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+      }, 50);
+      return;
+    }
+
+    // ── Tier mode ────────────────────────────────────────────────────
     const currentNodes = reactFlowInstance.getNodes();
     const currentGroups = groupsData.map(group => {
       // An absorbed card has no node of its own; seed it from the container
@@ -2291,16 +2456,12 @@ function GroupedGraphInner() {
 
     // `tiers` describes the caption row: one entry per non-empty tier, each
     // one column wide. It is taken BEFORE the hidden units are parked below,
-    // so a parked column never gets a caption of its own. Collection mode is
-    // the same layout with the collection order inside each column.
+    // so a parked column never gets a caption of its own.
     const { positions: newPositions, tiers } = arrangeGroupsByConnectedBlocks(
       arrangeUnits, visibleConnections, settings.gapX, settings.gapY,
       {
         heightOverrides,
         depthConnections: allConnections,
-        ...(settings.sortBy === 'collection'
-          ? { collectionOrder: collections.map(collection => collection.id) }
-          : {}),
       }
     );
 
@@ -2312,10 +2473,7 @@ function GroupedGraphInner() {
     if (hidingActivation !== null) {
       // A drag save still pending from before would read the grid below off
       // the canvas: run it now, against the positions it was meant for.
-      if (pendingPositionSaveRef.current) {
-        if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
-        pendingPositionSaveRef.current();
-      }
+      flushPendingPositionSave();
       setNodes(prevNodes =>
         prevNodes.map(rfNode => {
           if (rfNode.parentId) return rfNode;
@@ -2346,9 +2504,8 @@ function GroupedGraphInner() {
     // they must keep an entry in the saved record. Dropping it would re-seed
     // them from their natural origin on the next layout pass and drop them
     // straight on top of the arranged grid the moment the filter is lifted.
-    // Park them in a spare column just right of the arranged content (both
-    // modes), ordered by their pre-arrange position so the result is
-    // deterministic.
+    // Park them in a spare column just right of the arranged content,
+    // ordered by their pre-arrange position so the result is deterministic.
     if (hiddenUnits.length > 0) {
       hiddenUnits.sort(sortGroupsByPosition);
       const parkX = newPositions.size > 0
@@ -2364,14 +2521,8 @@ function GroupedGraphInner() {
     // One-step undo: the SAVED record and the tier captions from before the
     // arrange — never the live node positions (arrangeUndo.ts). A drag save
     // still pending belongs to the record before the arrange: flush it first.
-    if (pendingPositionSaveRef.current) {
-      if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
-      pendingPositionSaveRef.current();
-    }
-    // An Apply that switched "Sort by" also records the mode it left, so Undo
-    // switches back (`gridLayoutSettings` here is still the pre-Apply value).
-    const previousSortBy = settings.sortBy !== gridLayoutSettings.sortBy ? gridLayoutSettings.sortBy : undefined;
-    lastArrangeUndoRef.current = takeArrangeSnapshot(savedPositionsRef.current, tierLabelsRef.current, previousSortBy);
+    flushPendingPositionSave();
+    lastArrangeUndoRef.current = takeArrangeSnapshot(savedPositionsRef.current, tierLabelsRef.current, 'tier', previousSortBy);
     setHasArrangeUndo(true);
 
     setNodes(prevNodes =>
@@ -2398,7 +2549,8 @@ function GroupedGraphInner() {
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
-  }, [reactFlowInstance, groupsData, connectionData, collections, gridLayoutSettings, groupedPaths, cardVisibilityFilters, isCardHiddenNow, setNodes, nodeIdForCard, hidingActivation]);
+  }, [reactFlowInstance, groupsData, connectionData, collections, collectionNameById, gridLayoutSettings, groupedPaths,
+      cardVisibilityFilters, isCardHiddenNow, setNodes, nodeIdForCard, hidingActivation, flushPendingPositionSave]);
 
   const handleUndoArrange = useCallback(() => {
     // A temporary arrange is undone by dropping it: the saved layout comes
@@ -2411,18 +2563,24 @@ function GroupedGraphInner() {
     const snapshot = lastArrangeUndoRef.current;
     if (!snapshot) return;
 
-    // Written back verbatim — possibly `{}`. Units that had no saved position
-    // before the arrange get none now, so they take the natural layout again
-    // and keep re-flowing with the filters (the revision bump re-lays out).
+    // Written back verbatim — possibly `{}` — to the record it was taken
+    // from. Units that had no saved position before the arrange get none now,
+    // so they take the natural layout again and keep re-flowing with the
+    // filters (the revision bump re-lays out).
     const previous = restoreArrangeSnapshot(snapshot);
-    savedPositionsRef.current = previous.positions;
-    setSavedPositions(previous.positions);
-    setSavedPositionsRevision(rev => rev + 1);
-    post({ type: 'set-client-storage', key: `graph-positions`, value: previous.positions });
+    if (previous.store === 'collection') {
+      collectionPositionsRef.current = previous.positions;
+      post({ type: 'set-client-storage', key: `graph-positions-collection`, value: previous.positions });
+    } else {
+      savedPositionsRef.current = previous.positions;
+      setSavedPositions(previous.positions);
+      post({ type: 'set-client-storage', key: `graph-positions`, value: previous.positions });
 
-    tierLabelsRef.current = previous.tierLabels;
-    setTierLabels(previous.tierLabels);
-    post({ type: 'set-client-storage', key: `graph-tier-labels`, value: previous.tierLabels });
+      tierLabelsRef.current = previous.tierLabels;
+      setTierLabels(previous.tierLabels);
+      post({ type: 'set-client-storage', key: `graph-tier-labels`, value: previous.tierLabels });
+    }
+    setSavedPositionsRevision(rev => rev + 1);
 
     // The arrange was an Apply that switched "Sort by": switch it back, saved.
     if (previous.sortBy) {
@@ -2512,6 +2670,9 @@ function GroupedGraphInner() {
       gapY: Number.parseInt(gridLayoutDraft.gapY, 10),
       sortBy: gridLayoutDraft.sortBy,
     });
+    const switchOnly = settings.sortBy !== gridLayoutSettings.sortBy
+      && settings.gapX === gridLayoutSettings.gapX
+      && settings.gapY === gridLayoutSettings.gapY;
     setGridLayoutSettings(settings);
     setGridLayoutDraft(toGridLayoutDraft(settings));
     post({
@@ -2519,10 +2680,24 @@ function GroupedGraphInner() {
       key: `graph-layout-settings`,
       value: settings,
     });
-    // Apply arranges with the new settings — a switched "Sort by" takes
-    // effect here, with Undo Arrange to get the previous positions back.
+    if (switchOnly) {
+      // Each mode keeps its own record, so a switch alone is lossless: it
+      // just shows the other mode's layout. Arranging would wipe that mode's
+      // manual moves. An undo step or a temporary arrange belongs to the
+      // layout being left, so both go.
+      flushPendingPositionSave();
+      lastArrangeUndoRef.current = null;
+      setHasArrangeUndo(false);
+      setHidingLayout(null);
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
+      }, 50);
+      return;
+    }
+    // Any other Apply arranges the mode it lands in with the new settings,
+    // with Undo Arrange to get the previous layout (and mode) back.
     handleArrangeGrid(settings);
-  }, [gridLayoutDraft, handleArrangeGrid]);
+  }, [gridLayoutDraft, gridLayoutSettings, handleArrangeGrid, flushPendingPositionSave, reactFlowInstance]);
 
   return (
     <div className="flex flex-col w-full h-full" ref={groupedGraphRef}>
