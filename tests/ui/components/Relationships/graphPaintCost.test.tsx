@@ -48,6 +48,11 @@ describe('graph node paint containment (main.css)', () => {
   });
 
   it('drops containment while a node holds an open dropdown', () => {
-    expect(block).toMatch(/\.react-flow__node:has\(\[data-dropdown-open\]\)\s*\{\s*contain:\s*none;/);
+    expect(block).toMatch(/\.react-flow__node:has\(\[data-dropdown-open\]\)[^{]*\{\s*contain:\s*none;/);
+  });
+
+  it('drops containment while a card shows its expanded title (hover, selected, active)', () => {
+    expect(block).toMatch(/:is\(:hover, \.selected\):has\(\[data-title-expand\]\)[^{]*\{\s*contain:\s*none;/);
+    expect(block).toMatch(/:has\(\[data-title-expand\]\[data-active\]\)[^{]*\{\s*contain:\s*none;/);
   });
 });

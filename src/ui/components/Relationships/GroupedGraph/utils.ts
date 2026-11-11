@@ -17,6 +17,7 @@ import {
 } from './types';
 import {
   HEADER_HEIGHT,
+  CARD_FOOTER_HEIGHT,
   ROW_HEIGHT,
   GROUP_PADDING,
   CARD_CHROME,
@@ -59,14 +60,24 @@ function normalizePathSegment(value: string): string {
  * around `h-8` rows). Exactly what GraphNode renders, so a gap the layout
  * leaves between two stacked cards is the gap on screen.
  */
-function getCardHeightForRows(rowCount: number): number {
-  return CARD_CHROME * 2 + HEADER_HEIGHT + rowCount * ROW_HEIGHT + GROUP_PADDING * 2;
+function getCardHeightForRows(rowCount: number, withFooter = false): number {
+  return CARD_CHROME * 2 + HEADER_HEIGHT + rowCount * ROW_HEIGHT + GROUP_PADDING * 2
+    + (withFooter ? CARD_FOOTER_HEIGHT : 0);
+}
+
+/**
+ * Whether a card draws the footer that holds its actions (level up, "+", the
+ * menu): standard cards and a collection's root card. Library and other
+ * read-only cards have no actions, so no footer.
+ */
+function hasCardFooter(group: GroupData): boolean {
+  return group.kind === 'standard' || group.kind === 'collection';
 }
 
 function getGroupHeight(group: GroupData): number {
   // An empty collection placeholder has no rows but still reserves one row's
   // worth of body, so its empty-root line has somewhere to sit.
-  return getCardHeightForRows(Math.max(group.variables.length, 1));
+  return getCardHeightForRows(Math.max(group.variables.length, 1), hasCardFooter(group));
 }
 
 /**
@@ -1472,6 +1483,7 @@ export {
   normalizePathSegment,
   getGroupHeight,
   getCardHeightForRows,
+  hasCardFooter,
   getCardRowsHeight,
   normalizeGridLayoutSettings,
   toGridLayoutDraft,

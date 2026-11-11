@@ -73,7 +73,8 @@ describe('GroupNodeComponent — collection root card', () => {
 
   it('renders the collection name as the card title', () => {
     renderCard(emptyCollectionCard);
-    expect(screen.getByTitle('Marco')).toHaveTextContent('Marco');
+    expect(screen.getByTestId('card-title')).toHaveTextContent('Marco');
+    expect(screen.getByTestId('card-title')).not.toHaveAttribute('title');
   });
 
   it('offers the same "+" add-variable affordance as a group card', () => {

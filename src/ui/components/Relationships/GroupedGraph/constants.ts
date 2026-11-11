@@ -5,6 +5,8 @@
 export const GROUP_WIDTH = 260;
 export const ROW_HEIGHT = 32;
 export const HEADER_HEIGHT = 36;
+/** The footer row of a card that has actions (`h-9`, same strip as the header): level up, +, menu. */
+export const CARD_FOOTER_HEIGHT = 36;
 export const GROUP_PADDING = 8;
 export const GROUP_GAP_X = 180;
 export const GROUP_GAP_Y = 40;

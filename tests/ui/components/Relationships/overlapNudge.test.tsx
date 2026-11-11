@@ -70,9 +70,11 @@ const variables: VariableData[] = [
   variable('v7', 'c2', 'x/one'), variable('v8', 'c2', 'x/two'),
 ];
 const ALL_GROUPS = new Set(['c1::a', 'c1::b', 'c1::c', 'c2::x']);
-const CARD = getCardHeightForRows(2);
+const CARD = getCardHeightForRows(2, true);
 // What the same two-row card measured before the height fix.
 const HEAD_CARD = CARD - 6;
+// A spot clear of the collection root cards that stack under the tier column.
+const BELOW_COLLECTION_CARDS = 2000;
 
 function setContext(selectedGroups: Set<string>) {
   ctx.value = {
@@ -257,7 +259,7 @@ describe('a drop onto another card', () => {
         'group:c1::a': { x: 0, y: 0 },
         // 4px under a: closer than the gap, but clear — so it loads as is.
         'group:c1::b': { x: 0, y: CARD + 4 },
-        'group:c1::c': { x: 0, y: 1000 },
+        'group:c1::c': { x: 0, y: BELOW_COLLECTION_CARDS },
         'group:c2::x': { x: 400, y: 0 },
       },
     });
@@ -269,12 +271,12 @@ describe('a drop onto another card', () => {
     fireEvent.keyDown(a, { key: 'ArrowDown' });
     await waitFor(() => expect(pos('group:c1::a').y).toBe(CARD + 24));
     expect(pos('group:c1::b').y).toBe(0);
-    expect(pos('group:c1::c').y).toBe(1000);
+    expect(pos('group:c1::c').y).toBe(BELOW_COLLECTION_CARDS);
     await waitFor(() => expect(writes('graph-positions').length).toBe(1), { timeout: 1000 });
     const saved = writes('graph-positions')[0] as Record<string, { y: number }>;
     expect(saved['group:c1::a'].y).toBe(CARD + 24);
     expect(saved['group:c1::b'].y).toBe(0);
-    expect(saved['group:c1::c'].y).toBe(1000);
+    expect(saved['group:c1::c'].y).toBe(BELOW_COLLECTION_CARDS);
   });
 
   it('a push keeps the full gap to the next card, and nothing is written', async () => {

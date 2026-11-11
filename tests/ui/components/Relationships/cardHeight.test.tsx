@@ -22,6 +22,7 @@ import {
 } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
 import {
   CARD_CHROME,
+  CARD_FOOTER_HEIGHT,
   CONTAINER_INSET,
   GROUP_WIDTH,
   STANDARD_GROUP_HEADER_FILL,
@@ -45,6 +46,7 @@ const P_2 = 8; // `p-2`
 const H_9 = 36; // `h-9`, the header row
 const PY_2 = 8; // `py-2`, the rows box, top and bottom
 const H_8 = 32; // `h-8`, one variable row (its border-b is inside it)
+const FOOTER_H_9 = 36; // `h-9`, the action footer of a standard/collection card (same strip as the header)
 
 const row = (id: string): VariableNode => ({
   id,
@@ -97,10 +99,20 @@ const cardData = (group: GroupData): GroupNodeData => ({
 const classesOf = (el: Element | null) => (el?.getAttribute('class') ?? '').split(/\s+/);
 
 describe('card height estimate', () => {
-  it.each([1, 2, 3, 6, 11, 20])('a %i-row card: border, gutter, header and rows', (count) => {
+  it.each([1, 2, 3, 6, 11, 20])('a %i-row card: border, gutter, header, rows and footer', (count) => {
     const drawn = 2 * (BORDER + P_0_5) + H_9 + 2 * PY_2 + count * H_8;
     expect(getCardHeightForRows(count)).toBe(drawn);
-    expect(getGroupHeight(card('a', count))).toBe(drawn);
+    expect(getCardHeightForRows(count, true)).toBe(drawn + FOOTER_H_9);
+    expect(getGroupHeight(card('a', count))).toBe(drawn + FOOTER_H_9);
+  });
+
+  it('the footer height constant is the h-9 the markup uses', () => {
+    expect(CARD_FOOTER_HEIGHT).toBe(FOOTER_H_9);
+  });
+
+  it('a card without actions (shader) has no footer in its height', () => {
+    const shader: GroupData = { ...card('a', 3), kind: 'shader' };
+    expect(getGroupHeight(shader)).toBe(getCardHeightForRows(3));
   });
 
   it('the chrome is the same 6px whatever the row count', () => {
@@ -129,6 +141,36 @@ describe('the markup the estimate is read off', () => {
     expect(classesOf(rowsBox)).toContain('py-2');
     expect(rowsBox!.children).toHaveLength(3);
     Array.from(rowsBox!.children).forEach(rowEl => expect(classesOf(rowEl)).toContain('h-8'));
+    // The footer sits below the rows box, inside the card box.
+    const footer = box!.querySelector('[data-testid="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(rowsBox!.nextElementSibling).toBe(footer);
+    expect(classesOf(footer)).toContain('h-9');
+  });
+
+  it('a standard card holds its "Add variable" button in the footer, not the header', () => {
+    const group = card('a', 3);
+    const props = { id: group.key, data: cardData(group) } as unknown as React.ComponentProps<typeof GroupNodeComponent>;
+    const { container } = render(
+      <ReactFlowProvider>
+        <GroupNodeComponent {...props} />
+      </ReactFlowProvider>
+    );
+    const label = `Add variable to ${group.title}`;
+    const footer = container.querySelector('[data-testid="card-footer"]')!;
+    expect(footer.querySelector(`[aria-label="${label}"]`)).not.toBeNull();
+    expect(container.querySelector('.group-header')!.querySelector(`[aria-label="${label}"]`)).toBeNull();
+  });
+
+  it('a card kind without actions (shader) draws no footer', () => {
+    const group: GroupData = { ...card('a', 3), kind: 'shader' };
+    const props = { id: group.key, data: cardData(group) } as unknown as React.ComponentProps<typeof GroupNodeComponent>;
+    const { container } = render(
+      <ReactFlowProvider>
+        <GroupNodeComponent {...props} />
+      </ReactFlowProvider>
+    );
+    expect(container.querySelector('[data-testid="card-footer"]')).toBeNull();
   });
 
   it('a container: bordered p-2 ring around a bordered p-0.5 card box', () => {
@@ -156,9 +198,9 @@ describe('a frame keeps WRAPPER_PADDING on every side of its cards', () => {
 
     // Above the first card: the header's bottom edge, then the padding.
     expect(b.position.y).toBe(CONTAINER_INSET + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING);
-    expect(c.position.y - (b.position.y + getCardHeightForRows(2))).toBe(WRAPPER_GAP);
+    expect(c.position.y - (b.position.y + getGroupHeight(cards[1]))).toBe(WRAPPER_GAP);
     // Below the last card: the padding, then the content edge.
-    expect(frame.height - (c.position.y + getCardHeightForRows(11))).toBe(WRAPPER_PADDING + CONTAINER_INSET);
+    expect(frame.height - (c.position.y + getGroupHeight(cards[2]))).toBe(WRAPPER_PADDING + CONTAINER_INSET);
     // Left and right alike.
     expect(b.position.x).toBe(CONTAINER_INSET + WRAPPER_PADDING);
     expect(frame.width - (b.position.x + GROUP_WIDTH)).toBe(WRAPPER_PADDING + CONTAINER_INSET);

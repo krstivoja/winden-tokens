@@ -68,7 +68,7 @@ const makeVariables = (one: string, two: string, prefix = 'v'): VariableData[] =
 ];
 const groupsOf = (one: string, two: string) => [`${one}::a`, `${one}::b`, `${one}::c`, `${two}::x`];
 
-const CARD = getCardHeightForRows(2);
+const CARD = getCardHeightForRows(2, true);
 const GAP = 24;
 const STEP = CARD + GAP;
 const SETTINGS = { sortBy: 'collection', gapY: GAP };
@@ -376,7 +376,9 @@ describe('Collection mode: the card order', () => {
     expect(writes('graph-order-collection')).toEqual([order]);
     expect((lastWrite('graph-layout-settings') as { sortBy: string }).sortBy).toBe('tier');
 
-    // Switching back (a switch only) shows the restored order.
+    // Switching back (a switch only) shows the restored order. Apply closed
+    // the modal, so reopen it.
+    fireEvent.click(screen.getByText('Grid Settings'));
     fireEvent.click(screen.getByRole('tab', { name: 'Collection' }));
     fireEvent.click(screen.getByText('Apply'));
     await waitFor(() => expect(shown()).toEqual({ c: 0, b: STEP, a: STEP * 2 }));

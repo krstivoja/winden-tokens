@@ -14,13 +14,19 @@ import { Dropdown } from '../../common/Dropdown/Dropdown';
 import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { GroupNodeData } from './types';
 import { GraphHandle } from './GraphHandle';
-import { getCardTitleSegments, getGroupHeight, isStructurallyEqual } from './utils';
+import { getCardTitleSegments, getGroupHeight, hasCardFooter, isStructurallyEqual } from './utils';
 import {
   GENERATED_CONNECTION_COLOR,
   REFERENCE_CONNECTION_COLOR,
   IDLE_HANDLE_FILL_COLOR,
   IDLE_HANDLE_BORDER_COLOR,
+  CARD_FOOTER_HEIGHT,
 } from './constants';
+
+// Written out in full so Tailwind sees every class. `active` = selected or
+// highlighted (data-active on the card root).
+const TITLE_EXPAND_CLASSES = 'group-hover/card:relative group-hover/card:flex-none group-hover/card:overflow-visible group-hover/card:rounded-r-sm group-hover/card:bg-(--card-header-fill) group-hover/card:-ml-3 group-hover/card:self-stretch group-hover/card:pl-3 group-hover/card:pr-6 group-hover/card:shadow-md group-data-active/card:relative group-data-active/card:flex-none group-data-active/card:overflow-visible group-data-active/card:rounded-r-sm group-data-active/card:bg-(--card-header-fill) group-data-active/card:-ml-3 group-data-active/card:self-stretch group-data-active/card:pl-3 group-data-active/card:pr-6 group-data-active/card:shadow-md';
+const TITLE_PART_EXPAND_CLASSES = 'group-hover/card:shrink-0 group-hover/card:overflow-visible group-hover/card:text-clip group-data-active/card:shrink-0 group-data-active/card:overflow-visible group-data-active/card:text-clip';
 
 /**
  * The header bar: the title, and whatever actions the caller puts on the
@@ -33,9 +39,10 @@ export function CardHeaderRow({
   headerFill,
   draggable = true,
   className = '',
+  expandTitle = false,
   children,
 }: {
-  /** Full title: the tooltip, and the label when no segments are given. */
+  /** Full title: the tooltip (none when the title expands on hover), and the label when no segments are given. */
   title: string;
   /** Breadcrumb parts (`font › size › body`); one part renders as plain text. */
   segments?: string[];
@@ -43,6 +50,11 @@ export function CardHeaderRow({
   /** False on a frozen card (inside a frame): no move cursor, nothing promises a drag. */
   draggable?: boolean;
   className?: string;
+  /** On card hover / selection / highlight the title grows to its full text,
+   *  over whatever is next to the card, instead of ending in an ellipsis. The
+   *  card root must carry `group/card` and `data-title-expand` (see
+   *  GroupNodeComponent); a container, whose header holds buttons, keeps it off. */
+  expandTitle?: boolean;
   children?: React.ReactNode;
 }) {
   const parts = segments && segments.length > 0 ? segments : [title];
@@ -50,11 +62,11 @@ export function CardHeaderRow({
   return (
     <div
       className={`group-header flex items-center justify-between gap-1 px-3 ${draggable ? 'cursor-move' : ''} select-none h-9 ${className}`}
-      style={{ background: headerFill }}
+      style={{ background: headerFill, '--card-header-fill': headerFill } as React.CSSProperties}
     >
       <span
-        className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap text-[13px]"
-        title={title}
+        className={`flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap text-[13px] ${expandTitle ? TITLE_EXPAND_CLASSES : ''}`}
+        title={expandTitle ? undefined : title}
         data-testid="card-title"
       >
         {parts.map((part, index) => (
@@ -65,7 +77,7 @@ export function CardHeaderRow({
               </span>
             )}
             <span
-              className={`overflow-hidden text-ellipsis ${
+              className={`overflow-hidden text-ellipsis ${expandTitle ? TITLE_PART_EXPAND_CLASSES : ''} ${
                 index === last
                   ? 'min-w-[3ch] shrink-[3] font-semibold text-text'
                   : 'min-w-0 shrink font-normal text-text/60'
@@ -101,9 +113,12 @@ type HeaderActionData = Pick<GroupNodeData, typeof HEADER_ACTION_FIELDS[number]>
 function CardHeaderActionsInner({
   data,
   showLevelUp = true,
+  menuPosition = 'bottom-right',
 }: {
   data: HeaderActionData;
   showLevelUp?: boolean;
+  /** Where the actions menu opens; a card's footer opens it upward. */
+  menuPosition?: 'bottom-right' | 'top-right';
 }) {
   const {
     group,
@@ -166,7 +181,7 @@ function CardHeaderActionsInner({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); onAddVariable(group); }}
       />
-      <Dropdown position="bottom-right">
+      <Dropdown position={menuPosition}>
         <Dropdown.Trigger asChild>
           <IconButton
             icon={<Icon name="menu" size={20} />}
@@ -208,6 +223,7 @@ function CardHeaderActionsInner({
 // re-render them: `isHidingUnused` picks the menu label).
 export const CardHeaderActions = React.memo(CardHeaderActionsInner, (prev, next) => (
   prev.showLevelUp === next.showLevelUp
+  && prev.menuPosition === next.menuPosition
   && HEADER_ACTION_FIELDS.every(key => isStructurallyEqual(prev.data[key], next.data[key]))
 ));
 
@@ -427,7 +443,7 @@ const CardRowsList = React.memo(function CardRowsList({
   );
 }, areCardRowsPropsEqual);
 
-function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
+function GroupNodeComponentInner({ data, selected }: NodeProps<Node<GroupNodeData>>) {
   const { group, isHighlighted, isDimmed } = data;
 
   // The layout's estimate of this card's height. `h-fit!` lets the markup
@@ -436,7 +452,9 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
 
   return (
     <div
-      className={`rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-xs w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-highlight-path ring-offset-2 ring-offset-canvas' : ''}`}
+      data-title-expand=""
+      data-active={isHighlighted || selected ? '' : undefined}
+      className={`group/card rf-group-box ${group.kind === 'shader' ? 'border-secondary' : 'border-text/40'} border rounded-sm bg-base h-fit! shadow-xs w-65 p-0.5 ${group.kind} transition-[opacity,box-shadow] duration-150 ${isDimmed ? 'opacity-55' : ''} ${isHighlighted ? 'ring-1 ring-highlight-path ring-offset-2 ring-offset-canvas' : ''}`}
       style={{ height }}
     >
       <CardHeaderRow
@@ -444,10 +462,18 @@ function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
         segments={getCardTitleSegments(group)}
         headerFill={group.headerFill}
         draggable={!data.inFrame}
-      >
-        <CardHeaderActions data={data} />
-      </CardHeaderRow>
+        expandTitle
+      />
       <CardRows data={data} />
+      {hasCardFooter(group) && (
+        <div
+          className="flex h-9 items-center justify-end gap-1 px-3 select-none"
+          style={{ height: CARD_FOOTER_HEIGHT, background: group.headerFill }}
+          data-testid="card-footer"
+        >
+          <CardHeaderActions data={data} menuPosition="top-right" />
+        </div>
+      )}
     </div>
   );
 }
