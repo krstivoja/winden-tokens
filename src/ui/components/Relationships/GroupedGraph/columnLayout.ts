@@ -1,18 +1,20 @@
 // Collection mode (Grid Settings "Sort by: Collection") — the pure half.
 //
 // One column per collection, left to right in collection order. Inside a
-// column the top-level units (loose cards, frames, managed chains) stack top
-// to bottom in the sidebar tree's path order (compareGroupPaths), the
-// collection root card first and an EMPTY root card last. Every column starts
-// at y = 0 and is as wide as its widest visible unit; a collection with
-// nothing visible takes no column and no gap.
+// column the top-level units (loose cards, frames, managed chains) form an
+// ordered list: the user's stored order (`graph-order-collection`, resolved by
+// orderColumnItems) or, without one, the sidebar tree's path order
+// (compareGroupPaths), the collection root card first and an EMPTY root card
+// last. Every column is packed from y = 0 with exactly `gapY` between visible
+// units; hidden units keep their list slot but take no room. Every column is
+// as wide as its widest visible unit; a collection with nothing visible takes
+// no column and no gap.
 //
-// No depth walk, no connections, no node positions: the order is the path
-// order, so the layout is deterministic and a drag never recomputes it.
+// No depth walk, no connections, no stored y: the layout is a pure function
+// of the items and the order, so filters and Hide unused always repack.
 //
-// Units keep only their y when moved: the column x always comes from here
-// (resolveColumnPositions for stored records, lockChangesToColumns for live
-// drags), so nothing can leave its column.
+// The column x always comes from here (packCollectionColumns for a layout
+// pass, lockChangesToColumns for live drags), so nothing can leave its column.
 
 import type { NodeChange } from '@xyflow/react';
 import { compareGroupPaths } from '../../../utils/groupFilters';
@@ -20,6 +22,7 @@ import { GROUP_WIDTH, WRAPPER_NODE_PREFIX } from './constants';
 import type { GroupData } from './types';
 import { getGroupHeight, getManagedLane, outermostGroupedAncestor, parseWrapperKey } from './utils';
 import { measureWrapperFrames } from './wrapperLayout';
+import { orderColumnItems } from './columnOrder';
 
 type Point = { x: number; y: number };
 
@@ -43,8 +46,10 @@ export interface ColumnItem {
   /** Sort path: the card's / frame's own path, '' for the collection root. */
   path: string;
   members: ColumnMember[];
-  /** The collection-root card with no variables — always last in its column. */
+  /** The collection-root card with no variables — last in natural order. */
   emptyRoot?: boolean;
+  /** A managed chain (source → shader → shades/steps), keyed `chain:<path>`. */
+  chain?: true;
 }
 
 export interface CollectionColumn {
@@ -89,7 +94,8 @@ function measureLine(item: ColumnItem, gapX: number) {
   return { offsets, width, height };
 }
 
-function compareItems(a: ColumnItem, b: ColumnItem): number {
+/** Natural order inside a column: path order, the empty root card last. */
+export function compareItems(a: ColumnItem, b: ColumnItem): number {
   if (!!a.emptyRoot !== !!b.emptyRoot) return a.emptyRoot ? 1 : -1;
   return compareGroupPaths(a.path, b.path)
     || (a.members[0]?.id ?? '').localeCompare(b.members[0]?.id ?? '');
@@ -102,37 +108,69 @@ export function layoutCollectionColumns(input: CollectionColumnsInput): Collecti
     return index < 0 ? collectionOrder.length : index;
   };
 
-  const byCollection = new Map<string, ColumnItem[]>();
+  const widths = new Map<string, number>();
   items.forEach(item => {
     if (!isVisible(item)) return;
-    const list = byCollection.get(item.collectionId) || [];
-    list.push(item);
-    byCollection.set(item.collectionId, list);
+    const width = measureLine(item, gapX).width;
+    widths.set(item.collectionId, Math.max(widths.get(item.collectionId) ?? 0, width));
   });
-  const collectionIds = Array.from(byCollection.keys())
+  const collectionIds = Array.from(widths.keys())
     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 
-  const positions = new Map<string, Point>();
   const columns: CollectionColumn[] = [];
   let x = 0;
   collectionIds.forEach(collectionId => {
-    const columnItems = (byCollection.get(collectionId) || []).slice().sort(compareItems);
-    let y = 0;
-    let width = 0;
-    columnItems.forEach(item => {
-      const line = measureLine(item, gapX);
-      item.members.forEach((member, index) => {
-        if (!member.hidden) positions.set(member.id, { x: x + line.offsets[index], y });
-      });
-      width = Math.max(width, line.width);
-      y += line.height + gapY;
-    });
+    const width = widths.get(collectionId) ?? 0;
     columns.push({ collectionId, x, width });
     x += width + gapX;
   });
 
+  // Natural layout = packing with no stored order.
+  const positions = packCollectionColumns(items, columns, new Map(), gapX, gapY);
   const last = columns[columns.length - 1];
   return { positions, columns, maxRight: last ? last.x + last.width : 0 };
+}
+
+/**
+ * Every visible member's spot, column by column: the column's items in
+ * `orders.get(collectionId)` order (orderColumnItems; a missing entry is
+ * natural order), stacked from y = 0 with exactly `gapY` between visible
+ * items. An item is hidden when every member is (`member.hidden`); it keeps
+ * its list slot but takes no room and gets no position. A chain line is as
+ * tall as its tallest visible lane, its lanes at `gapX` steps (a hidden lane
+ * keeps its slot); a frame is one member already sized from its visible cards
+ * (buildCollectionColumnItems / measureWrapperFrames). Keyed by member id —
+ * the xyflow node id (card key, `wrapper:<collectionId>::<path>`, chain lane
+ * keys). Items of a collection with no entry in `columns` get nothing.
+ */
+export function packCollectionColumns(
+  items: readonly ColumnItem[],
+  columns: readonly CollectionColumn[],
+  orders: ReadonlyMap<string, string[]>,
+  gapX: number,
+  gapY: number
+): Map<string, Point> {
+  const byCollection = new Map<string, ColumnItem[]>();
+  items.forEach(item => {
+    const list = byCollection.get(item.collectionId);
+    if (list) list.push(item);
+    else byCollection.set(item.collectionId, [item]);
+  });
+
+  const positions = new Map<string, Point>();
+  columns.forEach(column => {
+    const ordered = orderColumnItems(byCollection.get(column.collectionId) || [], orders.get(column.collectionId));
+    let y = 0;
+    ordered.forEach(item => {
+      if (!isVisible(item)) return;
+      const line = measureLine(item, gapX);
+      item.members.forEach((member, index) => {
+        if (!member.hidden) positions.set(member.id, { x: column.x + line.offsets[index], y });
+      });
+      y += line.height + gapY;
+    });
+  });
+  return positions;
 }
 
 /**
@@ -185,6 +223,7 @@ export function buildCollectionColumnItems(
     return {
       collectionId: ordered[0].collectionId,
       path: ordered[0].sourceGroupName || '',
+      chain: true as const,
       members: ordered.map(group => ({
         id: group.key, width: GROUP_WIDTH, height: getGroupHeight(group), hidden: isHidden(group),
       })),
@@ -192,24 +231,6 @@ export function buildCollectionColumnItems(
   });
 
   return [...units.values(), ...chainItems];
-}
-
-/**
- * The record a Collection-mode layout pass reads: every column unit at its
- * column's x and its saved y (natural y when it has none) — a saved x is never
- * trusted, so no stored record can pull a unit out of its column. Ids the
- * column layout does not place (library cards, the selection card, hidden
- * units) keep their saved spot untouched.
- */
-export function resolveColumnPositions(
-  saved: Readonly<Record<string, Point>>,
-  natural: ReadonlyMap<string, Point>
-): Record<string, Point> {
-  const out: Record<string, Point> = { ...saved };
-  natural.forEach((pos, id) => {
-    out[id] = { x: pos.x, y: saved[id]?.y ?? pos.y };
-  });
-  return out;
 }
 
 /**

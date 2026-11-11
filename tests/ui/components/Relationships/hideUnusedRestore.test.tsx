@@ -104,6 +104,7 @@ async function mount(layoutSettings: unknown = null) {
   storage('graph-grouped-paths', []);
   storage('graph-positions', {});
   storage('graph-positions-collection', {});
+  storage('graph-order-collection', null);
   storage('graph-tier-labels', []);
   storage('graph-layout-labels', null);
   storage('graph-layout-settings', layoutSettings);
@@ -210,8 +211,9 @@ describe('Undo Arrange while hiding', () => {
     fireEvent.change(screen.getByLabelText('Horizontal gap'), { target: { value: '100' } });
     fireEvent.click(screen.getByText('Apply'));
     await waitFor(() => expect(document.querySelector('[data-id="tier-label:collection:c1"]')).not.toBe(null));
-    // A temporary arrange: no saved record touched.
+    // A temporary arrange: no saved record or card order touched.
     expect(writes('graph-positions-collection')).toEqual([]);
+    expect(writes('graph-order-collection')).toEqual([]);
     posted.length = 0;
 
     fireEvent.click(await screen.findByText('Undo Arrange'));
@@ -229,6 +231,7 @@ describe('Undo Arrange while hiding', () => {
     expect(screen.queryByText('Undo Arrange')).toBe(null);
     expect(writes('graph-positions')).toEqual([]);
     expect(writes('graph-positions-collection')).toEqual([]);
+    expect(writes('graph-order-collection')).toEqual([]);
   });
 
   it('gives back the saved undo step the switch set aside', async () => {

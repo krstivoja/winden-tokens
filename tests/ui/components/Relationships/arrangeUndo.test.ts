@@ -87,3 +87,32 @@ describe('per-mode store', () => {
     expect(restoreArrangeSnapshot(collection)).toEqual(collection);
   });
 });
+
+describe('collection card order', () => {
+  const order = { v: 1 as const, columns: [{ id: 'c1', name: 'Color', items: ['path:b', 'path:a'] }] };
+
+  it('is deep-copied: mutating the record after the snapshot cannot change it', () => {
+    const live = { v: 1 as const, columns: order.columns.map(c => ({ ...c, items: c.items.slice() })) };
+    const snapshot = takeArrangeSnapshot({}, [], 'collection', undefined, live);
+    live.columns[0].items.push('path:c');
+    live.columns[0].name = 'Renamed';
+    live.columns.push({ id: 'c2', name: 'Size', items: [] });
+    expect(snapshot.collectionOrder).toEqual(order);
+  });
+
+  it('restores verbatim, as a fresh copy', () => {
+    const snapshot = takeArrangeSnapshot({}, [], 'collection', 'tier', order);
+    const restored = restoreArrangeSnapshot(snapshot);
+    expect(restored).toEqual({ positions: {}, tierLabels: [], store: 'collection', sortBy: 'tier', collectionOrder: order });
+    expect(restored.collectionOrder).not.toBe(snapshot.collectionOrder);
+    expect(restored.collectionOrder!.columns[0].items).not.toBe(snapshot.collectionOrder!.columns[0].items);
+  });
+
+  it('null (no stored order) round-trips as null; a Tier snapshot has no key', () => {
+    const none = takeArrangeSnapshot({}, [], 'collection', undefined, null);
+    expect(none.collectionOrder).toBeNull();
+    expect(restoreArrangeSnapshot(none).collectionOrder).toBeNull();
+    expect('collectionOrder' in takeArrangeSnapshot({}, [], 'tier')).toBe(false);
+    expect('collectionOrder' in restoreArrangeSnapshot(takeArrangeSnapshot({}, [], 'tier'))).toBe(false);
+  });
+});

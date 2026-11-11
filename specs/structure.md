@@ -106,6 +106,7 @@ winden-tokens/
 │   │   │   │   └── GroupedGraph/    # Graph nodes, layout and pure helpers
 │   │   │   │       ├── wrapperLayout.ts  # Frames + default packing
 │   │   │   │       ├── columnLayout.ts   # Collection mode: one column per collection
+│   │   │   │       ├── columnOrder.ts    # Collection mode per-column card order: storage, matching, reorder, migration
 │   │   │   │       ├── resolveOverlaps.ts # Overlap nudge: push overlapping cards/frames down to the gap
 │   │   │   │       ├── arrangeUndo.ts    # Undo Arrange snapshot
 │   │   │   │       ├── hideUnused.ts     # Highlight path + Hide unused
@@ -155,6 +156,9 @@ winden-tokens/
 │       ├── components/Table/
 │       │   ├── SidebarFilter.test.tsx
 │       │   └── SidebarFilterReorder.test.tsx  # Collection drag / Alt+Arrow reorder
+│       ├── components/Relationships/
+│       │   ├── columnOrder.test.ts            # Per-column order: parse / match / reorder / migrate
+│       │   └── collectionCardOrder.test.tsx   # Collection mode drag, keys, storage, Undo (component)
 │       ├── context/
 │       │   └── DataContext.test.tsx           # Resolved collections, reorderCollections
 │       └── utils/

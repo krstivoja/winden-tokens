@@ -139,13 +139,14 @@ function nodeBox(id: string) {
 function mount(
   selectedGroups: Set<string>,
   layoutSettings: unknown = null,
-  options: { groupedPaths?: string[]; collectionPositions?: unknown; positions?: unknown } = {}
+  options: { groupedPaths?: string[]; collectionPositions?: unknown; positions?: unknown; collectionOrder?: unknown } = {}
 ) {
   setContext(selectedGroups);
   const view = render(<GroupedGraph />);
   storage('graph-grouped-paths', options.groupedPaths ?? ['c1::', 'c2::']);
   storage('graph-positions', options.positions ?? {});
   storage('graph-positions-collection', options.collectionPositions ?? {});
+  storage('graph-order-collection', options.collectionOrder ?? null);
   storage('graph-tier-labels', []);
   storage('graph-layout-labels', null);
   storage('graph-layout-settings', layoutSettings);
@@ -231,6 +232,7 @@ describe('Grid Settings "Sort by"', () => {
     expect((saved[saved.length - 1] as { sortBy: string }).sortBy).toBe('collection');
     expect(writes('graph-positions')).toEqual([]);
     expect(writes('graph-positions-collection')).toEqual([]);
+    expect(writes('graph-order-collection')).toEqual([]);
     expect(writes('graph-tier-labels')).toEqual([]);
     expect(screen.queryByText('Undo Arrange')).toBe(null);
     // The canvas shows Collection mode: one column per collection.
@@ -239,15 +241,19 @@ describe('Grid Settings "Sort by"', () => {
   });
 
   it('an Apply that switches and changes a gap arranges the new mode; Undo restores mode and store', async () => {
-    const record = { 'wrapper:c1::': { x: 0, y: 400 } };
-    mount(allGroups, null, { collectionPositions: record, positions: { 'wrapper:c1::': { x: 900, y: 900 } } });
+    const record = { 'ext-group:lib': { x: 0, y: 400 } };
+    const order = { v: 1, columns: [{ id: 'c1', name: 'One', items: ['path:'] }] };
+    mount(allGroups, null, {
+      collectionPositions: record, collectionOrder: order, positions: { 'wrapper:c1::': { x: 900, y: 900 } },
+    });
     await waitFor(() => nodeBox('wrapper:c2::'));
     openGridSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Collection' }));
     fireEvent.change(screen.getByLabelText('Horizontal gap'), { target: { value: '100' } });
     fireEvent.click(screen.getByText('Apply'));
 
-    // Collection Arrange = reset its own record; Tier's is untouched.
+    // Collection Arrange = reset its own order and record; Tier's is untouched.
+    expect(writes('graph-order-collection')).toEqual([{ v: 1, columns: [] }]);
     expect(writes('graph-positions-collection')).toEqual([{}]);
     expect(writes('graph-positions')).toEqual([]);
     expect(writes('graph-tier-labels')).toEqual([]);
@@ -255,6 +261,7 @@ describe('Grid Settings "Sort by"', () => {
     posted.length = 0;
 
     fireEvent.click(await screen.findByText('Undo Arrange'));
+    expect(writes('graph-order-collection')).toEqual([order]);
     expect(writes('graph-positions-collection')).toEqual([record]);
     expect(writes('graph-positions')).toEqual([]);
     expect(writes('graph-tier-labels')).toEqual([]);
@@ -318,44 +325,56 @@ describe('Collection mode: one column per collection', () => {
     expect(headerIds()).toEqual(['tier-label:collection:c2']);
   });
 
-  it('a stored x is never trusted: a unit stays in its column, keeping its stored y', async () => {
-    mount(allGroups, { sortBy: 'collection' }, { collectionPositions: { 'wrapper:c2::': { x: 5000, y: 300 } } });
-    await waitFor(() => expect(nodeBox('wrapper:c2::')).toMatchObject({ x: COLUMN_2_X, y: 300 }));
+  // Loose cards (no frames): c1's column is a, b, then its empty root card.
+  const CARD = getCardHeightForRows(2);
+  const reversed = { v: 1, columns: [{ id: 'c1', name: 'One', items: ['path:b', 'path:a', 'path:'] }] };
+
+  it('packs a column in the stored card order; a stored spot of a column unit is never used', async () => {
+    mount(allGroups, { sortBy: 'collection', gapY: 24 }, {
+      groupedPaths: [],
+      collectionOrder: reversed,
+      collectionPositions: { 'group:c1::a': { x: 5000, y: 900 } },
+    });
+    await waitFor(() => expect(nodeBox('group:c1::a')).toMatchObject({ x: 0, y: CARD + 24 }));
+    expect(nodeBox('group:c1::b')).toMatchObject({ x: 0, y: 0 });
   });
 
-  it('a keyboard move keeps the column x and saves only the moved card, to the Collection record', async () => {
-    // Loose cards (no frames), so a card can be selected and moved.
-    mount(allGroups, { sortBy: 'collection' }, { groupedPaths: [] });
-    await waitFor(() => nodeBox('group:c2::x'));
-    const before = nodeBox('group:c2::x');
-    const el = document.querySelector('.react-flow__node[data-id="group:c2::x"]') as HTMLElement;
+  it('a keyboard move keeps the column x and saves the card order, not a position', async () => {
+    mount(allGroups, { sortBy: 'collection', gapY: 24 }, { groupedPaths: [] });
+    await waitFor(() => nodeBox('group:c1::a'));
+    const before = nodeBox('group:c1::a');
+    const el = document.querySelector('.react-flow__node[data-id="group:c1::a"]') as HTMLElement;
     // Enter selects a focused node (xyflow's keyboard a11y), as a click would.
     fireEvent.keyDown(el, { key: 'Enter' });
     await waitFor(() => expect(el.classList.contains('selected')).toBe(true));
     fireEvent.keyDown(el, { key: 'ArrowRight' });
     fireEvent.keyDown(el, { key: 'ArrowDown' });
-    await waitFor(() => expect(nodeBox('group:c2::x').y).toBeGreaterThan(before.y));
-    expect(nodeBox('group:c2::x').x).toBe(before.x);
+    await waitFor(() => expect(nodeBox('group:c1::a').y).toBe(CARD + 24));
+    expect(nodeBox('group:c1::a').x).toBe(before.x);
+    expect(nodeBox('group:c1::b').y).toBe(0);
 
-    await waitFor(() => expect(writes('graph-positions-collection').length).toBe(1));
-    const saved = writes('graph-positions-collection')[0] as Record<string, { x: number; y: number }>;
-    expect(Object.keys(saved)).toEqual(['group:c2::x']);
-    expect(saved['group:c2::x'].x).toBe(before.x);
+    await waitFor(() => expect(writes('graph-order-collection').length).toBe(1));
+    expect(writes('graph-order-collection')[0]).toEqual(reversed);
+    expect(writes('graph-positions-collection')).toEqual([]);
     expect(writes('graph-positions')).toEqual([]);
   });
 
-  it('Arrange resets the Collection record; Undo restores the previous one', async () => {
-    const record = { 'wrapper:c2::': { x: COLUMN_2_X, y: 300 } };
-    mount(allGroups, { sortBy: 'collection' }, { collectionPositions: record });
-    await waitFor(() => expect(nodeBox('wrapper:c2::').y).toBe(300));
+  it('Arrange resets the card order and the free record; Undo restores both', async () => {
+    const record = { 'ext-group:lib': { x: 900, y: 40 } };
+    mount(allGroups, { sortBy: 'collection', gapY: 24 }, {
+      groupedPaths: [], collectionOrder: reversed, collectionPositions: record,
+    });
+    await waitFor(() => expect(nodeBox('group:c1::a').y).toBe(CARD + 24));
     fireEvent.click(screen.getByText('Arrange Grid'));
+    expect(writes('graph-order-collection')).toEqual([{ v: 1, columns: [] }]);
     expect(writes('graph-positions-collection')).toEqual([{}]);
-    await waitFor(() => expect(nodeBox('wrapper:c2::').y).toBe(0));
+    await waitFor(() => expect(nodeBox('group:c1::a').y).toBe(0));
 
     fireEvent.click(await screen.findByText('Undo Arrange'));
+    expect(writes('graph-order-collection')).toEqual([{ v: 1, columns: [] }, reversed]);
     expect(writes('graph-positions-collection')).toEqual([{}, record]);
     expect(writes('graph-positions')).toEqual([]);
-    await waitFor(() => expect(nodeBox('wrapper:c2::').y).toBe(300));
+    await waitFor(() => expect(nodeBox('group:c1::a').y).toBe(CARD + 24));
   });
 
   it('switching back to Tier shows the Tier record, untouched by Collection mode', async () => {

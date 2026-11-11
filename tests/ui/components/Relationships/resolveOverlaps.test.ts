@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Node } from '@xyflow/react';
 import {
-  boxesToStore,
   getNodeOverlapBox,
   resolveDrop,
   resolveNodeOverlaps,
@@ -274,38 +273,6 @@ describe('resolveDrop', () => {
     const moved = resolveDrop(boxes, 24, at({ c: [0, 248] }));
     const resolved = boxes.map(b => ({ ...b, y: moved.get(b.id) ?? b.y }));
     expect(resolveOverlaps(resolved, 24).size).toBe(0);
-  });
-});
-
-// Collection mode stores only what the next layout pass would not reproduce
-// by itself: the dropped boxes and the ones that passed them. Boxes pushed
-// down from below keep re-flowing with the filters.
-describe('boxesToStore', () => {
-  it('a drop onto the boxes below stores the drop alone', () => {
-    // a dropped from 0 to 50 onto b (124) and c (248): shown after the drop.
-    const shown = [box('a', 0, 50), box('b', 0, 174), box('c', 0, 298)];
-    const start = new Map([['b', 124], ['c', 248]]);
-    expect([...boxesToStore(shown, start, new Set(['a']), 24)].sort()).toEqual(['a']);
-  });
-
-  it('a box the drop passed is stored with it, the cascade below is not', () => {
-    // b dropped up to 90 into a; a passed it; c pushed from 248.
-    const shown = [box('a', 0, 214), box('b', 0, 90), box('c', 0, 338)];
-    const start = new Map([['a', 0], ['c', 248]]);
-    expect([...boxesToStore(shown, start, new Set(['b']), 24)].sort()).toEqual(['a', 'b']);
-  });
-
-  it('a stored box the next pass pushes the same way keeps its old record', () => {
-    // c is stored at 280 (closer than the gap under b once b is pushed).
-    const shown = [box('a', 0, 50), box('b', 0, 174), box('c', 0, 298)];
-    const start = new Map([['b', 124], ['c', 280]]);
-    expect([...boxesToStore(shown, start, new Set(['a']), 24)].sort()).toEqual(['a']);
-  });
-
-  it('stores whatever else the pass would not reproduce', () => {
-    // x sat 400 in the record but is shown at 500 (nothing pushes it there).
-    const shown = [box('a', 0, 0), box('x', 0, 500)];
-    expect([...boxesToStore(shown, new Map([['x', 400]]), new Set(['a']), 24)].sort()).toEqual(['a', 'x']);
   });
 });
 

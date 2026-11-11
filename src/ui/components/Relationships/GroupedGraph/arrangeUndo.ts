@@ -20,7 +20,12 @@
 // `graph-positions-collection` for Collection), so the snapshot names the
 // store it was taken from and Undo writes it back to THAT store. The tier
 // captions only mean something for a Tier snapshot.
+//
+// A Collection snapshot also carries the card order per column
+// (`graph-order-collection`): Arrange resets it to natural, Undo writes it
+// back verbatim — `null` when there was no record, so Undo clears it again.
 
+import type { ColumnOrderRecord } from './columnOrder';
 import type { GraphSortBy, TierPlacement } from './types';
 
 type PositionRecord = Record<string, { x: number; y: number }>;
@@ -35,6 +40,17 @@ export interface ArrangeUndoSnapshot {
   /** The "Sort by" mode before the arrange — set only when the arrange
    *  (an Apply) switched it. */
   sortBy?: GraphSortBy;
+  /** Collection mode only: the card order record (`graph-order-collection`)
+   *  before the arrange; `null` when none was stored. Absent for Tier. */
+  collectionOrder?: ColumnOrderRecord | null;
+}
+
+function copyColumnOrder(record: ColumnOrderRecord | null): ColumnOrderRecord | null {
+  if (!record) return null;
+  return {
+    v: record.v,
+    columns: record.columns.map(column => ({ id: column.id, name: column.name, items: column.items.slice() })),
+  };
 }
 
 /** Copy the pre-arrange state; later mutation of the inputs cannot leak in. */
@@ -42,7 +58,8 @@ export function takeArrangeSnapshot(
   savedPositions: PositionRecord,
   tierLabels: TierPlacement[],
   store: GraphSortBy,
-  previousSortBy?: GraphSortBy
+  previousSortBy?: GraphSortBy,
+  collectionOrder?: ColumnOrderRecord | null
 ): ArrangeUndoSnapshot {
   const positions: PositionRecord = {};
   Object.entries(savedPositions).forEach(([key, pos]) => { positions[key] = { x: pos.x, y: pos.y }; });
@@ -51,10 +68,11 @@ export function takeArrangeSnapshot(
     tierLabels: tierLabels.map(label => ({ ...label })),
     store,
     ...(previousSortBy ? { sortBy: previousSortBy } : {}),
+    ...(collectionOrder !== undefined ? { collectionOrder: copyColumnOrder(collectionOrder) } : {}),
   };
 }
 
 /** What Undo writes back: the snapshot itself, verbatim — nothing frozen. */
 export function restoreArrangeSnapshot(snapshot: ArrangeUndoSnapshot): ArrangeUndoSnapshot {
-  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels, snapshot.store, snapshot.sortBy);
+  return takeArrangeSnapshot(snapshot.positions, snapshot.tierLabels, snapshot.store, snapshot.sortBy, snapshot.collectionOrder);
 }

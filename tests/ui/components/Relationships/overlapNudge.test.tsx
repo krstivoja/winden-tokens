@@ -1,9 +1,10 @@
 // Saved layouts from before the card-height fix overlap: cards and frames are
 // drawn taller than the estimates those layouts were packed with. Loading one
 // must push overlapping boxes down to the Grid Settings gap — without writing
-// anything to storage, without moving anything that does not collide, and in
-// both Tier and Collection mode. A keyboard drop that lands on another card
-// resolves on the spot, and the push is saved with the drop.
+// anything to storage and without moving anything that does not collide. A
+// keyboard drop that lands on another card resolves on the spot, and the push
+// is saved with the drop. All of this is Tier mode: Collection mode packs its
+// columns in a stored card order instead (collectionCardOrder.test.tsx).
 //
 // Real GroupedGraph with real xyflow; storage answers are dispatched as the
 // plugin's `client-storage-data` messages, geometry is read off the nodes.
@@ -248,40 +249,6 @@ describe('Tier mode: a layout saved before the height fix', () => {
   });
 });
 
-describe('Collection mode: a dragged card under computed ones', () => {
-  it('pushes the dragged card below the computed card that grew into it', async () => {
-    // Collection mode keeps only moved cards: b was dropped 6px below a's
-    // old bottom (+ gap 24); a is computed, and now taller.
-    await mount({
-      settings: { sortBy: 'collection', gapY: 24 },
-      collectionPositions: { 'group:c1::b': { x: 0, y: CARD - 10 } },
-    });
-    await waitFor(() => expect(pos('group:c1::b').y).toBe(CARD + 24));
-    expect(pos('group:c1::a').y).toBe(0);
-    // c (computed, at its natural spot below b's natural one) does not collide.
-    expect(pos('group:c1::c').y).toBe((CARD + 24) * 2);
-    expect(writes('graph-positions-collection')).toEqual([]);
-  });
-
-  it('pushes the computed cards below a dragged card that lands on them, cascading', async () => {
-    await mount({
-      settings: { sortBy: 'collection', gapY: 24 },
-      // a dropped onto b's natural spot: b and then c make room.
-      collectionPositions: { 'group:c1::a': { x: 0, y: CARD } },
-    });
-    await waitFor(() => expect(pos('group:c1::b').y).toBe(CARD + CARD + 24));
-    expect(pos('group:c1::a').y).toBe(CARD);
-    expect(pos('group:c1::c').y).toBe(CARD + (CARD + 24) * 2);
-  });
-
-  it('leaves an untouched layout alone', async () => {
-    await mount({ settings: { sortBy: 'collection', gapY: 24 } });
-    expect(pos('group:c1::a').y).toBe(0);
-    expect(pos('group:c1::b').y).toBe(CARD + 24);
-    expect(pos('group:c1::c').y).toBe((CARD + 24) * 2);
-  });
-});
-
 describe('a drop onto another card', () => {
   it('a key press into the card below swaps the two, and the swap is saved with the drop', async () => {
     await mount({
@@ -308,32 +275,6 @@ describe('a drop onto another card', () => {
     expect(saved['group:c1::a'].y).toBe(CARD + 24);
     expect(saved['group:c1::b'].y).toBe(0);
     expect(saved['group:c1::c'].y).toBe(1000);
-  });
-
-  it('Collection mode: key presses down swap once the card runs into the next; only the pair is stored, the rest re-flows', async () => {
-    const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
-    const a = nodeEl('group:c1::a')!;
-    fireEvent.keyDown(a, { key: 'Enter' });
-    const STEP = CARD + 24;
-    // 8px a press: three walk a into the 24px gap, the fourth runs into b.
-    await pressUntil(a, 'ArrowDown', () => pos('group:c1::b').y === 0);
-    const expected = { a: STEP, b: 0, c: STEP * 2 };
-    const shown = () => ({ a: pos('group:c1::a').y, b: pos('group:c1::b').y, c: pos('group:c1::c').y });
-    await waitFor(() => expect(shown()).toEqual(expected));
-    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
-    const all = writes('graph-positions-collection');
-    expect(Object.keys(all[all.length - 1] as object).sort()).toEqual(['group:c1::a', 'group:c1::b']);
-
-    // Any rebuild (here: a fresh filter object) lays out from the record.
-    setContext(new Set(ALL_GROUPS));
-    view.rerender(<GroupedGraph />);
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-    expect(shown()).toEqual(expected);
-
-    // Filter a out: c (unstored) closes up under b.
-    setContext(new Set(['c1::b', 'c1::c', 'c2::x']));
-    view.rerender(<GroupedGraph />);
-    await waitFor(() => expect(pos('group:c1::c').y).toBe(STEP));
   });
 
   it('a push keeps the full gap to the next card, and nothing is written', async () => {
@@ -469,51 +410,6 @@ describe('a drop that passes a box swaps with it', () => {
     expect(pos('group:c1::a').y).toBeLessThan(f.height);
   });
 
-  it('Collection mode: up stores the swapped pair only, keeps the column x, and a reload shows the same layout', async () => {
-    const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
-    const b = nodeEl('group:c1::b')!;
-    const x = pos('group:c1::b').x;
-    fireEvent.keyDown(b, { key: 'Enter' });
-    fireEvent.keyDown(b, { key: 'ArrowRight' });
-    await pressUntil(b, 'ArrowUp', () => pos('group:c1::b').y < CARD);
-    const expected = { a: STEP, b: 0, c: STEP * 2 };
-    await waitFor(() => expect(shown()).toEqual(expected));
-    expect(pos('group:c1::b').x).toBe(x);
-    expect(pos('group:c1::a').x).toBe(x);
-
-    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
-    const record = lastWrite('graph-positions-collection');
-    // c and the root card never moved: they stay unstored.
-    expect(Object.keys(record).sort()).toEqual(['group:c1::a', 'group:c1::b']);
-
-    view.unmount();
-    posted.length = 0;
-    await mount({ settings: { sortBy: 'collection', gapY: 24 }, collectionPositions: record });
-    await waitFor(() => expect(shown()).toEqual(expected));
-    expect(writes('graph-positions-collection')).toEqual([]);
-  });
-
-  it('Collection mode: down stores the swapped pair only, a reload shows the same layout, and a filter re-flows the rest', async () => {
-    const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
-    mouseDrag('group:c1::a', STEP - 40);
-    const expected = { a: STEP, b: 0, c: STEP * 2 };
-    await waitFor(() => expect(shown()).toEqual(expected));
-    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
-    const record = lastWrite('graph-positions-collection');
-    expect(Object.keys(record).sort()).toEqual(['group:c1::a', 'group:c1::b']);
-
-    // Filter a out: c (unstored) closes up under b.
-    setContext(new Set(['c1::b', 'c1::c', 'c2::x']));
-    view.rerender(<GroupedGraph />);
-    await waitFor(() => expect(pos('group:c1::c').y).toBe(STEP));
-
-    view.unmount();
-    posted.length = 0;
-    await mount({ settings: { sortBy: 'collection', gapY: 24 }, collectionPositions: record });
-    await waitFor(() => expect(shown()).toEqual(expected));
-    expect(writes('graph-positions-collection')).toEqual([]);
-  });
-
   it('Tier mode: a reload from the saved record shows the same layout', async () => {
     const view = await mount({ settings: { gapY: 24 }, positions: stacked });
     const b = nodeEl('group:c1::b')!;
@@ -521,8 +417,12 @@ describe('a drop that passes a box swaps with it', () => {
     await pressUntil(b, 'ArrowUp', () => pos('group:c1::b').y < CARD);
     const expected = { a: STEP, b: 0, c: STEP * 2 };
     await waitFor(() => expect(shown()).toEqual(expected));
-    await waitFor(() => expect(writes('graph-positions').length).toBeGreaterThan(0), { timeout: 1000 });
-    const record = lastWrite('graph-positions');
+    // This drop's save: an earlier test's debounced save can still land
+    // after its unmount (an empty record), so wait for the one with the cards.
+    const ours = () => (writes('graph-positions') as Array<Record<string, { x: number; y: number }>>)
+      .filter(record => 'group:c1::b' in record);
+    await waitFor(() => expect(ours().length).toBeGreaterThan(0), { timeout: 1000 });
+    const record = ours()[ours().length - 1];
 
     view.unmount();
     posted.length = 0;

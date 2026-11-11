@@ -454,6 +454,20 @@ describe('extendHidingLayout', () => {
     expect(next.previousSortBy).toBe('tier');
     expect(next.savedUndo).toBe(null);
   });
+
+  it('carries the temporary collection order; a new one replaces it', () => {
+    const natural = { v: 1 as const, columns: [] };
+    const first = extendHidingLayout(null, { activation: 'a', positions: {}, tierLabels: [], collectionOrder: natural }, null);
+    expect(first.collectionOrder).toBe(natural);
+    // A later arrange without an order (e.g. Tier) keeps it.
+    const kept = extendHidingLayout(first, { activation: 'a', positions: {}, tierLabels: [] }, null);
+    expect(kept.collectionOrder).toBe(natural);
+    const reordered = { v: 1 as const, columns: [{ id: 'c1', name: 'Color', items: ['path:b', 'path:a'] }] };
+    expect(extendHidingLayout(kept, { activation: 'a', positions: {}, tierLabels: [], collectionOrder: reordered }, null)
+      .collectionOrder).toBe(reordered);
+    // No order anywhere → no key.
+    expect('collectionOrder' in extendHidingLayout(null, { activation: 'a', positions: {}, tierLabels: [] }, null)).toBe(false);
+  });
 });
 
 describe('releaseCollectionsFromOwn', () => {

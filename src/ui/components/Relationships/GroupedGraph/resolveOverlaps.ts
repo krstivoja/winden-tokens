@@ -3,9 +3,10 @@
 // Saved layouts are only as good as the size estimates they were made with.
 // Records written before the card-height fix (cards 6px, frames 22–34px
 // shorter than drawn) now overlap: in Tier mode a frame runs into the card
-// below it, in Collection mode the computed cards above a dragged one run
-// into it. Rather than rewrite anyone's record, every layout pass resolves
-// overlaps on the way to the canvas, and a drop resolves the overlap it made.
+// below it. Rather than rewrite anyone's record, every layout pass resolves
+// overlaps on the way to the canvas, and a Tier-mode drop resolves the
+// overlap it made. Collection mode packs its columns (columnLayout.ts), so
+// there its column units are pinned and only free cards can be nudged.
 //
 // The rule: walking top to bottom, a box that overlaps a box above it (both
 // on screen, in the same column) moves DOWN to sit exactly the Grid Settings
@@ -197,46 +198,6 @@ export function resolveDrop(
     const y = moved.get(box.id) ?? box.y;
     if (y !== boxes[index].y) out.set(box.id, y);
   });
-  return out;
-}
-
-/**
- * Collection mode stores only the boxes moved by hand: the rest keep
- * re-flowing with the filters. A drop moves more than that (the boxes it
- * pushed), so this picks what the record must also hold for the next layout
- * pass to show exactly `shown` again: the boxes that pass would not put there
- * by itself — in practice a box the drop passed (it started above a dropped
- * box and is now below it). A box pushed down from below is left out: the
- * pass makes the same push from the stored drop.
- *
- * `shown`: the boxes on screen after the drop. `passStart`: the y the next
- * pass starts a box at while its y is not stored now (its old record, else its
- * natural slot); a box missing there starts where it is shown. `stored`: the
- * ids the record will hold at their shown y. Returns `stored` plus what it
- * needs. Each round adds the first box, in the pass's own order, the pass
- * gets wrong: every box placed before it is right, so it can only be fixed
- * by storing it.
- */
-export function boxesToStore(
-  shown: readonly OverlapBox[],
-  passStart: ReadonlyMap<string, number>,
-  stored: ReadonlySet<string>,
-  gapY: number
-): Set<string> {
-  const out = new Set(stored);
-  for (let round = 0; round <= shown.length; round++) {
-    const start = shown.map(box => (out.has(box.id) ? box : { ...box, y: passStart.get(box.id) ?? box.y }));
-    const moved = resolveOverlaps(start, gapY);
-    let first: OverlapBox | null = null;
-    for (let index = 0; index < start.length; index++) {
-      const box = start[index];
-      const y = moved.get(box.id) ?? box.y;
-      if (Math.abs(y - shown[index].y) <= EPSILON) continue;
-      if (!first || byTop(box, first) < 0) first = box;
-    }
-    if (!first) return out;
-    out.add(first.id);
-  }
   return out;
 }
 

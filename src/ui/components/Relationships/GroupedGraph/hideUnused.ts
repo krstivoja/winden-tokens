@@ -15,6 +15,7 @@
 import { getCollectionGroupKey, getVariableGroupName } from '../../../utils/groupFilters';
 import type { ConnectionRecord, GraphSortBy, GroupData, TierLabelNodeData } from './types';
 import type { ArrangeUndoSnapshot } from './arrangeUndo';
+import type { ColumnOrderRecord } from './columnOrder';
 
 export interface HighlightPath {
   /** Cards holding any variable on the path, plus the highlighted card. */
@@ -401,28 +402,35 @@ export interface HidingLayout {
   /** The saved one-step undo of the mode that switch left, set aside while
    *  the layout lives in the other mode; Undo Arrange gives it back. */
   savedUndo?: ArrangeUndoSnapshot | null;
+  /** Collection mode: the temporary card order per column (natural, i.e.
+   *  `{ v: 1, columns: [] }`, when the arrange made it); drags while the
+   *  layout lives reorder only this, never the saved order. */
+  collectionOrder?: ColumnOrderRecord;
 }
 
 /**
  * The next temporary layout for an arrange made while hiding, laid over the
  * active one (`previous`, null when none): new positions win, what the new
- * arrange did not move keeps its spot. The mode and the saved undo step from
+ * arrange did not move keeps its spot. A new `collectionOrder` replaces the
+ * previous one; without one the previous order is carried. The mode and the saved undo step from
  * before the FIRST arrange of the layout are kept, so dropping it (Undo
  * Arrange) returns to the state before any of it; a switching arrange on a
  * fresh layout records them from `switched`.
  */
 export function extendHidingLayout(
   previous: HidingLayout | null,
-  next: Pick<HidingLayout, 'activation' | 'positions' | 'tierLabels'>,
+  next: Pick<HidingLayout, 'activation' | 'positions' | 'tierLabels' | 'collectionOrder'>,
   switched: { previousSortBy: GraphSortBy; savedUndo: ArrangeUndoSnapshot | null } | null
 ): HidingLayout {
   const origin = previous?.previousSortBy !== undefined
     ? { previousSortBy: previous.previousSortBy, savedUndo: previous.savedUndo ?? null }
     : switched;
+  const collectionOrder = next.collectionOrder ?? previous?.collectionOrder;
   return {
     activation: next.activation,
     positions: { ...previous?.positions, ...next.positions },
     tierLabels: next.tierLabels,
+    ...(collectionOrder ? { collectionOrder } : {}),
     ...(origin ? { previousSortBy: origin.previousSortBy, savedUndo: origin.savedUndo } : {}),
   };
 }

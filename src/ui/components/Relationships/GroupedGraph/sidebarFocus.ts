@@ -95,7 +95,8 @@ export function selectFocusScope(nodes: Node[], collectionId: string, path: stri
  * (a managed chain's later lanes sit to the right and lose). A collection's
  * column can be very tall, so fitting all of it would zoom far out. An empty
  * collection-root card ("No variables at the collection root") is skipped for
- * the first card that has variables (it is last in its column anyway), and is
+ * the first card that has variables (it is last in natural order, but the
+ * user can move it anywhere in its column's card order), and is
  * the target only when nothing else of the collection is visible. Null when
  * nothing of it is visible.
  */

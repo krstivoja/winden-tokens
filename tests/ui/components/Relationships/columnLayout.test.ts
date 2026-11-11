@@ -5,10 +5,10 @@ import type { NodeChange } from '@xyflow/react';
 import {
   buildCollectionColumnItems,
   layoutCollectionColumns,
-  resolveColumnPositions,
+  packCollectionColumns,
   lockChangesToColumns,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/columnLayout';
-import type { ColumnItem } from '../../../../src/ui/components/Relationships/GroupedGraph/columnLayout';
+import type { ColumnItem, CollectionColumn } from '../../../../src/ui/components/Relationships/GroupedGraph/columnLayout';
 import { compareGroupPaths } from '../../../../src/ui/utils/groupFilters';
 import type { GroupData, VariableNode } from '../../../../src/ui/components/Relationships/GroupedGraph/types';
 
@@ -31,6 +31,7 @@ const card = (collectionId: string, path: string, over: Partial<ColumnItem> & { 
 const chain = (collectionId: string, path: string, heights = [60, 60, 200]): ColumnItem => ({
   collectionId,
   path,
+  chain: true,
   members: heights.map((height, index) => ({ id: `${['source', 'shader', 'shades'][index]}:${path}`, width: 260, height })),
 });
 
@@ -136,26 +137,74 @@ describe('layoutCollectionColumns', () => {
   });
 });
 
-describe('resolveColumnPositions', () => {
-  const natural = new Map([['a', { x: 360, y: 40 }], ['b', { x: 360, y: 200 }]]);
+describe('packCollectionColumns', () => {
+  const columns: CollectionColumn[] = [{ collectionId: 'color', x: 360, width: 260 }];
+  const pack = (items: ColumnItem[], stored?: string[], cols = columns) =>
+    packCollectionColumns(items, cols, new Map(stored ? [['color', stored]] : []), gapX, gapY);
+  const ys = (positions: Map<string, { x: number; y: number }>, ids: string[]) => ids.map(id => positions.get(id)?.y);
 
-  it('ignores a saved x, keeps a saved y', () => {
-    expect(resolveColumnPositions({ a: { x: 9999, y: 500 } }, natural).a).toEqual({ x: 360, y: 500 });
+  it('stacks in stored order from y 0 with exactly gapY, at the column x', () => {
+    const items = [card('color', 'a', { height: 50 }), card('color', 'b', { height: 70 }), card('color', 'c', { height: 30 })];
+    const positions = pack(items, ['path:c', 'path:a', 'path:b']);
+    expect(ys(positions, ['color::c', 'color::a', 'color::b'])).toEqual([0, 30 + gapY, 30 + 50 + 2 * gapY]);
+    expect(positions.get('color::a')!.x).toBe(360);
   });
 
-  it('an unsaved unit takes its natural spot', () => {
-    expect(resolveColumnPositions({}, natural).b).toEqual({ x: 360, y: 200 });
+  it('hidden items keep their slot but take no room and get no position', () => {
+    const items = [card('color', 'a', { height: 50 }), card('color', 'b', { height: 70, hidden: true }), card('color', 'c', { height: 30 })];
+    const positions = pack(items, ['path:b', 'path:c', 'path:a']);
+    expect(positions.has('color::b')).toBe(false);
+    expect(ys(positions, ['color::c', 'color::a'])).toEqual([0, 30 + gapY]);
   });
 
-  it('non-column ids keep their saved {x, y}', () => {
-    const saved = { 'ext-group:lib': { x: 4000, y: 12 } };
-    expect(resolveColumnPositions(saved, natural)['ext-group:lib']).toEqual({ x: 4000, y: 12 });
+  it('a chain line is as tall as its tallest visible lane; lanes at gapX steps', () => {
+    const items = [chain('color', 'brand/500', [60, 300, 200]), card('color', 'z', { height: 40 })];
+    items[0].members[1].hidden = true;
+    const positions = pack(items, ['chain:brand/500', 'path:z']);
+    expect(positions.get('source:brand/500')).toEqual({ x: 360, y: 0 });
+    expect(positions.has('shader:brand/500')).toBe(false);
+    expect(positions.get('shades:brand/500')).toEqual({ x: 360 + 2 * (260 + gapX), y: 0 });
+    // Tallest VISIBLE lane is 200 (the hidden 300 takes no room).
+    expect(positions.get('color::z')!.y).toBe(200 + gapY);
   });
 
-  it('a Tier-style free x never leaves the column', () => {
-    const tierRecord = { a: { x: 1234, y: 40 }, b: { x: -80, y: 200 } };
-    const resolved = resolveColumnPositions(tierRecord, natural);
-    expect([resolved.a.x, resolved.b.x]).toEqual([360, 360]);
+  it('a frame is one block of its measured height; nothing inside it is placed here', () => {
+    const groups: GroupData[] = [
+      { key: 'group:color::f/a', title: 'a', variables: [], x: 0, y: 0, initialX: 0, initialY: 0, kind: 'standard', sourceGroupName: 'f/a', headerFill: '#222', collectionId: 'color' },
+      { key: 'group:color::f/b', title: 'b', variables: [], x: 0, y: 0, initialX: 0, initialY: 0, kind: 'standard', sourceGroupName: 'f/b', headerFill: '#222', collectionId: 'color' },
+      { key: 'group:color::z', title: 'z', variables: [], x: 0, y: 0, initialX: 0, initialY: 0, kind: 'standard', sourceGroupName: 'z', headerFill: '#222', collectionId: 'color' },
+    ];
+    const items = buildCollectionColumnItems(groups, new Set(['color::f']), () => false);
+    const frame = items.find(item => item.members[0].id === 'wrapper:color::f')!;
+    const positions = pack(items, ['path:f', 'path:z']);
+    expect(positions.get('wrapper:color::f')!.y).toBe(0);
+    expect(positions.has('group:color::f/a')).toBe(false);
+    expect(positions.get('group:color::z')!.y).toBe(frame.members[0].height + gapY);
+    // Hiding one card shrinks the block; the next unit moves up by exactly that.
+    const shrunk = buildCollectionColumnItems(groups, new Set(['color::f']), g => g.key === 'group:color::f/a');
+    const smaller = shrunk.find(item => item.members[0].id === 'wrapper:color::f')!.members[0].height;
+    expect(smaller).toBeLessThan(frame.members[0].height);
+    expect(pack(shrunk, ['path:f', 'path:z']).get('group:color::z')!.y).toBe(smaller + gapY);
+  });
+
+  it('only the listed columns are packed; other columns keep natural order', () => {
+    const items = [card('color', 'a', { height: 10 }), card('color', 'b', { height: 10 }), card('size', 'a', { height: 10 }), card('size', 'b', { height: 10 })];
+    const cols: CollectionColumn[] = [{ collectionId: 'color', x: 0, width: 260 }, { collectionId: 'size', x: 360, width: 260 }];
+    const positions = pack(items, ['path:b', 'path:a'], cols);
+    expect(ys(positions, ['color::b', 'color::a'])).toEqual([0, 30]);
+    expect(ys(positions, ['size::a', 'size::b'])).toEqual([0, 30]);
+  });
+
+  it('natural layout == packing with an empty record, for every column', () => {
+    const items = [
+      card('color', 'b', { height: 40 }), card('color', '', { height: 10, emptyRoot: true }), chain('color', 'b/500'),
+      card('color', 'a', { height: 30, hidden: true }), card('color', 'badge-x'), card('color', 'badge/color'),
+      card('_global', 'base', { height: 70 }), card('typography', 'font', { width: 312 }),
+    ];
+    const natural = layout(items);
+    expect(packCollectionColumns(items, natural.columns, new Map(), gapX, gapY)).toEqual(natural.positions);
+    const empty = new Map(natural.columns.map(c => [c.collectionId, [] as string[]]));
+    expect(packCollectionColumns(items, natural.columns, empty, gapX, gapY)).toEqual(natural.positions);
   });
 });
 

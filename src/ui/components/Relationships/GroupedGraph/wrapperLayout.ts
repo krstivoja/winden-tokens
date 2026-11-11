@@ -217,7 +217,7 @@ function buildUnitForest(
  * anyway) and the frame grows back when the filter is lifted.
  *
  * Collection mode hands in every column unit's spot through `savedPositions`
- * (see resolveColumnPositions), so the packing below only ever fills in what
+ * (see packCollectionColumns), so the packing below only ever fills in what
  * the record does not cover.
  */
 export function buildWrapperLayout(
