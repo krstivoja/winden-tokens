@@ -70,6 +70,7 @@ const ALL_GROUPS = ['c1::alpha', 'c1::beta', 'c1::gamma', 'c2::omega'];
 function Harness() {
   const [collectionIds, setCollectionIds] = useState<Set<string>>(new Set(['c1', 'c2']));
   const [groups, setGroups] = useState<Set<string>>(new Set(ALL_GROUPS));
+  const [sidebarMarks, setSidebarMarks] = useState<ReadonlySet<string>>(new Set());
   ctx.value = {
     collections,
     variables,
@@ -84,6 +85,8 @@ function Harness() {
     toggleVariableType: () => {},
     setSelectedCollectionIds: setCollectionIds,
     setSelectedGroups: setGroups,
+    sidebarMarks,
+    setSidebarMarks,
   };
   return <GroupedGraph />;
 }

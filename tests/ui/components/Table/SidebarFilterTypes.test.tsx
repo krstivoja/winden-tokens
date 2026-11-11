@@ -17,7 +17,10 @@ const variables: VariableData[] = [
 ];
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => ({ collections, variables }),
+  useAppContext: () => {
+    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
+    return { collections, variables, sidebarMarks, setSidebarMarks };
+  },
 }));
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
   useModalContext: () => ({ openInputModal: vi.fn() }),

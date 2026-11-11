@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { CollectionData, VariableData } from '../../../../src/ui/types';
 import { SidebarFilter } from '../../../../src/ui/components/Table/SidebarFilter';
 
@@ -26,7 +26,11 @@ let currentCollections = collections;
 let currentVariables = variables;
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => ({ collections: currentCollections, variables: currentVariables, reorderCollections: vi.fn() }),
+  // The sidebar marks (rings) live in FilterContext; here, state of the sidebar itself.
+  useAppContext: () => {
+    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
+    return { collections: currentCollections, variables: currentVariables, reorderCollections: vi.fn(), sidebarMarks, setSidebarMarks };
+  },
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
@@ -53,6 +57,32 @@ function renderSidebar(
     />
   );
   return { onSelectionChange };
+}
+
+// The selection held by a parent (as TableView / GroupedGraph do), so rings
+// can follow what a click wrote. `onSelectionChange` is spied on as well.
+type Selection = { collections: Set<string>; groups: Set<string> };
+let setOutside: (next: Selection) => void = () => {};
+function StatefulSidebar({
+  initial,
+  onSelectionChange,
+  ...props
+}: Partial<React.ComponentProps<typeof SidebarFilter>> & { initial: Selection }) {
+  const [selection, setSelection] = React.useState(initial);
+  setOutside = setSelection;
+  return (
+    <SidebarFilter
+      selectedModeId="m1"
+      onModeChange={() => {}}
+      selectedCollections={selection.collections}
+      selectedGroups={selection.groups}
+      onSelectionChange={next => {
+        onSelectionChange?.(next);
+        setSelection(next);
+      }}
+      {...props}
+    />
+  );
 }
 
 // Tree row of a label ('color' etc. are unique: the type filter only lists
@@ -115,11 +145,15 @@ describe('SidebarFilter row selection', () => {
   it('plain click on a collection hides nothing: it clears filters, rings the row and focuses it', () => {
     const onFocusPath = vi.fn();
     const onSelectAllCollections = vi.fn();
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']), {
-      selectedGroups: new Set(['c1::color']),
-      onFocusPath,
-      onSelectAllCollections,
-    });
+    const onSelectionChange = vi.fn();
+    render(
+      <StatefulSidebar
+        initial={{ collections: new Set(['c1', 'c2']), groups: new Set(['c1::color']) }}
+        onSelectionChange={onSelectionChange}
+        onFocusPath={onFocusPath}
+        onSelectAllCollections={onSelectAllCollections}
+      />
+    );
     fireEvent.click(rowOf('Primitives'));
     expect(lastCall(onSelectionChange)).toEqual({
       collections: ['c1', 'c2'],
@@ -177,6 +211,7 @@ describe('SidebarFilter row selection', () => {
       { id: 'v3', collectionId: 'c1', name: 'size/sm', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
     ];
     renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
+    fireEvent.click(rowOf('color'));
     expect(rowOf('color').className).toContain('ring-primary');
     expect(rowOf('color').getAttribute('aria-selected')).toBe('true');
     expect(rowOf('size').className).not.toContain('bg-primary/10');
@@ -186,12 +221,17 @@ describe('SidebarFilter row selection', () => {
     }
   });
 
-  it('marks the single selected row and clears the root', () => {
+  it('rings only a clicked row, never one that is merely the remaining selection', () => {
     renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    for (const text of ['Theme', 'Primitives', 'space', 'All variables']) {
+      expect(rowOf(text).className).not.toContain('ring-primary');
+    }
+    fireEvent.click(rowOf('Primitives'));
     expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
     expect(rowOf('Primitives').className).toContain('bg-primary/10');
     expect(rowOf('Primitives').className).toContain('ring-primary');
     expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('space').className).not.toContain('ring-primary');
     expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
     expect(rowOf('All variables').getAttribute('aria-selected')).toBe('false');
   });
@@ -207,6 +247,7 @@ describe('SidebarFilter row selection', () => {
   it('Cmd-click adds a group within a collection, and narrows a fully visible one to that group', () => {
     withSecondGroup();
     const add = renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
+    fireEvent.click(rowOf('color'));
     fireEvent.click(rowOf('size'), { metaKey: true });
     expect(lastCall(add.onSelectionChange)).toEqual({
       collections: ['c1', 'c2'],
@@ -233,7 +274,7 @@ describe('SidebarFilter row selection', () => {
   });
 
   it('Enter and Space select, with the modifier they toggle', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
+    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
     // fireEvent returns false when the handler called preventDefault (no scroll).
     expect(fireEvent.keyDown(rowOf('Primitives'), { key: 'Enter' })).toBe(false);
     expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
@@ -379,6 +420,25 @@ describe('SidebarFilter folder rows and focus', () => {
     expect(rowOf('badge').className).not.toContain('ring-primary');
   });
 
+  it('a highlight set from a folder row rings only the folder, not its single card', () => {
+    // The graph highlights every card under the clicked row; here that is one.
+    renderFocusSidebar({
+      onFocusPath: vi.fn(),
+      focusedRowKey: 'c3::badge',
+      highlightedGroupKey: 'group:c3::badge/color/error',
+    });
+    expect(rowOf('badge').className).toContain('ring-primary');
+    expect(rowOf('error').className).not.toContain('ring-primary');
+  });
+
+  it('drops the focus ring of a row whose variables are no longer selected', () => {
+    renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::button', selectedGroups: new Set(['c3::badge/color/error']) });
+    expect(rowOf('button').className).not.toContain('ring-primary');
+    document.body.innerHTML = '';
+    renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::', selectedCollections: new Set() });
+    expect(rowOf('Components').className).not.toContain('ring-primary');
+  });
+
   it('still rings a group highlighted from the canvas', () => {
     renderFocusSidebar({ onFocusPath: vi.fn(), highlightedGroupKey: 'group:c3::badge/color/error' });
     expect(rowOf('error').className).toContain('ring-primary');
@@ -391,5 +451,218 @@ describe('SidebarFilter folder rows and focus', () => {
     }
     fireEvent.click(rowOf('Components'));
     expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Rings follow the rows the user clicked, not the selection: folder `action`
+// holds only group `action/height` (same variables), and the selection lives
+// in a parent (as in TableView / GroupedGraph) so it can also change from
+// outside the sidebar (Hide unused, Show all, plugin undo).
+const ringCollections: CollectionData[] = [
+  { id: 'r1', name: 'Tokens', modes: [{ modeId: 'm1', name: 'Default' }] },
+  { id: 'r2', name: 'Sizes', modes: [{ modeId: 'm2', name: 'Default' }] },
+];
+const ringVariables = (ids = ['r1', 'r2']): VariableData[] => [
+  { id: 'h1', collectionId: ids[0], name: 'action/height/1', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
+  { id: 'h2', collectionId: ids[0], name: 'action/height/2', resolvedType: 'FLOAT', value: '2', valuesByMode: { m1: '2' } },
+  { id: 'h3', collectionId: ids[0], name: 'action/height/3', resolvedType: 'FLOAT', value: '3', valuesByMode: { m1: '3' } },
+  { id: 's1', collectionId: ids[0], name: 'size/sm', resolvedType: 'FLOAT', value: '4', valuesByMode: { m1: '4' } },
+  { id: 'g1', collectionId: ids[1], name: 'gap/1', resolvedType: 'FLOAT', value: '8', valuesByMode: { m2: '8' } },
+];
+const everythingOf = (ids = ['r1', 'r2']) => ({
+  collections: new Set(ids),
+  groups: new Set([`${ids[0]}::action/height`, `${ids[0]}::size`, `${ids[1]}::gap`]),
+});
+
+const RingHarness = () => <StatefulSidebar initial={everythingOf()} />;
+
+const ringed = () =>
+  screen
+    .getAllByRole('treeitem')
+    .filter(row => row.className.includes('ring-primary'))
+    .map(row => row.querySelector('span')?.textContent);
+
+describe('SidebarFilter rings exactly the clicked rows', () => {
+  beforeEach(() => {
+    currentCollections = ringCollections;
+    currentVariables = ringVariables();
+  });
+  afterEach(() => {
+    currentCollections = collections;
+    currentVariables = variables;
+  });
+
+  it('clicking a group rings only that group, not its single-child parent folder', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    expect(ringed()).toEqual(['height']);
+    expect(rowOf('action').getAttribute('aria-selected')).toBe('false');
+    expect(rowOf('action').className).not.toContain('bg-primary/10');
+    // Enter is the same as a click.
+    fireEvent.click(rowOf('All variables'));
+    fireEvent.keyDown(rowOf('height'), { key: 'Enter' });
+    expect(ringed()).toEqual(['height']);
+  });
+
+  it('clicking the parent folder rings only the parent; the child gets the fill', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('action'));
+    expect(ringed()).toEqual(['action']);
+    expect(rowOf('height').getAttribute('aria-selected')).toBe('true');
+    expect(rowOf('height').className).toContain('bg-primary/10');
+    expect(rowOf('size').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('Cmd/Ctrl-click rings each clicked row and un-rings it again', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    fireEvent.click(rowOf('size'), { metaKey: true });
+    fireEvent.click(rowOf('gap'), { ctrlKey: true });
+    expect(ringed()).toEqual(['height', 'size', 'gap']);
+    // The parent covering the same variables takes over the child's ring.
+    fireEvent.click(rowOf('action'), { metaKey: true });
+    expect(ringed()).toEqual(['action', 'size', 'gap']);
+    fireEvent.click(rowOf('size'), { metaKey: true });
+    expect(ringed()).toEqual(['action', 'gap']);
+    expect(rowOf('size').getAttribute('aria-selected')).toBe('false');
+    // Taking the folder out takes the group under it along.
+    fireEvent.click(rowOf('action'), { metaKey: true });
+    expect(ringed()).toEqual(['gap']);
+    expect(rowOf('height').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('Cmd/Ctrl-click on a child of a clicked folder takes it out; the ring moves to the children left', () => {
+    currentVariables = [
+      ...ringVariables(),
+      { id: 'b1', collectionId: 'r1', name: 'btn/primary/bg', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
+      { id: 'b2', collectionId: 'r1', name: 'btn/ghost/bg', resolvedType: 'FLOAT', value: '2', valuesByMode: { m1: '2' } },
+    ];
+    const onSelectionChange = vi.fn();
+    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r1::size', 'r1::btn/primary', 'r1::btn/ghost', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
+    fireEvent.click(rowOf('btn'));
+    fireEvent.click(rowOf('primary'), { metaKey: true });
+    expect(lastCall(onSelectionChange)).toEqual({ collections: ['r1', 'r2'], groups: ['r1::btn/ghost', 'r2::gap'] });
+    expect(ringed()).toEqual(['ghost']);
+    expect(rowOf('primary').getAttribute('aria-selected')).toBe('false');
+    // Cmd/Ctrl-click again brings it back, ringed next to its sibling.
+    fireEvent.click(rowOf('primary'), { ctrlKey: true });
+    expect(lastCall(onSelectionChange)).toEqual({ collections: ['r1', 'r2'], groups: ['r1::btn/ghost', 'r1::btn/primary', 'r2::gap'] });
+    expect(ringed()).toEqual(['ghost', 'primary']);
+  });
+
+  it('a ring hidden by Hide unused comes back after Show all, even after a Cmd/Ctrl-click meanwhile', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    const narrowed = { collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r2::gap']) };
+    act(() => setOutside({ collections: new Set(['r2']), groups: new Set(['r2::gap']) }));
+    fireEvent.click(rowOf('Sizes'), { metaKey: true });
+    expect(ringed()).toEqual(['Sizes']);
+    act(() => setOutside(narrowed));
+    expect(ringed()).toEqual(['height', 'Sizes']);
+  });
+
+  it('a Cmd/Ctrl-clicked group whose collection is fully shown again (Show all) loses its ring', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'), { metaKey: true });
+    expect(ringed()).toEqual(['height']);
+    act(() => setOutside(everythingOf()));
+    expect(ringed()).toEqual(['All variables']);
+  });
+
+  it('a ring hidden by Hide unused still counts: a Cmd/Ctrl-clicked group joins its collection', () => {
+    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
+    currentVariables = [v('x1', 'a/b/c/1'), v('x2', 'a/b/d/1'), v('x3', 'a/e/1'), v('x4', 'f/1'), ringVariables()[4]];
+    const onSelectionChange = vi.fn();
+    const all = ['r1::a/b/c', 'r1::a/b/d', 'r1::a/e', 'r1::f', 'r2::gap'];
+    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(all) }} onSelectionChange={onSelectionChange} />);
+    fireEvent.click(rowOf('a'));
+    // Hide unused unchecks a/b/c: the `a` ring hides.
+    act(() => setOutside({ collections: new Set(['r1', 'r2']), groups: new Set(['r1::a/b/d', 'r1::a/e', 'r2::gap']) }));
+    expect(ringed()).toEqual([]);
+    fireEvent.click(rowOf('f'), { metaKey: true });
+    expect(lastCall(onSelectionChange).groups).toEqual(['r1::a/b/d', 'r1::a/e', 'r1::f', 'r2::gap']);
+    expect(ringed()).toEqual(['f']);
+    // Show all re-checks a/b/c.
+    act(() => setOutside({ collections: new Set(['r1', 'r2']), groups: new Set(all) }));
+    expect(ringed()).toEqual(['a', 'f']);
+  });
+
+  it('a folder with variables of its own stays ringed for them when its subgroups leave', () => {
+    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
+    currentVariables = [v('y1', 'btn/x'), v('y2', 'btn/a/1'), v('y3', 'btn/b/1'), v('y4', 'z/1'), ringVariables()[4]];
+    const onSelectionChange = vi.fn();
+    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::btn', 'r1::btn/a', 'r1::btn/b', 'r1::z', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
+    fireEvent.click(rowOf('btn'));
+    fireEvent.click(rowOf('a'), { metaKey: true });
+    // The folder's ring for its own variables is dashed, not the solid ring.
+    expect(ringed()).toEqual(['b']);
+    expect(rowOf('btn').className).toContain('outline-dashed');
+    expect(rowOf('btn').className).toContain('outline-primary');
+    expect(rowOf('btn').getAttribute('aria-selected')).toBe('true');
+    // Only its own variables: no fill on the subgroup rows.
+    expect(rowOf('a').getAttribute('aria-selected')).toBe('false');
+    fireEvent.click(rowOf('b'), { metaKey: true });
+    expect(lastCall(onSelectionChange).groups).toEqual(['r1::btn', 'r2::gap']);
+    expect(rowOf('btn').className).toContain('outline-dashed');
+    expect(rowOf('b').getAttribute('aria-selected')).toBe('false');
+    // A plain click selects the whole folder again, solid ring.
+    fireEvent.click(rowOf('btn'));
+    expect(ringed()).toEqual(['btn']);
+    expect(rowOf('btn').className).not.toContain('outline-dashed');
+  });
+
+  it('Cmd/Ctrl-click on a folder ringed for its own variables takes them out', () => {
+    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
+    currentVariables = [v('y1', 'btn/x'), v('y2', 'btn/a/1'), v('y3', 'btn/b/1'), v('y4', 'z/1'), ringVariables()[4]];
+    const onSelectionChange = vi.fn();
+    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::btn', 'r1::btn/a', 'r1::btn/b', 'r1::z', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
+    fireEvent.click(rowOf('btn'));
+    fireEvent.click(rowOf('a'), { metaKey: true });
+    fireEvent.click(rowOf('btn'), { metaKey: true });
+    expect(lastCall(onSelectionChange).groups).toEqual(['r1::btn/b', 'r2::gap']);
+    expect(ringed()).toEqual(['b']);
+    expect(rowOf('btn').className).not.toContain('outline-dashed');
+    expect(rowOf('btn').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('ringing a folder drops the rings under it: rows under a ring only get the fill', () => {
+    // The graph still focuses the row plain-clicked before (focusedRowKey).
+    render(<StatefulSidebar initial={everythingOf()} onFocusPath={vi.fn()} focusedRowKey="r1::action/height" />);
+    fireEvent.click(rowOf('height'));
+    fireEvent.click(rowOf('action'), { metaKey: true });
+    expect(ringed()).toEqual(['action']);
+    expect(rowOf('height').className).toContain('bg-primary/10');
+  });
+
+  it('All variables clears every ring', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    fireEvent.click(rowOf('gap'), { metaKey: true });
+    fireEvent.click(rowOf('All variables'));
+    expect(ringed()).toEqual(['All variables']);
+  });
+
+  it('a row whose keys are unchecked from outside loses its ring, and gets it back when they return', () => {
+    render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    const narrowed = { collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r2::gap']) };
+    // Hide unused unchecks the clicked group.
+    act(() => setOutside({ collections: new Set(['r2']), groups: new Set(['r2::gap']) }));
+    expect(ringed()).toEqual([]);
+    // Show all re-checks it.
+    act(() => setOutside(narrowed));
+    expect(ringed()).toEqual(['height']);
+  });
+
+  it('drops the rings when a plugin undo recreates every id', () => {
+    const { rerender } = render(<RingHarness />);
+    fireEvent.click(rowOf('height'));
+    fireEvent.click(rowOf('Sizes'), { metaKey: true });
+    expect(ringed()).toEqual(['height', 'Sizes']);
+    currentCollections = ringCollections.map(c => ({ ...c, id: `${c.id}-new` }));
+    currentVariables = ringVariables(['r1-new', 'r2-new']);
+    act(() => setOutside(everythingOf(['r1-new', 'r2-new'])));
+    rerender(<RingHarness />);
+    expect(ringed()).toEqual(['All variables']);
   });
 });

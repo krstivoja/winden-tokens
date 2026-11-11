@@ -25,7 +25,10 @@ let currentCollections = collections;
 const reorderCollections = vi.fn();
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => ({ collections: currentCollections, variables, reorderCollections }),
+  useAppContext: () => {
+    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
+    return { collections: currentCollections, variables, reorderCollections, sidebarMarks, setSidebarMarks };
+  },
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({

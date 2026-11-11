@@ -9,11 +9,13 @@ import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { useModalContext } from '../Modals/ModalContext';
 import { compareGroupPaths, getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
 import {
-  isEverythingSelected,
-  isRowMarked,
+  isRootMarked,
+  isRowSelected,
+  markId,
+  ownMarkId,
   selectOnly,
-  toggleRow,
-  toggleCollectionMark,
+  toggleMark,
+  visibleMarks,
   type SidebarRow,
   type SidebarSelection,
   type SidebarUniverse,
@@ -83,6 +85,9 @@ const isAdditive = (e: { metaKey: boolean; ctrlKey: boolean }): RowActivation =>
 });
 
 const SELECTED_ROW_CLASS = 'bg-primary/10 ring-1 ring-primary';
+// A folder picked only for the variables it holds itself (its subgroups were
+// Cmd/Ctrl-clicked out): dashed, so it does not read as the whole folder.
+const OWN_SELECTED_ROW_CLASS = 'bg-primary/10 outline-1 outline-dashed outline-primary -outline-offset-1';
 // A row under the clicked one: part of the selection, so a fill but no ring.
 const DESCENDANT_ROW_CLASS = 'bg-primary/10';
 
@@ -92,6 +97,8 @@ interface TreeRowProps {
   variant: 'root' | 'collection' | 'group';
   /** Drives `aria-selected` and the selected fill. */
   selected: boolean;
+  /** Selected only for the folder's own variables: dashed instead of the ring. */
+  ownOnly?: boolean;
   /** Part of the selection only through an ancestor row: fill, no ring. */
   descendant?: boolean;
   /** Ringed like a selected row: its card is the one focused on the canvas. */
@@ -124,6 +131,7 @@ function TreeRow({
   count,
   variant,
   selected,
+  ownOnly = false,
   highlighted = false,
   descendant = false,
   expandable = false,
@@ -167,10 +175,12 @@ function TreeRow({
         e.preventDefault();
         onActivate(isAdditive(e));
       }}
-      className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer select-none focus-visible:outline-1 focus-visible:outline-text focus-visible:outline-offset-2 ${
-        selected || highlighted
+      className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer select-none focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-text focus-visible:outline-offset-2 ${
+        highlighted || (selected && !ownOnly)
           ? SELECTED_ROW_CLASS
-          : descendant
+          : selected
+            ? OWN_SELECTED_ROW_CLASS
+            : descendant
             ? DESCENDANT_ROW_CLASS
             : 'hover:bg-base-2'
       }${dragging ? ' opacity-50' : ''}`}
@@ -206,8 +216,10 @@ interface GroupNodeRowProps {
   variables: VariableData[];
   selection: SidebarSelection;
   universe: SidebarUniverse;
-  /** The parent row (collection or group) is itself picked. */
-  parentMarked: boolean;
+  /** Marked rows (`markId`) that are shown: the rows the user clicked. */
+  marks: ReadonlySet<string>;
+  /** Some ancestor row (collection or group) is marked. */
+  ancestorMarked: boolean;
   onActivate: (row: SidebarRow, activation: RowActivation, focusPath: string | null) => void;
   collapsedGroups: Set<string>;
   setCollapsedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -226,7 +238,8 @@ function GroupNodeRow({
   variables,
   selection,
   universe,
-  parentMarked,
+  marks,
+  ancestorMarked,
   onActivate,
   collapsedGroups,
   setCollapsedGroups,
@@ -246,8 +259,10 @@ function GroupNodeRow({
   const graphGroupKey = getGroupCardKey(collectionId, node.path);
   // Ringed when its card was clicked on the canvas, or when this row was the
   // last one focused from the sidebar (folder rows have no card of their own).
-  const isHighlighted =
-    (node.isGroup && highlightedGroupKey === graphGroupKey) || focusedRowKey === nodeKey;
+  // A highlight set from a sidebar row rings only that row: a folder whose
+  // only card is this group must not ring the group too.
+  const isFocusTarget =
+    (!focusedRowKey && node.isGroup && highlightedGroupKey === graphGroupKey) || focusedRowKey === nodeKey;
 
   const count = variables.filter(
     v => v.collectionId === collectionId && v.name.startsWith(`${node.path}/`)
@@ -257,10 +272,18 @@ function GroupNodeRow({
     () => ({ kind: 'group', collectionId, groupKeys: collectGroupKeys(node, collectionId) }),
     [node, collectionId]
   );
-  // Picked rows only (never rows that are merely visible). The row the user
-  // clicked gets the ring, rows under a picked parent just a fill.
-  const marked = isRowMarked(selection, row, universe);
-  const selected = marked && !parentMarked;
+  // Only a row the user clicked gets the ring, never one that is merely
+  // visible or covers the same variables; rows under it just a fill. An own
+  // mark rings the folder for the variables it holds itself, without the fill
+  // below it.
+  const wholeMarked = marks.has(nodeKey);
+  const ownOnly = !wholeMarked && marks.has(ownMarkId(collectionId, node.path));
+  const selected = wholeMarked || ownOnly;
+  // No focus ring on a row whose variables are no longer selected (e.g. it
+  // was Cmd/Ctrl-clicked out of the selection after being focused), nor a
+  // sidebar focus ring inside a ringed folder (no rings inside rings).
+  const sidebarFocusUnderRing = focusedRowKey === nodeKey && ancestorMarked;
+  const isHighlighted = isFocusTarget && !sidebarFocusUnderRing && isRowSelected(selection, row, universe);
   const muted = canFocus && !!isPathFocusable && !isPathFocusable(collectionId, node.path);
 
   return (
@@ -270,7 +293,8 @@ function GroupNodeRow({
         label={node.label}
         count={count}
         selected={selected}
-        descendant={marked && parentMarked}
+        ownOnly={ownOnly}
+        descendant={!selected && ancestorMarked}
         highlighted={isHighlighted}
         indent={depth * 16}
         expandable={hasChildren}
@@ -303,7 +327,8 @@ function GroupNodeRow({
               variables={variables}
               selection={selection}
               universe={universe}
-              parentMarked={marked}
+              marks={marks}
+              ancestorMarked={ancestorMarked || wholeMarked}
               onActivate={onActivate}
               collapsedGroups={collapsedGroups}
               setCollapsedGroups={setCollapsedGroups}
@@ -371,7 +396,7 @@ export function SidebarFilter({
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
-  const { collections, variables, reorderCollections } = useAppContext();
+  const { collections, variables, reorderCollections, sidebarMarks, setSidebarMarks } = useAppContext();
   const { openInputModal } = useModalContext();
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -621,45 +646,42 @@ export function SidebarFilter({
     () => ({ collections: selectedCollections, groups: selectedGroups }),
     [selectedCollections, selectedGroups]
   );
-  // Collections the user picked without filtering anything (plain or
-  // Cmd/Ctrl-click on the row): ringed, nothing hidden.
-  const [markedCollections, setMarkedCollections] = useState<ReadonlySet<string>>(new Set());
-  const everythingSelected = collections.length > 0 && isEverythingSelected(selection, universe);
+  // Rows the user clicked (plain or Cmd/Ctrl), ringed only while the row
+  // still exists and is fully selected: a selection changed elsewhere (Hide
+  // unused, Show all, plugin undo) never rings a row that is not shown.
+  const marks = React.useMemo(
+    () => visibleMarks(sidebarMarks, selection, universe),
+    [sidebarMarks, selection, universe]
+  );
+  const rootMarked = collections.length > 0 && isRootMarked(selection, universe, marks);
 
-  // Plain click: select only the row, then find it in the graph. Cmd/Ctrl:
-  // toggle it in the selection and leave the camera alone. "All variables"
-  // always means everything.
+  // Plain click: select only the row, mark it, then find it in the graph.
+  // Cmd/Ctrl: toggle it in the selection and the marks and leave the camera
+  // alone. "All variables" always means everything and clears every mark.
   const handleRowActivate = (
     row: SidebarRow,
     { additive }: RowActivation,
     focus: { collectionId: string; path: string } | null
   ) => {
     if (row.kind === 'root') {
-      setMarkedCollections(new Set());
+      setSidebarMarks(new Set());
       onSelectionChange(selectOnly(row, universe));
       onSelectAllCollections?.();
       return;
     }
-    if (row.kind === 'collection') {
-      // A collection row never filters. Cmd/Ctrl flips its mark; a plain
-      // click clears every filter and mark, marks this one and jumps to it.
-      if (additive) {
-        setMarkedCollections(toggleCollectionMark(markedCollections, row.collectionId, selection, universe));
-        return;
-      }
-      setMarkedCollections(new Set([row.collectionId]));
-      onSelectionChange(selectOnly(row, universe));
-      onSelectAllCollections?.();
-      if (focus) onFocusPath?.(focus.collectionId, focus.path);
-      return;
-    }
+    const id = markId(row.collectionId, focus?.path ?? '');
     if (additive) {
-      const next = toggleRow(selection, row, universe, markedCollections.size > 0);
-      if (next !== selection) onSelectionChange(next);
+      // A collection mark never filters; a group one narrows its collection.
+      const next = toggleMark(selection, sidebarMarks, id, universe);
+      if (!next) return;
+      setSidebarMarks(next.marks);
+      if (next.selection !== selection) onSelectionChange(next.selection);
       return;
     }
-    setMarkedCollections(new Set());
+    // A collection row never filters: it clears every narrowing.
+    setSidebarMarks(new Set([id]));
     onSelectionChange(selectOnly(row, universe));
+    if (row.kind === 'collection') onSelectAllCollections?.();
     if (focus) onFocusPath?.(focus.collectionId, focus.path);
   };
 
@@ -779,7 +801,7 @@ export function SidebarFilter({
               variant="root"
               label="All variables"
               count={variables.length}
-              selected={everythingSelected}
+              selected={rootMarked}
               expandable
               expanded={rootExpanded || isSearching}
               expandLabel={rootExpanded || isSearching ? 'Collapse all variables' : 'Expand all variables'}
@@ -822,7 +844,7 @@ export function SidebarFilter({
 
             const isExpanded = isSearching ? true : expandedCollections.has(collection.id);
             const collectionRow: SidebarRow = { kind: 'collection', collectionId: collection.id };
-            const collectionSelected = isRowMarked(selection, collectionRow, universe, markedCollections);
+            const collectionSelected = marks.has(markId(collection.id));
             const collectionMuted = !!onFocusPath && !!isPathFocusable && !isPathFocusable(collection.id, '');
 
             const indicator = dropTarget?.id === collection.id ? dropTarget.position : null;
@@ -856,7 +878,7 @@ export function SidebarFilter({
                   label={collection.name}
                   count={variableCount}
                   selected={collectionSelected}
-                  highlighted={focusedRowKey === `${collection.id}::`}
+                  highlighted={focusedRowKey === markId(collection.id) && selection.collections.has(collection.id)}
                   expandable={!!hasGroups}
                   expanded={isExpanded}
                   expandLabel={`${isExpanded ? 'Collapse' : 'Expand'} ${collection.name}`}
@@ -897,7 +919,8 @@ export function SidebarFilter({
                         variables={variables}
                         selection={selection}
                         universe={universe}
-                        parentMarked={collectionSelected}
+                        marks={marks}
+                        ancestorMarked={collectionSelected}
                         onActivate={(row, activation, path) =>
                           handleRowActivate(row, activation, path === null ? null : { collectionId: collection.id, path })
                         }
