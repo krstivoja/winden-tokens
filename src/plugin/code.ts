@@ -146,12 +146,34 @@ interface HistoryVariableSnapshot {
   stepConfig: StoredStepGeneratorConfig | null;
 }
 
+// Collection order (document plugin data `collectionOrder`). Mirrors the UI
+// contract in src/ui/types.ts; this file cannot import UI modules.
+interface CollectionOrderEntry {
+  id: string;
+  name: string;
+}
+
+interface StoredCollectionOrder {
+  v: 1;
+  entries: CollectionOrderEntry[];
+}
+
 interface HistorySnapshot {
   collections: HistoryCollectionSnapshot[];
   variables: HistoryVariableSnapshot[];
   variableOrder: string[];
+  // Stored entries as read, or null when the stored value is unreadable
+  // (bad JSON, another version); then `collectionOrderRaw` holds it verbatim
+  // so a restore puts it back instead of overwriting it.
+  collectionOrder: CollectionOrderEntry[] | null;
+  collectionOrderRaw: string;
   hash: string;
+  // `hash` without the collection order: equal content hashes mean two
+  // snapshots differ at most in collection order (undo fast path).
+  contentHash: string;
 }
+
+type HistorySnapshotData = Omit<HistorySnapshot, 'hash' | 'contentHash'>;
 
 const STEP_RATIO_PRESET_VALUES = [
   { value: '1.125', ratio: 1.125 },
@@ -190,6 +212,7 @@ interface UIState {
   collectionData: CollectionData[];
   variableData: UIVariableData[];
   shadeGroups: UIShadeGroupData[];
+  collectionOrder: StoredCollectionOrder | null;
   hash: string;
 }
 
@@ -227,6 +250,133 @@ function setVariableOrder(order: string[]): void {
   figma.root.setPluginData('variableOrder', JSON.stringify(order));
 }
 
+// Collection order: `{ v: 1, entries: { id, name }[] }`, saved in the file and
+// shared with everyone. Keyed by id with name as fallback; the UI resolves it
+// against the live collections (src/ui/utils/collectionOrder.ts). The wire
+// keeps `collections` in API order.
+const COLLECTION_ORDER_KEY = 'collectionOrder';
+const COLLECTION_ORDER_MAX_ENTRIES = 1000;
+
+// Entries must be an array of `{ id: string, name: string }`; anything else is
+// rejected whole (null). Duplicate ids keep the first; capped at 1000.
+function sanitizeCollectionOrderEntries(raw: unknown): CollectionOrderEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+
+  const seen = new Set<string>();
+  const entries: CollectionOrderEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return null;
+    const { id, name } = item as { id?: unknown; name?: unknown };
+    if (typeof id !== 'string' || typeof name !== 'string') return null;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    entries.push({ id, name });
+    if (entries.length >= COLLECTION_ORDER_MAX_ENTRIES) break;
+  }
+  return entries;
+}
+
+function parseStoredCollectionOrder(raw: unknown): StoredCollectionOrder | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const candidate = raw as { v?: unknown; entries?: unknown };
+  if (candidate.v !== 1) return null;
+  const entries = sanitizeCollectionOrderEntries(candidate.entries);
+  return entries ? { v: 1, entries } : null;
+}
+
+function readCollectionOrderRaw(): string {
+  return figma.root.getPluginData(COLLECTION_ORDER_KEY);
+}
+
+// Null when nothing is stored or the stored value is unreadable (bad JSON,
+// another version). Unreadable data is left in place, never overwritten here.
+function readCollectionOrder(): StoredCollectionOrder | null {
+  const raw = readCollectionOrderRaw();
+  if (!raw) return null;
+  try {
+    return parseStoredCollectionOrder(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+// An empty list deletes the key. Throws in view-only files.
+function writeCollectionOrder(entries: CollectionOrderEntry[]): void {
+  const sanitized = sanitizeCollectionOrderEntries(entries) || [];
+  if (sanitized.length === 0) {
+    figma.root.setPluginData(COLLECTION_ORDER_KEY, '');
+    return;
+  }
+  const stored: StoredCollectionOrder = { v: 1, entries: sanitized };
+  figma.root.setPluginData(COLLECTION_ORDER_KEY, JSON.stringify(stored));
+}
+
+// Writes a snapshot's collection order back. `resolveCollection` maps a
+// snapshot collection id to the live collection (new id, current name);
+// entries it cannot map (collections deleted at capture time) keep their id
+// and name so the name fallback still works.
+function restoreSnapshotCollectionOrder(
+  snapshot: HistorySnapshotData,
+  resolveCollection: (snapshotId: string) => { id: string; name: string } | null
+): void {
+  // Snapshots without the fields (none persist today) leave the order alone.
+  if (snapshot.collectionOrder === undefined) return;
+
+  if (snapshot.collectionOrder === null) {
+    // Unreadable at capture time: put the exact stored value back.
+    if (typeof snapshot.collectionOrderRaw === 'string' &&
+        snapshot.collectionOrderRaw !== readCollectionOrderRaw()) {
+      figma.root.setPluginData(COLLECTION_ORDER_KEY, snapshot.collectionOrderRaw);
+    }
+    return;
+  }
+
+  writeCollectionOrder(snapshot.collectionOrder.map(entry => {
+    const live = resolveCollection(entry.id);
+    return live ? { id: live.id, name: live.name } : { id: entry.id, name: entry.name };
+  }));
+}
+
+// Replies `update-success` / `update-error` echoing the UI's `requestId`, so
+// the UI can tell when its optimistic order is settled. Every reply follows a
+// `data-loaded` with the stored order, also after a failure (view-only file,
+// bad payload), so the UI never keeps an order that was not saved.
+async function setCollectionOrderFromUi(order: unknown, requestId: unknown): Promise<void> {
+  const reply = typeof requestId === 'string' ? { requestId } : {};
+  try {
+    const parsed = parseStoredCollectionOrder(order);
+    if (!parsed) {
+      throw new Error('Invalid collection order');
+    }
+
+    // Names come from the live collections, never from the UI.
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const collectionById = new Map(collections.map(collection => [collection.id, collection]));
+    const entries: CollectionOrderEntry[] = [];
+    for (const entry of parsed.entries) {
+      const collection = collectionById.get(entry.id);
+      if (collection) {
+        entries.push({ id: collection.id, name: collection.name });
+      }
+    }
+
+    writeCollectionOrder(entries);
+    await fetchData();
+    figma.ui.postMessage({ type: 'update-success', ...reply });
+  } catch (error: any) {
+    try {
+      await fetchData();
+    } catch {
+      // Nothing more to send; the UI's ack timeout restores the last order.
+    }
+    figma.ui.postMessage({
+      type: 'update-error',
+      error: error && error.message ? error.message : String(error),
+      ...reply,
+    });
+  }
+}
+
 function getHistoryVariableKey(
   collectionIndexById: Map<string, number>,
   variable: Pick<HistoryVariableSnapshot, 'collectionId' | 'resolvedType' | 'name'>
@@ -236,7 +386,7 @@ function getHistoryVariableKey(
   return `${collectionIndex}::${variable.resolvedType}::${variable.name}`;
 }
 
-function buildHistoryHash(snapshot: Omit<HistorySnapshot, 'hash'>): string {
+function buildHistoryHashes(snapshot: HistorySnapshotData): { hash: string; contentHash: string } {
   const collectionIndexById = new Map<string, number>();
   snapshot.collections.forEach((collection, index) => {
     collectionIndexById.set(collection.id, index);
@@ -327,7 +477,7 @@ function buildHistoryHash(snapshot: Omit<HistorySnapshot, 'hash'>): string {
     };
   });
 
-  return JSON.stringify({
+  const content = {
     collections: snapshot.collections.map(collection => ({
       name: collection.name,
       hiddenFromPublishing: collection.hiddenFromPublishing,
@@ -337,7 +487,24 @@ function buildHistoryHash(snapshot: Omit<HistorySnapshot, 'hash'>): string {
     variableOrder: snapshot.variableOrder
       .map(id => variableKeyById.get(id) || null)
       .filter((value): value is string => value !== null),
-  });
+  };
+
+  // Id-free: an entry becomes its collection's index in this snapshot, or its
+  // name when the id is not a live collection, so the hash survives the id
+  // churn of a full restore.
+  const collectionOrder = snapshot.collectionOrder === undefined
+    ? null
+    : snapshot.collectionOrder === null
+      ? { raw: snapshot.collectionOrderRaw }
+      : snapshot.collectionOrder.map(entry => {
+          const index = collectionIndexById.get(entry.id);
+          return index !== undefined ? index : `name:${entry.name}`;
+        });
+
+  return {
+    hash: JSON.stringify({ ...content, collectionOrder }),
+    contentHash: JSON.stringify(content),
+  };
 }
 
 function cloneStoredShadeConfig(config: StoredShadeGeneratorConfig | null): StoredShadeGeneratorConfig | null {
@@ -388,17 +555,24 @@ async function captureHistorySnapshot(): Promise<HistorySnapshot> {
     }
   }
 
-  const snapshotBase = {
+  const collectionOrderRaw = readCollectionOrderRaw();
+  const storedCollectionOrder = readCollectionOrder();
+  const snapshotBase: HistorySnapshotData = {
     collections: collectionSnapshots,
     variables: variableSnapshots,
     variableOrder: getVariableOrder().filter(variableId => variablesById.has(variableId)),
+    // Raw entries (stale ids included) so the name fallback survives undo.
+    collectionOrder: collectionOrderRaw
+      ? (storedCollectionOrder ? storedCollectionOrder.entries : null)
+      : [],
+    collectionOrderRaw,
   };
 
+  const { hash, contentHash } = buildHistoryHashes(snapshotBase);
   return {
-    collections: snapshotBase.collections,
-    variables: snapshotBase.variables,
-    variableOrder: snapshotBase.variableOrder,
-    hash: buildHistoryHash(snapshotBase),
+    ...snapshotBase,
+    hash,
+    contentHash,
   };
 }
 
@@ -579,8 +753,37 @@ async function restoreHistorySnapshot(snapshot: HistorySnapshot): Promise<void> 
       })
       .filter((id): id is string => id !== null)
   );
+  restoreSnapshotCollectionOrder(snapshot, oldCollectionId => collectionMap.get(oldCollectionId) || null);
   setSidebarRelaunchData();
   await fetchData();
+}
+
+// Undo/redo fast path: the target differs from the file only in collection
+// order, so nothing is deleted or recreated (ids, graph state and canvas
+// bindings survive). Equal content hashes mean the same collections at the
+// same API positions, so target ids map to live ids by position.
+function canRestoreCollectionOrderOnly(current: HistorySnapshot, target: HistorySnapshot): boolean {
+  return typeof target.contentHash === 'string' &&
+    target.contentHash === current.contentHash &&
+    target.collections.length === current.collections.length;
+}
+
+async function restoreCollectionOrderOnly(current: HistorySnapshot, target: HistorySnapshot): Promise<void> {
+  const liveByTargetId = new Map<string, { id: string; name: string }>();
+  target.collections.forEach((collection, index) => {
+    const live = current.collections[index];
+    liveByTargetId.set(collection.id, { id: live.id, name: live.name });
+  });
+  restoreSnapshotCollectionOrder(target, targetId => liveByTargetId.get(targetId) || null);
+  await fetchData();
+}
+
+async function applyHistorySnapshot(current: HistorySnapshot, target: HistorySnapshot): Promise<void> {
+  if (canRestoreCollectionOrderOnly(current, target)) {
+    await restoreCollectionOrderOnly(current, target);
+  } else {
+    await restoreHistorySnapshot(target);
+  }
 }
 
 function trimHistoryStack(stack: HistorySnapshot[]): HistorySnapshot[] {
@@ -607,19 +810,37 @@ async function resetHistory(): Promise<void> {
   postHistoryState();
 }
 
-async function runMutationWithHistory(action: () => Promise<void>): Promise<void> {
-  const beforeSnapshot = await captureHistorySnapshot();
-  await action();
-  const afterSnapshot = await captureHistorySnapshot();
+// Runs history operations (mutations, undo, redo) one at a time, in arrival
+// order. `figma.ui.onmessage` does not wait for the previous handler, so
+// without this two mutations interleave: both capture the same "before"
+// snapshot (one undo then reverts both and the next undo is a no-op), and an
+// undo racing a mutation trips the external-change check. Safe to apply to
+// every history operation: none waits on a UI message or calls another
+// queued operation, so the queue cannot deadlock, and a failed operation
+// rejects only its own caller.
+let historyQueue: Promise<void> = Promise.resolve();
 
-  currentHistoryHash = afterSnapshot.hash;
+function runSerializedHistoryOperation(operation: () => Promise<void>): Promise<void> {
+  const run = historyQueue.then(operation);
+  historyQueue = run.catch(() => undefined);
+  return run;
+}
 
-  if (afterSnapshot.hash !== beforeSnapshot.hash) {
-    undoHistory = trimHistoryStack(undoHistory.concat([beforeSnapshot]));
-    redoHistory = [];
-  }
+function runMutationWithHistory(action: () => Promise<void>): Promise<void> {
+  return runSerializedHistoryOperation(async () => {
+    const beforeSnapshot = await captureHistorySnapshot();
+    await action();
+    const afterSnapshot = await captureHistorySnapshot();
 
-  postHistoryState();
+    currentHistoryHash = afterSnapshot.hash;
+
+    if (afterSnapshot.hash !== beforeSnapshot.hash) {
+      undoHistory = trimHistoryStack(undoHistory.concat([beforeSnapshot]));
+      redoHistory = [];
+    }
+
+    postHistoryState();
+  });
 }
 
 async function undoHistoryStep(): Promise<void> {
@@ -642,7 +863,7 @@ async function undoHistoryStep(): Promise<void> {
   undoHistory = undoHistory.slice(0, -1);
   redoHistory = trimHistoryStack(redoHistory.concat([currentSnapshot]));
 
-  await restoreHistorySnapshot(previousSnapshot);
+  await applyHistorySnapshot(currentSnapshot, previousSnapshot);
   currentHistoryHash = previousSnapshot.hash;
   postHistoryState();
   figma.ui.postMessage({ type: 'history-applied', direction: 'undo' });
@@ -668,7 +889,7 @@ async function redoHistoryStep(): Promise<void> {
   redoHistory = redoHistory.slice(0, -1);
   undoHistory = trimHistoryStack(undoHistory.concat([currentSnapshot]));
 
-  await restoreHistorySnapshot(nextSnapshot);
+  await applyHistorySnapshot(currentSnapshot, nextSnapshot);
   currentHistoryHash = nextSnapshot.hash;
   postHistoryState();
   figma.ui.postMessage({ type: 'history-applied', direction: 'redo' });
@@ -2085,16 +2306,21 @@ async function buildUiState(): Promise<UIState> {
 
   const formattedValueMap = new Map(variableData.map(variable => [variable.id, variable.value]));
   const shadeGroups = buildShadeGroups(variables, formattedValueMap);
+  const collectionOrder = readCollectionOrder();
   const hash = JSON.stringify({
     collections: collectionData,
     variables: variableData,
     shadeGroups,
+    // Raw stored value, so the poll also notices a collaborator's reorder
+    // (and a value this build cannot read).
+    collectionOrder: readCollectionOrderRaw(),
   });
 
   return {
     collectionData,
     variableData,
     shadeGroups,
+    collectionOrder,
     hash,
   };
 }
@@ -2103,14 +2329,16 @@ async function buildUiState(): Promise<UIState> {
 async function fetchData() {
   await syncManagedShadeSources();
   await syncManagedStepSources();
-  const { collectionData, variableData, shadeGroups, hash } = await buildUiState();
+  const { collectionData, variableData, shadeGroups, collectionOrder, hash } = await buildUiState();
 
   lastDataHash = hash;
   figma.ui.postMessage({
     type: 'data-loaded',
+    // API order; the UI applies `collectionOrder` itself.
     collections: collectionData,
     variables: variableData,
     shadeGroups,
+    collectionOrder,
   });
 }
 
@@ -4393,6 +4621,8 @@ figma.ui.onmessage = async (msg: any) => {
   switch (msg.type) {
     case 'refresh':
       setVariableOrder([]); // Clear custom order on refresh to match Figma's order
+      // The collection order is kept: it is shared, saved in the file, and
+      // Figma's own panel order cannot be read back.
       await fetchData();
       await resetHistory();
       break;
@@ -4494,6 +4724,10 @@ figma.ui.onmessage = async (msg: any) => {
       await runMutationWithHistory(() => reorderVariable(msg.draggedId, msg.targetId, msg.insertBefore));
       break;
 
+    case 'set-collection-order':
+      await runMutationWithHistory(() => setCollectionOrderFromUi(msg.order, msg.requestId));
+      break;
+
     case 'reset-order':
       await runMutationWithHistory(async () => {
         setVariableOrder([]);
@@ -4502,11 +4736,11 @@ figma.ui.onmessage = async (msg: any) => {
       break;
 
     case 'undo':
-      await undoHistoryStep();
+      await runSerializedHistoryOperation(undoHistoryStep);
       break;
 
     case 'redo':
-      await redoHistoryStep();
+      await runSerializedHistoryOperation(redoHistoryStep);
       break;
 
     case 'get-history-state':

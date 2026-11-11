@@ -499,6 +499,18 @@ Dependency graph in `src/ui/components/Relationships/`
 - Only rows the user picked are marked (`isRowMarked`), never rows that are merely visible: the clicked row gets `bg-primary/10 ring-1 ring-primary` (also the canvas-focus ring), its descendants only the `bg-primary/10` fill; while everything is selected only "All variables" is marked
 - In the graph a plain click also finds the row on the canvas via `onFocusPath`; Cmd/Ctrl-click does not move the camera
 
+**Collection reorder (order saved in the file, see "Collection order" in `functions.md`):**
+- Collections come from `useAppContext()` already in the saved order; the tree calls `reorderCollections(orderedIds)` (DataContext), which applies the new order at once and saves it
+- Drag a collection row (HTML5 drag and drop; not the "All variables" root, groups or folders). Each collection block is the drop target: the pointer above the row's midpoint drops before it, below it (including over its expanded groups) after it
+- Drop line: a 2px `bg-primary` bar in the gap between blocks; the dragged row is `opacity-50`; no line when the drop would change nothing
+- Alt+ArrowUp / Alt+ArrowDown on a focused collection row moves it one place; focus stays on the moved row and an `aria-live="polite"` `sr-only` region announces "Moved <name> to position N of M"
+- Disabled (not draggable, no keys, no hint) while the search box has text or with fewer than 2 collections
+- Row tooltip adds "Drag or Alt+↑/↓ to reorder"; plain click, Cmd/Ctrl-click and Enter/Space are unchanged, and the click a browser may send after a drag is ignored
+- Collection rows carry `data-collection-id`; `TreeRow` gains `draggable`, `onDragStart`, `onDragEnd`, `dragging`, `onReorderKey`, `dataCollectionId`
+- Move math: `moveCollectionId` in `utils/collectionOrder.ts`
+
+**DataContext (`context/DataContext.tsx`):** `collections` is resolved against the stored order and `variables` are stable-sorted by their collection's rank (raw API-order data stays internal); `setData(collections, variables, shadeGroups, collectionOrder?)`; `reorderCollections(orderedIds)` (optimistic, then `set-collection-order`; the optimistic order holds until every pending request is settled via `settleCollectionOrder(requestId)` from `update-success` / `update-error`, or 10 s pass). The initial selected collection is the first one in the resolved order
+
 **Props:** `selectedCollections`, `selectedGroups`, `onSelectionChange({ collections, groups })` (one atomic write per click), optional `onFocusPath`, `focusNoun` (tooltip, 'graph' default / 'table'), `isPathFocusable`, `focusedRowKey`, `highlightedGroupKey`, `onSelectAllCollections`
 
 **Table filtering:** ungrouped (collection root) variables show only while every group of their collection is selected, so picking a group shows just that group (`isVariableVisibleForGroupFilters` with `getGroupKeysByCollection`)

@@ -6,6 +6,19 @@ export interface CollectionData {
   modes: Array<{ modeId: string; name: string }>;
 }
 
+// User-set collection order, saved in the Figma file's document plugin data.
+// Keyed by id, with name as a fallback for ids that changed (undo recreates
+// every collection). The sandbox writes `name` from the live collection.
+export interface CollectionOrderEntry {
+  id: string;
+  name: string;
+}
+
+export interface StoredCollectionOrder {
+  v: 1;
+  entries: CollectionOrderEntry[];
+}
+
 export interface VariableData {
   id: string;
   collectionId: string;

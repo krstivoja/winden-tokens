@@ -120,7 +120,10 @@ winden-tokens/
 │   │   │   └── (custom hooks here)
 │   │   │
 │   │   ├── context/                 # React context providers
-│   │   │   └── (context files here)
+│   │   │   └── DataContext.tsx      # Collections, variables, shade groups; resolves the collection order
+│   │   │
+│   │   ├── utils/                   # Pure helpers
+│   │   │   └── collectionOrder.ts   # Collection order: parse, resolve, sort variables, move, build
 │   │   │
 │   │   ├── styles/                  # Styles
 │   │   │   └── main.css             # Tailwind @theme and base styles
@@ -147,6 +150,16 @@ winden-tokens/
 ├── package-lock.json                # Locked dependency versions
 ├── tsconfig.json                    # TypeScript config (UI)
 ├── tsconfig.plugin.json             # TypeScript config (Plugin)
+├── tests/                           # Tests, mirroring src/ (never shipped)
+│   └── ui/
+│       ├── components/Table/
+│       │   ├── SidebarFilter.test.tsx
+│       │   └── SidebarFilterReorder.test.tsx  # Collection drag / Alt+Arrow reorder
+│       ├── context/
+│       │   └── DataContext.test.tsx           # Resolved collections, reorderCollections
+│       └── utils/
+│           └── collectionOrder.test.ts        # Order parse / resolve / move
+│
 ├── vite.config.ts                   # Vite build configuration
 └── vitest.config.ts                 # Vitest test configuration
 ```

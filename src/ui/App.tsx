@@ -5,6 +5,7 @@ import { useAppContext } from './context/AppContext';
 import { usePluginMessages, post } from './hooks/usePluginMessages';
 import { useBridge, answerBridgePairing, isInsideFigma, BRIDGE_CLIENT_ENABLED } from './hooks/useBridge';
 import { BRIDGE_CLI_COMMAND } from './bridge/protocol';
+import { parseCollectionOrder } from './utils/collectionOrder';
 import { TextButton } from './components/common/Button';
 import { Icon } from './components/icons/Icon';
 import { TabBar, type TabId } from './components/Tabs/TabBar';
@@ -33,7 +34,7 @@ const BRIDGE_MENU_HINT =
   'run "Bridge to browser" from its menu (Plugins → Winden Tokens → Bridge to browser)';
 
 export function App() {
-  const { setData, setSelection } = useAppContext();
+  const { setData, settleCollectionOrder, setSelection } = useAppContext();
   // The browser tab exists to give the Relationships graph room, so it opens
   // straight into it and hides the tab bar. The plugin keeps every tab.
   const isBrowserClient = !isInsideFigma();
@@ -53,13 +54,21 @@ export function App() {
   // Handle plugin messages
   const messageHandlers = useCallback(() => ({
     'data-loaded': (msg: any) => {
-      setData(msg.collections || [], msg.variables || [], msg.shadeGroups || []);
+      setData(
+        msg.collections || [],
+        msg.variables || [],
+        msg.shadeGroups || [],
+        parseCollectionOrder(msg.collectionOrder)
+      );
       setStatus({ message: '', type: '' }); // Clear any warning status after refresh
     },
-    'update-success': () => {
+    'update-success': (msg: any) => {
+      // `requestId` is set only on replies to `set-collection-order`.
+      settleCollectionOrder(msg.requestId);
       showStatus('Saved', 'success');
     },
     'update-error': (msg: any) => {
+      settleCollectionOrder(msg.requestId);
       showStatus('Error: ' + msg.error, 'warning');
     },
     'history-state': (msg: any) => {
@@ -77,7 +86,7 @@ export function App() {
     'selection-changed': (msg: any) => {
       setSelection(msg.node || null, !!msg.multiple);
     },
-  }), [setData, setSelection, showStatus]);
+  }), [setData, settleCollectionOrder, setSelection, showStatus]);
 
   usePluginMessages(messageHandlers());
 

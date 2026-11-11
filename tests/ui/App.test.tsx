@@ -6,12 +6,17 @@
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import type { BridgeStatus } from '../../src/ui/hooks/useBridge';
 
 const bridgeMock = vi.hoisted(() => ({
   status: null as BridgeStatus | null,
   answer: vi.fn(),
+}));
+
+const messagesMock = vi.hoisted(() => ({
+  handlers: {} as Record<string, (msg: any) => void>,
+  settle: vi.fn(),
 }));
 
 vi.mock('../../src/ui/hooks/useBridge', () => ({
@@ -22,12 +27,14 @@ vi.mock('../../src/ui/hooks/useBridge', () => ({
 }));
 
 vi.mock('../../src/ui/hooks/usePluginMessages', () => ({
-  usePluginMessages: () => undefined,
+  usePluginMessages: (handlers: Record<string, (msg: any) => void>) => {
+    messagesMock.handlers = handlers;
+  },
   post: () => undefined,
 }));
 
 vi.mock('../../src/ui/context/AppContext', () => ({
-  useAppContext: () => ({ setData: () => undefined, setSelection: () => undefined }),
+  useAppContext: () => ({ setData: () => undefined, settleCollectionOrder: messagesMock.settle, setSelection: () => undefined }),
 }));
 
 vi.mock('../../src/ui/components/Tabs/TabBar', () => ({ TabBar: () => null }));
@@ -57,6 +64,20 @@ function status(overrides: Partial<BridgeStatus>): BridgeStatus {
 
 beforeEach(() => {
   bridgeMock.answer.mockReset();
+  messagesMock.settle.mockReset();
+});
+
+describe('App plugin replies', () => {
+  it('settles a pending collection reorder on update-success and update-error', () => {
+    bridgeMock.status = status({});
+    render(<App />);
+    act(() => {
+      messagesMock.handlers['update-success']({ type: 'update-success', requestId: 'r1' });
+      messagesMock.handlers['update-error']({ type: 'update-error', error: 'view-only', requestId: 'r2' });
+      messagesMock.handlers['update-success']({ type: 'update-success' });
+    });
+    expect(messagesMock.settle.mock.calls).toEqual([['r1'], ['r2'], [undefined]]);
+  });
 });
 
 describe('App bridge banners (browser tab)', () => {

@@ -124,8 +124,8 @@
 - Card and frame titles are breadcrumbs (`font > size > body`), the tooltip is the full slash path; collection and managed/external cards stay plain
 - Card menu "Hide unused" (just above Delete): highlights that card's path and turns hiding on in one step; reads "Show all" while hiding is active
 - Grid Settings "Sort by": Tier (default) or Collection, persisted with the gaps in `graph-layout-settings` (a record without it loads as Tier)
-- Tier: one column per dependency tier, left to right, every column starting at the top, with a "Tier N" caption above each (`graph-tier-labels`, Tier mode only); inside a column, cards by title, then reordered to reduce wire crossings; free drag
-- Collection: one column per collection, left to right in collection order (the order of the collections in the file), each headed by the collection's name (derived live, never saved; a rename updates it)
+- Tier: one column per dependency tier, left to right, every column starting at the top, with a "Tier N" caption above each (`graph-tier-labels`, Tier mode only); inside a column, cards by title (collection root cards stay alphabetical, the collection order does not apply to Tier mode), then reordered to reduce wire crossings; free drag
+- Collection: one column per collection, left to right in the collection order (Winden's saved order, the same as the sidebar; see Collection order), each headed by the collection's name (derived live, never saved; a rename updates it)
 - Collection: inside a column, cards and frames stack top to bottom in the sidebar tree's path order (segment-wise, `compareGroupPaths`); the collection root card comes first, an empty root card ("No variables at the collection root") last; a managed chain (source → shader → shades/steps) stays one horizontal line at its source's path slot and widens its column
 - Collection: every column starts at the top; a column is as wide as its widest visible unit; columns are `gapX` apart, units `gapY` apart (Grid Settings)
 - Collection: cards and frames move vertically only (mouse drag, multi-selection drag and arrow keys); library cards and the selection card stay right of the last column and move freely
@@ -237,6 +237,13 @@ figma.ui.postMessage({
 });
 ```
 
+**Collection order messages:**
+- `set-collection-order` (UI → plugin): `{ order: { v: 1, entries: [{ id, name }] }, requestId }`. Undoable: it runs through `runMutationWithHistory`, so each reorder is its own undo step. The plugin keeps only entries whose id is a live collection and writes their names from the live collections, never from the UI.
+- Every reply comes after a fresh `data-loaded` with the stored order and echoes `requestId`: `update-success`, or `update-error` for an invalid payload or a failed write (view-only file)
+- History operations (every `runMutationWithHistory` mutation, undo, redo) run one at a time in arrival order (`runSerializedHistoryOperation`), because `figma.ui.onmessage` does not wait for the previous handler
+- `data-loaded` (plugin → UI) carries `collectionOrder` (the stored order, or `null`) next to `collections` and `variables`. `collections` and `variables` stay in API order on the wire; the UI applies the order
+- `refresh` clears the variable order but keeps the collection order (shared, saved in the file; Figma's own panel order cannot be read back)
+
 ---
 
 ## Figma Variables
@@ -266,6 +273,38 @@ Figma supports 4 types:
 Variables are organized in collections:
 - Collection = group of related variables
 - Example: "Colors", "Spacing", "Typography"
+
+#### Collection order
+
+Figma's plugin API returns collections in creation order and exposes no collection order, so Winden keeps its own.
+It is saved in the Figma file, so it is shared with everyone who opens the file.
+
+**Storage:**
+- `figma.root` plugin data key `collectionOrder`: `{ v: 1, entries: [{ id, name }] }` (sandbox: `readCollectionOrder` / `writeCollectionOrder`; at most 1000 entries, duplicate ids keep the first; an empty list deletes the key)
+- Validation is the same on both sides (sandbox `sanitizeCollectionOrderEntries`, UI `parseCollectionOrder`): one malformed entry rejects the whole value
+- A value this build cannot read (bad JSON, another version) reads as "no order" and is never overwritten by reads; undo/redo puts it back verbatim
+
+**Resolution (`utils/collectionOrder.ts`, `resolveCollectionOrder`):**
+- Each entry first claims the collection with the same id; each entry still unmatched then claims the first unclaimed collection with the same name
+- Collections come in entry order; new or unknown collections go last, in API order
+- Because of the name fallback the order survives Winden undo/redo (which recreates every collection with a new id) and renames
+- No stored order, or no match, means API order
+
+**Where it applies:**
+- `DataContext` exposes the resolved `collections` and `variables` stable-sorted by their collection's rank, so the sidebar, mode tags, table rows, graph Collection columns, JSON tab and move-to-collection dropdowns all follow it
+- Tier mode root cards stay alphabetical; MCP `list_collections` stays in API order
+- `reorderCollections(orderedIds)` applies the order optimistically, then posts `set-collection-order` with a new `requestId`; a no-op reorder posts nothing
+- While any reorder is unanswered the optimistic order wins over the stored order of incoming `data-loaded` messages (their collections still apply, so creates, deletes and renames show at once), so rapid moves build on each other
+- `update-success` / `update-error` settle a request by its `requestId` (`settleCollectionOrder`); once none is pending the last stored order shows, so a failed save reverts
+- With no answer for 10 s (`COLLECTION_ORDER_ACK_TIMEOUT_MS`, e.g. an older plugin build that ignores the message) the stored order shows again
+
+**Undo / redo / sync:**
+- The order is part of the history snapshot; a pure reorder undo (same collections, only the order differs) takes an order-only fast path: nothing is deleted or recreated, so ids, graph state and canvas bindings survive
+- Any other undo restores the order with the ids remapped to the recreated collections
+- Delete all and Refresh keep the order
+- The change poll hashes the raw stored value, so a collaborator's reorder shows up on the next poll
+
+**Sidebar:** drag collection rows or press Alt+↑/↓ (see SidebarFilter in `components.md`)
 
 ### Modes
 
@@ -430,7 +469,8 @@ const modeId = collection.addMode(modeName);
 1. **No real-time updates** - Must poll
 2. **No undo/redo API** - Can't hook into Figma's undo
 3. **No batch operations** - Must update variables one by one
-4. **Single-file UI** - Must bundle everything inline
+4. **No collection order** - The API returns collections in creation order and offers no way to read or set the order shown in Figma's panel; Winden stores its own order in the file (see Collection order)
+5. **Single-file UI** - Must bundle everything inline
 
 ### Plugin Limitations
 

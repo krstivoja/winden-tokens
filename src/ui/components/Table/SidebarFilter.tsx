@@ -22,6 +22,7 @@ import { getGroupCardKey } from '../Relationships/GroupedGraph/utils';
 import { resolveModeIdForCollection } from '../../utils/modes';
 import { VariableData } from '../../types';
 import { Search } from '../common/Search';
+import { moveCollectionId } from '../../utils/collectionOrder';
 
 // A group name like "color/on-surface/1" is split into a nested tree so
 // siblings sharing a prefix (on-surface/1, /2, /accent, ...) collapse together.
@@ -104,6 +105,16 @@ interface TreeRowProps {
   title?: string;
   indent?: number;
   onActivate: (activation: RowActivation) => void;
+  /** Collection rows only: the row can be dragged to reorder collections. */
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
+  /** This row is the one being dragged: dimmed. */
+  dragging?: boolean;
+  /** Alt+ArrowUp (-1) / Alt+ArrowDown (1) on the focused row. */
+  onReorderKey?: (direction: -1 | 1) => void;
+  /** Lets the parent find the row again (focus after a keyboard move). */
+  dataCollectionId?: string;
 }
 
 // One selectable row of the tree (root, collection, group or folder). The
@@ -123,6 +134,12 @@ function TreeRow({
   title,
   indent = 0,
   onActivate,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
+  dragging = false,
+  onReorderKey,
+  dataCollectionId,
 }: TreeRowProps) {
   const textClass =
     variant === 'root' ? 'text-sm font-semibold' : variant === 'collection' ? 'text-sm' : 'text-xs';
@@ -133,8 +150,18 @@ function TreeRow({
       aria-selected={selected || descendant}
       aria-expanded={expandable ? expanded : undefined}
       title={title}
+      data-collection-id={dataCollectionId}
+      draggable={draggable || undefined}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
       onClick={e => onActivate(isAdditive(e))}
       onKeyDown={e => {
+        if (onReorderKey && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          // Would otherwise scroll the tree.
+          e.preventDefault();
+          onReorderKey(e.key === 'ArrowUp' ? -1 : 1);
+          return;
+        }
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Space would otherwise scroll the tree.
         e.preventDefault();
@@ -146,7 +173,7 @@ function TreeRow({
           : descendant
             ? DESCENDANT_ROW_CLASS
             : 'hover:bg-base-2'
-      }`}
+      }${dragging ? ' opacity-50' : ''}`}
       style={indent ? { marginLeft: indent } : undefined}
     >
       {expandable ? (
@@ -344,7 +371,7 @@ export function SidebarFilter({
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
-  const { collections, variables } = useAppContext();
+  const { collections, variables, reorderCollections } = useAppContext();
   const { openInputModal } = useModalContext();
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -353,6 +380,100 @@ export function SidebarFilter({
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
   const hasInitializedExpanded = React.useRef(false);
+
+  // Collection reorder (drag a collection row, or Alt+ArrowUp/Down on it).
+  // Off while searching: the visible rows are not the whole order.
+  const canReorder = collections.length >= 2 && !isSearching;
+  const [draggedCollectionId, setDraggedCollectionId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('');
+  // The browser may follow a drag with a click on the source row: ignore it.
+  const suppressClickRef = React.useRef(false);
+  const treeRef = React.useRef<HTMLDivElement>(null);
+  const pendingFocusIdRef = React.useRef<string | null>(null);
+
+  const collectionIds = React.useMemo(() => collections.map(c => c.id), [collections]);
+  const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
+
+  const clearDrag = () => {
+    setDraggedCollectionId(null);
+    setDropTarget(null);
+  };
+
+  const handleCollectionDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox only starts a drag that carries data.
+      e.dataTransfer.setData('text/plain', id);
+    }
+    setDraggedCollectionId(id);
+  };
+
+  const handleCollectionDragEnd = () => {
+    clearDrag();
+    suppressClickRef.current = true;
+    requestAnimationFrame(() => {
+      suppressClickRef.current = false;
+    });
+  };
+
+  // Before/after by the collection row's vertical midpoint; the block's
+  // expanded groups sit below it, so they count as "after".
+  const dropPositionOf = (e: React.DragEvent<HTMLDivElement>): 'before' | 'after' => {
+    const row = e.currentTarget.querySelector('[role="treeitem"]') ?? e.currentTarget;
+    const rect = row.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  };
+
+  const handleBlockDragOver = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+    // Only collection drags started here (not OS files or text).
+    if (!draggedCollectionId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const position = dropPositionOf(e);
+    const changes = !sameOrder(moveCollectionId(collectionIds, draggedCollectionId, targetId, position), collectionIds);
+    const next = changes ? { id: targetId, position } : null;
+    setDropTarget(prev =>
+      prev?.id === next?.id && prev?.position === next?.position ? prev : next
+    );
+  };
+
+  const handleBlockDragLeave = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+    const related = e.relatedTarget as Node | null;
+    if (related && e.currentTarget.contains(related)) return;
+    setDropTarget(prev => (prev?.id === targetId ? null : prev));
+  };
+
+  const handleBlockDrop = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+    if (!draggedCollectionId) return;
+    e.preventDefault();
+    const next = moveCollectionId(collectionIds, draggedCollectionId, targetId, dropPositionOf(e));
+    clearDrag();
+    if (!sameOrder(next, collectionIds)) reorderCollections(next);
+  };
+
+  const handleReorderKey = (id: string, direction: -1 | 1) => {
+    const index = collectionIds.indexOf(id);
+    const neighbor = collectionIds[index + direction];
+    if (index === -1 || !neighbor) return;
+    const next = moveCollectionId(collectionIds, id, neighbor, direction === -1 ? 'before' : 'after');
+    if (sameOrder(next, collectionIds)) return;
+    const name = collections[index].name;
+    pendingFocusIdRef.current = id;
+    reorderCollections(next);
+    setReorderAnnouncement(`Moved ${name} to position ${next.indexOf(id) + 1} of ${next.length}`);
+  };
+
+  // A moved DOM node can lose focus: put it back on the row moved by keyboard.
+  React.useLayoutEffect(() => {
+    const id = pendingFocusIdRef.current;
+    if (!id) return;
+    pendingFocusIdRef.current = null;
+    const row = Array.from(
+      treeRef.current?.querySelectorAll<HTMLElement>('[data-collection-id]') ?? []
+    ).find(el => el.dataset.collectionId === id);
+    if (row && document.activeElement !== row) row.focus();
+  }, [collections]);
 
   // Sidebar width — draggable via the handle on the right edge, persisted across sessions.
   const SIDEBAR_MIN_WIDTH = 200;
@@ -652,7 +773,7 @@ export function SidebarFilter({
           className="mb-2"
           fullWidth
         />
-        <div role="tree" aria-multiselectable className="space-y-1 overflow-auto flex-1 min-h-0">
+        <div ref={treeRef} role="tree" aria-multiselectable className="space-y-1 overflow-auto flex-1 min-h-0">
           {collections.length > 0 && (
             <TreeRow
               variant="root"
@@ -704,8 +825,32 @@ export function SidebarFilter({
             const collectionSelected = isRowMarked(selection, collectionRow, universe, markedCollections);
             const collectionMuted = !!onFocusPath && !!isPathFocusable && !isPathFocusable(collection.id, '');
 
+            const indicator = dropTarget?.id === collection.id ? dropTarget.position : null;
+            const focusTitle = onFocusPath
+              ? collectionMuted
+                ? 'Not shown in graph'
+                : `Click to select and find in ${focusNoun}`
+              : undefined;
+            const reorderTitle = canReorder ? 'Drag or Alt+↑/↓ to reorder' : undefined;
+
             return (
-              <div key={collection.id} className="space-y-0.5">
+              <div
+                key={collection.id}
+                className="relative space-y-0.5"
+                onDragOver={canReorder ? e => handleBlockDragOver(e, collection.id) : undefined}
+                onDragLeave={canReorder ? e => handleBlockDragLeave(e, collection.id) : undefined}
+                onDrop={canReorder ? e => handleBlockDrop(e, collection.id) : undefined}
+              >
+                {indicator && (
+                  // Centred in the 4px gap between collection blocks; `my-0`
+                  // beats the block's `space-y-0.5` margin on this first child.
+                  <span
+                    aria-hidden
+                    className={`pointer-events-none absolute left-0 right-0 my-0 h-0.5 rounded-full bg-primary ${
+                      indicator === 'before' ? '-top-[3px]' : '-bottom-[3px]'
+                    }`}
+                  />
+                )}
                 <TreeRow
                   variant="collection"
                   label={collection.name}
@@ -727,16 +872,17 @@ export function SidebarFilter({
                     })
                   }
                   muted={collectionMuted}
-                  title={
-                    onFocusPath
-                      ? collectionMuted
-                        ? 'Not shown in graph'
-                        : `Click to select and find in ${focusNoun}`
-                      : undefined
-                  }
-                  onActivate={activation =>
-                    handleRowActivate(collectionRow, activation, { collectionId: collection.id, path: '' })
-                  }
+                  title={[focusTitle, reorderTitle].filter(Boolean).join(' · ') || undefined}
+                  onActivate={activation => {
+                    if (suppressClickRef.current) return;
+                    handleRowActivate(collectionRow, activation, { collectionId: collection.id, path: '' });
+                  }}
+                  dataCollectionId={collection.id}
+                  draggable={canReorder}
+                  dragging={draggedCollectionId === collection.id}
+                  onDragStart={e => handleCollectionDragStart(e, collection.id)}
+                  onDragEnd={handleCollectionDragEnd}
+                  onReorderKey={canReorder ? direction => handleReorderKey(collection.id, direction) : undefined}
                 />
 
                 {/* Groups (nested, collapsible subgroups) */}
@@ -793,6 +939,10 @@ export function SidebarFilter({
           {footer}
         </div>
       )}
+
+      <div aria-live="polite" className="sr-only">
+        {reorderAnnouncement}
+      </div>
 
       {/* Resize handle */}
       <div

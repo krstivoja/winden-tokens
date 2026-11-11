@@ -26,7 +26,7 @@ let currentCollections = collections;
 let currentVariables = variables;
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => ({ collections: currentCollections, variables: currentVariables }),
+  useAppContext: () => ({ collections: currentCollections, variables: currentVariables, reorderCollections: vi.fn() }),
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
