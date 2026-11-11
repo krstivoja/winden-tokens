@@ -75,7 +75,7 @@ import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
-import { resolveNodeOverlaps } from './GroupedGraph/resolveOverlaps';
+import { boxesToStore, getNodeOverlapBoxes, resolveNodeDrop, resolveNodeOverlaps } from './GroupedGraph/resolveOverlaps';
 import {
   buildCollectionColumnItems,
   layoutCollectionColumns,
@@ -1570,6 +1570,10 @@ function GroupedGraphInner() {
     }));
     return { ...layout, headers };
   }, [gridLayoutSettings, groupsData, groupedPaths, naturalLayoutFilters, collections, collectionNameById]);
+  // Read by a drop in Collection mode to tell which pushed boxes the next
+  // layout pass reproduces by itself (see boxesToStore).
+  const collectionNaturalLayoutRef = useRef(collectionNaturalLayout);
+  collectionNaturalLayoutRef.current = collectionNaturalLayout;
   // Collection mode's drag lock: node id → the column x the layout effect
   // gave it (a temporary arrange's included). Empty in Tier mode. Written by
   // the layout effect, read by the nodes-change handler on every drag frame.
@@ -2302,6 +2306,15 @@ function GroupedGraphInner() {
   // (collected across the debounce window); everything else stays natural
   // and keeps re-flowing with filters and gaps.
   const movedNodeIdsRef = useRef<Set<string>>(new Set());
+  // The start of the drag (or key press) each moving node is in, until its drop.
+  const dragOriginsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // A run of key presses (or drops) on the same nodes: each press is its own
+  // drop, but the presses that only walk a card into the gap must not move
+  // its slot, or the card that it then passes would move up to the walked
+  // spot instead of the slot and the column would grow by a gap each swap.
+  // Per node: its slot (moved only by a swap) and where the last drop left
+  // it — the slot is used only while the node is still there.
+  const dropWalkRef = useRef<Map<string, { slot: { x: number; y: number }; last: { x: number; y: number } }>>(new Map());
   // The mode a drag happens in decides where its save goes.
   const sortByRef = useRef(gridLayoutSettings.sortBy);
   sortByRef.current = gridLayoutSettings.sortBy;
@@ -2311,20 +2324,33 @@ function GroupedGraphInner() {
     // before xyflow applies it, so mouse drags, multi-selection drags and
     // keyboard moves are all covered; Tier mode's map is empty (identity).
     const changes = lockChangesToColumns(rawChanges, lockedXRef.current);
+    // Where each moving node started (before its first drag tick or its key
+    // press), read before xyflow applies the change: a drop that passes a
+    // box swaps with it, and only the start tells which boxes it passed.
+    changes.forEach(c => {
+      if (c.type !== 'position' || !c.position || dragOriginsRef.current.has(c.id)) return;
+      const node = reactFlowInstance.getNode(c.id);
+      if (!node) return;
+      const walk = dropWalkRef.current.get(c.id);
+      const stillThere = walk
+        && Math.abs(walk.last.x - node.position.x) < 0.5 && Math.abs(walk.last.y - node.position.y) < 0.5;
+      dragOriginsRef.current.set(c.id, stillThere ? walk.slot : { x: node.position.x, y: node.position.y });
+    });
     onNodesChange(changes);
 
     const positionChanges = changes.filter(c => c.type === 'position' && c.position);
     if (positionChanges.length > 0) {
       if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
       positionChanges.forEach(c => { if (c.type === 'position') movedNodeIdsRef.current.add(c.id); });
-      // A drop (drag end or keyboard move — never a drag tick) that lands on
-      // another box resolves at once, with the same rule every layout pass
-      // uses (see resolveOverlaps): the box whose top is higher stays, the
-      // other moves down to the gap. Pushed boxes are not marked as moved:
-      // the rule is deterministic, so the next layout pass makes the same
-      // pushes from the stored drop alone — a drop is never undone by a later
-      // pass, and Collection mode keeps storing only what the user moved
-      // (Tier mode's save stores the whole canvas anyway).
+      // A drop (drag end or keyboard move — never a drag tick) resolves at
+      // once (see resolveDrop): a drop that passes boxes in its column swaps
+      // with them like a reorder; otherwise the dropped boxes stay where the
+      // user put them and every box they land on moves down to the gap below
+      // them, cascading. Tier mode's save stores the whole canvas anyway.
+      // Collection mode stores only what the next layout pass would not
+      // reproduce by itself (see boxesToStore): the drop and the boxes it
+      // swapped with — a box pushed down from below is pushed again by that
+      // pass, so it stays unstored and keeps re-flowing with the filters.
       const dropped = new Map<string, { x: number; y: number }>();
       positionChanges.forEach(c => {
         if (c.type === 'position' && c.dragging === false && c.position) dropped.set(c.id, c.position);
@@ -2334,7 +2360,33 @@ function GroupedGraphInner() {
           const position = dropped.get(n.id);
           return position ? { ...n, position } : n;
         });
-        const pushed = resolveNodeOverlaps(afterDrop, layoutGapYRef.current);
+        const origins = new Map<string, { x: number; y: number }>();
+        dropped.forEach((position, id) => origins.set(id, dragOriginsRef.current.get(id) ?? position));
+        // Every move of this gesture ends here (a multi-selection drops at once).
+        dragOriginsRef.current.clear();
+        const pushed = resolveNodeDrop(afterDrop, layoutGapYRef.current, origins);
+        const walks = new Map<string, { slot: { x: number; y: number }; last: { x: number; y: number } }>();
+        dropped.forEach((position, id) => {
+          const swapped = pushed.get(id);
+          // A swap moves the slot to where the swap put the node.
+          walks.set(id, { slot: swapped ?? origins.get(id)!, last: swapped ?? position });
+        });
+        dropWalkRef.current = walks;
+        const natural = collectionNaturalLayoutRef.current;
+        if (pushed.size > 0 && sortByRef.current === 'collection' && natural && hidingLayoutRef.current === null) {
+          const shown = getNodeOverlapBoxes(afterDrop.map(n => {
+            const position = pushed.get(n.id);
+            return position ? { ...n, position } : n;
+          }));
+          const record = collectionPositionsRef.current;
+          const passStart = new Map<string, number>();
+          shown.forEach(box => {
+            const y = record[box.id]?.y ?? natural.positions.get(box.id)?.y;
+            if (y !== undefined) passStart.set(box.id, y);
+          });
+          boxesToStore(shown, passStart, movedNodeIdsRef.current, layoutGapYRef.current)
+            .forEach(id => movedNodeIdsRef.current.add(id));
+        }
         if (pushed.size > 0) {
           setNodes(prev => prev.map(n => {
             const position = pushed.get(n.id);

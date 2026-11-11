@@ -128,6 +128,47 @@ async function mount(options: {
   return view;
 }
 
+// d3-drag (xyflow's mouse drag) reads `event.view`, which jsdom's MouseEvent
+// init rejects for the test window, so it is set on the event afterwards.
+function mouseEvent(target: EventTarget, type: string, clientX: number, clientY: number) {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'mouseup' ? 0 : 1, clientX, clientY });
+  Object.defineProperty(event, 'view', { value: window });
+  act(() => { target.dispatchEvent(event); });
+}
+
+/**
+ * A mouse drag by the header of node `id`, by `dy` canvas px. The pane gets a
+ * real size for the drag (jsdom's is 0×0, which would make xyflow auto-pan
+ * every frame), and the first move only starts the drag: xyflow measures the
+ * grab offset there, so the move by `dy` is counted from it.
+ */
+function mouseDrag(id: string, dy: number) {
+  const header = nodeEl(id)!.querySelector('.group-header') ?? nodeEl(id)!;
+  const pane = document.querySelector('.react-flow') as HTMLElement;
+  const rect = vi.spyOn(pane, 'getBoundingClientRect').mockReturnValue(
+    { x: 0, y: 0, left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800, toJSON: () => ({}) } as DOMRect
+  );
+  const viewport = document.querySelector('.react-flow__viewport') as HTMLElement;
+  const zoom = Number(/scale\(([\d.]+)\)/.exec(viewport.style.transform)?.[1] ?? 1);
+  const startY = 400;
+  const endY = startY + 4 + dy * zoom;
+  mouseEvent(header, 'mousedown', 300, startY);
+  mouseEvent(window, 'mousemove', 300, startY + 4);
+  for (let i = 1; i <= 4; i++) mouseEvent(window, 'mousemove', 300, startY + 4 + ((endY - startY - 4) * i) / 4);
+  mouseEvent(window, 'mouseup', 300, endY);
+  rect.mockRestore();
+}
+
+// One arrow key press at a time until `done` holds (each press is a drop).
+async function pressUntil(el: HTMLElement, key: string, done: () => boolean, max = 20) {
+  for (let i = 0; i < max && !done(); i++) {
+    const before = el.style.transform;
+    fireEvent.keyDown(el, { key });
+    await waitFor(() => expect(el.style.transform).not.toBe(before));
+  }
+  expect(done()).toBe(true);
+}
+
 const writes = (key: string) =>
   posted.filter(m => m.type === 'set-client-storage' && m.key === key).map(m => m.value);
 
@@ -242,7 +283,7 @@ describe('Collection mode: a dragged card under computed ones', () => {
 });
 
 describe('a drop onto another card', () => {
-  it('resolves on the spot, and the push is saved with the drop', async () => {
+  it('a key press into the card below swaps the two, and the swap is saved with the drop', async () => {
     await mount({
       settings: { gapY: 24 },
       positions: {
@@ -254,45 +295,239 @@ describe('a drop onto another card', () => {
       },
     });
     expect(pos('group:c1::b').y).toBe(CARD + 4);
-    // Select a, then move it down by keyboard (one snap step a press) until
-    // its bottom runs into b; b's top is still lower, so b moves.
+    // One press down runs a into b: b moves up to a's old top (never above
+    // it), a sits the gap below b.
     const a = nodeEl('group:c1::a')!;
     fireEvent.keyDown(a, { key: 'Enter' });
     fireEvent.keyDown(a, { key: 'ArrowDown' });
-    await waitFor(() => expect(pos('group:c1::a').y).toBeGreaterThan(4));
-    const aY = pos('group:c1::a').y;
-    await waitFor(() => expect(pos('group:c1::b').y).toBe(aY + CARD + 24));
+    await waitFor(() => expect(pos('group:c1::a').y).toBe(CARD + 24));
+    expect(pos('group:c1::b').y).toBe(0);
     expect(pos('group:c1::c').y).toBe(1000);
     await waitFor(() => expect(writes('graph-positions').length).toBe(1), { timeout: 1000 });
     const saved = writes('graph-positions')[0] as Record<string, { y: number }>;
-    expect(saved['group:c1::a'].y).toBe(aY);
-    expect(saved['group:c1::b'].y).toBe(aY + CARD + 24);
+    expect(saved['group:c1::a'].y).toBe(CARD + 24);
+    expect(saved['group:c1::b'].y).toBe(0);
     expect(saved['group:c1::c'].y).toBe(1000);
   });
 
-  it('Collection mode stores only the moved card, and a rebuild makes the same pushes', async () => {
+  it('Collection mode: key presses down swap once the card runs into the next; only the pair is stored, the rest re-flows', async () => {
     const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
     const a = nodeEl('group:c1::a')!;
     fireEvent.keyDown(a, { key: 'Enter' });
-    // Down until a's bottom runs past b's top (b sits the gap, 24px, below).
-    for (let i = 0; i < 4; i++) fireEvent.keyDown(a, { key: 'ArrowDown' });
-    await waitFor(() => expect(pos('group:c1::a').y).toBeGreaterThan(24));
-    const aY = pos('group:c1::a').y;
-    const expected = {
-      a: aY,
-      b: aY + CARD + 24,
-      // b's push lands on c, which moves too.
-      c: aY + (CARD + 24) * 2,
-    };
+    const STEP = CARD + 24;
+    // 8px a press: three walk a into the 24px gap, the fourth runs into b.
+    await pressUntil(a, 'ArrowDown', () => pos('group:c1::b').y === 0);
+    const expected = { a: STEP, b: 0, c: STEP * 2 };
     const shown = () => ({ a: pos('group:c1::a').y, b: pos('group:c1::b').y, c: pos('group:c1::c').y });
     await waitFor(() => expect(shown()).toEqual(expected));
-    await waitFor(() => expect(writes('graph-positions-collection').length).toBe(1), { timeout: 1000 });
-    expect(Object.keys(writes('graph-positions-collection')[0] as object)).toEqual(['group:c1::a']);
+    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
+    const all = writes('graph-positions-collection');
+    expect(Object.keys(all[all.length - 1] as object).sort()).toEqual(['group:c1::a', 'group:c1::b']);
 
     // Any rebuild (here: a fresh filter object) lays out from the record.
     setContext(new Set(ALL_GROUPS));
     view.rerender(<GroupedGraph />);
     await act(async () => { await new Promise(r => setTimeout(r, 50)); });
     expect(shown()).toEqual(expected);
+
+    // Filter a out: c (unstored) closes up under b.
+    setContext(new Set(['c1::b', 'c1::c', 'c2::x']));
+    view.rerender(<GroupedGraph />);
+    await waitFor(() => expect(pos('group:c1::c').y).toBe(STEP));
+  });
+
+  it('a push keeps the full gap to the next card, and nothing is written', async () => {
+    // b runs 10px into a; c sits clear of b, but b's push lands 6px from it.
+    await mount({
+      settings: { gapY: 24 },
+      positions: {
+        'group:c1::a': { x: 0, y: 0 },
+        'group:c1::b': { x: 0, y: CARD - 10 },
+        'group:c1::c': { x: 0, y: CARD * 2 + 30 },
+        'group:c2::x': { x: 400, y: 0 },
+      },
+    });
+    await waitFor(() => expect(pos('group:c1::b').y).toBe(CARD + 24));
+    expect(pos('group:c1::c').y).toBe(CARD * 2 + 48);
+    expect(writes('graph-positions')).toEqual([]);
+  });
+});
+
+// A drop that passes a box in its column swaps with it, like a reorder: the
+// column stays packed. A drop that only runs into a box without passing it
+// stays where it lands, and the box goes down to the gap below it.
+describe('a drop that passes a box swaps with it', () => {
+  // a, b, c stacked at the gap in c1's column; x alone in the next one.
+  const stacked = {
+    'group:c1::a': { x: 0, y: 0 },
+    'group:c1::b': { x: 0, y: CARD + 24 },
+    'group:c1::c': { x: 0, y: (CARD + 24) * 2 },
+    'group:c2::x': { x: 400, y: 0 },
+  };
+  const STEP = CARD + 24;
+  const shown = () => ({ a: pos('group:c1::a').y, b: pos('group:c1::b').y, c: pos('group:c1::c').y });
+  const lastWrite = (key: string) => {
+    const all = writes(key);
+    return all[all.length - 1] as Record<string, { x: number; y: number }>;
+  };
+
+  it('up by arrow keys: the press that runs into the card above swaps the two, and the next press moves on', async () => {
+    await mount({ settings: { gapY: 24 }, positions: stacked });
+    const b = nodeEl('group:c1::b')!;
+    fireEvent.keyDown(b, { key: 'Enter' });
+    // Up 8px a press: across the 24px gap, then the press into a swaps.
+    await pressUntil(b, 'ArrowUp', () => pos('group:c1::b').y < CARD);
+    await waitFor(() => expect(shown()).toEqual({ a: STEP, b: 0, c: STEP * 2 }));
+    // The next press moves b on up; a stays.
+    fireEvent.keyDown(b, { key: 'ArrowUp' });
+    await waitFor(() => expect(pos('group:c1::b').y).toBe(-8));
+    expect(pos('group:c1::a').y).toBe(STEP);
+    expect(pos('group:c2::x')).toMatchObject({ x: 400, y: 0 });
+
+    await waitFor(() => expect(writes('graph-positions').length).toBeGreaterThan(0), { timeout: 1000 });
+    const saved = lastWrite('graph-positions');
+    expect(saved['group:c1::b'].y).toBe(-8);
+    expect(saved['group:c1::a'].y).toBe(STEP);
+    expect(saved['group:c1::c'].y).toBe(STEP * 2);
+  });
+
+  it('up by mouse: a drop onto the lower part of the card above swaps the two, no hole left', async () => {
+    await mount({ settings: { gapY: 24 }, positions: stacked });
+    // b's top lands 40px below a's.
+    mouseDrag('group:c1::b', -(CARD - 16));
+    await waitFor(() => expect(shown()).toEqual({ a: STEP, b: 0, c: STEP * 2 }));
+    await waitFor(() => expect(writes('graph-positions').length).toBeGreaterThan(0), { timeout: 1000 });
+    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+    expect(shown()).toEqual({ a: STEP, b: 0, c: STEP * 2 });
+  });
+
+  it('down by mouse: a drop into the upper part of the card below swaps the two (the mirror of up)', async () => {
+    await mount({ settings: { gapY: 24 }, positions: stacked });
+    // a's top lands 40px above b's: a's bottom is inside b.
+    mouseDrag('group:c1::a', STEP - 40);
+    await waitFor(() => expect(shown()).toEqual({ a: STEP, b: 0, c: STEP * 2 }));
+  });
+
+  it('down by mouse: a drop whose bottom reaches the card after next passes both', async () => {
+    await mount({ settings: { gapY: 24 }, positions: stacked });
+    // a's top lands 40px below b's, its bottom inside c.
+    mouseDrag('group:c1::a', STEP + 40);
+    await waitFor(() => expect(shown()).toEqual({ a: STEP * 2, b: 0, c: STEP }));
+  });
+
+  it('down by keys: the card walks down one card every few presses, the column never grows', async () => {
+    await mount({ settings: { gapY: 24 }, positions: stacked });
+    const a = nodeEl('group:c1::a')!;
+    fireEvent.keyDown(a, { key: 'Enter' });
+    await pressUntil(a, 'ArrowDown', () => pos('group:c1::c').y === STEP, 40);
+    // Past b and then c: they took the slots above, packed at the gap.
+    expect(pos('group:c1::b').y).toBe(0);
+    await waitFor(() => expect(pos('group:c1::a').y).toBe(STEP * 2));
+  });
+
+  it('a multi-selection swaps as one block, keeping its offsets', async () => {
+    // c on top, then a and b: a and b move up together into c.
+    await mount({
+      settings: { gapY: 24 },
+      positions: {
+        ...stacked,
+        'group:c1::c': { x: 0, y: 0 },
+        'group:c1::a': { x: 0, y: STEP },
+        'group:c1::b': { x: 0, y: STEP * 2 },
+      },
+    });
+    const a = nodeEl('group:c1::a')!;
+    const b = nodeEl('group:c1::b')!;
+    fireEvent.keyDown(a, { key: 'Enter' });
+    fireEvent.keyUp(a, { key: 'Enter' });
+    // Add b to the selection with the multi-selection key (Control off a Mac) held.
+    fireEvent.keyDown(document, { key: 'Control', code: 'ControlLeft', ctrlKey: true });
+    fireEvent.keyDown(b, { key: 'Enter', ctrlKey: true });
+    fireEvent.keyUp(b, { key: 'Enter', ctrlKey: true });
+    fireEvent.keyUp(document, { key: 'Control', code: 'ControlLeft' });
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node.selected').length).toBe(2));
+    // Both move up together until a runs into c: a takes c's top.
+    await pressUntil(b, 'ArrowUp', () => pos('group:c1::a').y < CARD);
+    await waitFor(() => expect(pos('group:c1::a').y).toBe(0));
+    const offset = pos('group:c1::b').y - pos('group:c1::a').y;
+    // Each snaps to the 8px grid on its own, so the offset is b's after the presses.
+    expect(offset).toBeGreaterThan(CARD);
+    await waitFor(() => expect(pos('group:c1::c').y).toBe(offset + CARD + 24));
+  });
+
+  it('a frame dropped onto the card above swaps with it; its cards ride along', async () => {
+    // c1's frame holds a, b and c; x sits above it in the same column.
+    await mount({
+      settings: { gapY: 40 },
+      groupedPaths: ['c1::'],
+      positions: { 'group:c2::x': { x: 0, y: 0 }, 'wrapper:c1::': { x: 0, y: CARD + 40 } },
+    });
+    mouseDrag('wrapper:c1::', -(CARD + 16));
+    await waitFor(() => expect(pos('wrapper:c1::').y).toBe(0));
+    const f = pos('wrapper:c1::');
+    await waitFor(() => expect(pos('group:c2::x').y).toBe(f.height + 40));
+    expect(pos('group:c1::a').y).toBeLessThan(f.height);
+  });
+
+  it('Collection mode: up stores the swapped pair only, keeps the column x, and a reload shows the same layout', async () => {
+    const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
+    const b = nodeEl('group:c1::b')!;
+    const x = pos('group:c1::b').x;
+    fireEvent.keyDown(b, { key: 'Enter' });
+    fireEvent.keyDown(b, { key: 'ArrowRight' });
+    await pressUntil(b, 'ArrowUp', () => pos('group:c1::b').y < CARD);
+    const expected = { a: STEP, b: 0, c: STEP * 2 };
+    await waitFor(() => expect(shown()).toEqual(expected));
+    expect(pos('group:c1::b').x).toBe(x);
+    expect(pos('group:c1::a').x).toBe(x);
+
+    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
+    const record = lastWrite('graph-positions-collection');
+    // c and the root card never moved: they stay unstored.
+    expect(Object.keys(record).sort()).toEqual(['group:c1::a', 'group:c1::b']);
+
+    view.unmount();
+    posted.length = 0;
+    await mount({ settings: { sortBy: 'collection', gapY: 24 }, collectionPositions: record });
+    await waitFor(() => expect(shown()).toEqual(expected));
+    expect(writes('graph-positions-collection')).toEqual([]);
+  });
+
+  it('Collection mode: down stores the swapped pair only, a reload shows the same layout, and a filter re-flows the rest', async () => {
+    const view = await mount({ settings: { sortBy: 'collection', gapY: 24 } });
+    mouseDrag('group:c1::a', STEP - 40);
+    const expected = { a: STEP, b: 0, c: STEP * 2 };
+    await waitFor(() => expect(shown()).toEqual(expected));
+    await waitFor(() => expect(writes('graph-positions-collection').length).toBeGreaterThan(0), { timeout: 1000 });
+    const record = lastWrite('graph-positions-collection');
+    expect(Object.keys(record).sort()).toEqual(['group:c1::a', 'group:c1::b']);
+
+    // Filter a out: c (unstored) closes up under b.
+    setContext(new Set(['c1::b', 'c1::c', 'c2::x']));
+    view.rerender(<GroupedGraph />);
+    await waitFor(() => expect(pos('group:c1::c').y).toBe(STEP));
+
+    view.unmount();
+    posted.length = 0;
+    await mount({ settings: { sortBy: 'collection', gapY: 24 }, collectionPositions: record });
+    await waitFor(() => expect(shown()).toEqual(expected));
+    expect(writes('graph-positions-collection')).toEqual([]);
+  });
+
+  it('Tier mode: a reload from the saved record shows the same layout', async () => {
+    const view = await mount({ settings: { gapY: 24 }, positions: stacked });
+    const b = nodeEl('group:c1::b')!;
+    fireEvent.keyDown(b, { key: 'Enter' });
+    await pressUntil(b, 'ArrowUp', () => pos('group:c1::b').y < CARD);
+    const expected = { a: STEP, b: 0, c: STEP * 2 };
+    await waitFor(() => expect(shown()).toEqual(expected));
+    await waitFor(() => expect(writes('graph-positions').length).toBeGreaterThan(0), { timeout: 1000 });
+    const record = lastWrite('graph-positions');
+
+    view.unmount();
+    posted.length = 0;
+    await mount({ settings: { gapY: 24 }, positions: record });
+    await waitFor(() => expect(shown()).toEqual(expected));
+    expect(writes('graph-positions')).toEqual([]);
   });
 });
