@@ -90,7 +90,7 @@ function collectFoldableKeys(node: GroupTreeNode, collectionId: string): string[
 
 // How one row was clicked: Cmd/Ctrl (or Enter/Space with it) adds to / removes
 // from the selection, anything else selects only that row.
-type RowActivation = { additive: boolean };
+type RowActivation = { additive: boolean; pointer?: boolean };
 const isAdditive = (e: { metaKey: boolean; ctrlKey: boolean }): RowActivation => ({
   additive: e.metaKey || e.ctrlKey,
 });
@@ -173,7 +173,7 @@ function TreeRow({
       draggable={draggable || undefined}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
-      onClick={e => onActivate(isAdditive(e))}
+      onClick={e => onActivate({ ...isAdditive(e), pointer: true })}
       onKeyDown={e => {
         if (onReorderKey && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
           // Would otherwise scroll the tree.
@@ -701,7 +701,7 @@ export function SidebarFilter({
   // alone. "All variables" always means everything and clears every mark.
   const handleRowActivate = (
     row: SidebarRow,
-    { additive }: RowActivation,
+    { additive, pointer }: RowActivation,
     focus: { collectionId: string; path: string } | null
   ) => {
     if (row.kind === 'root') {
@@ -717,6 +717,13 @@ export function SidebarFilter({
       if (!next) return;
       setSidebarMarks(next.marks);
       if (next.selection !== selection) onSelectionChange(next.selection);
+      return;
+    }
+    // Clicking the one row that is already the whole selection deselects it:
+    // the same reset as "All variables" (marks, filter, highlight, focus).
+    // Enter/Space on it still re-focuses the camera instead.
+    if (pointer && sidebarMarks.size === 1 && sidebarMarks.has(id)) {
+      handleRowActivate({ kind: 'root' }, { additive: false }, null);
       return;
     }
     // A collection row never filters: it clears every narrowing.

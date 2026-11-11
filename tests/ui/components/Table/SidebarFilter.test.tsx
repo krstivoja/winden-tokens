@@ -186,6 +186,30 @@ describe('SidebarFilter row selection', () => {
     expect(onFocusPath).not.toHaveBeenCalled();
   });
 
+  it('clicking the already-selected row again deselects it like All variables', () => {
+    const onSelectAllCollections = vi.fn();
+    const onFocusPath = vi.fn();
+    render(
+      <StatefulSidebar
+        initial={{ collections: new Set(['c1', 'c2']), groups: new Set(['c1::color', 'c2::space']) }}
+        onSelectAllCollections={onSelectAllCollections}
+        onFocusPath={onFocusPath}
+      />
+    );
+    fireEvent.click(rowOf('space'));
+    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
+    expect(onSelectAllCollections).not.toHaveBeenCalled();
+    fireEvent.click(rowOf('space'));
+    expect(rowOf('space').getAttribute('aria-selected')).toBe('false');
+    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('true');
+    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
+    // Only the first click focused the graph.
+    expect(onFocusPath).toHaveBeenCalledTimes(1);
+    // A third click selects it again.
+    fireEvent.click(rowOf('space'));
+    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
+  });
+
   it('a plain click on a group or All variables clears the collection marks', () => {
     renderSidebar(new Set(['c1', 'c2']));
     fireEvent.click(rowOf('Theme'));
