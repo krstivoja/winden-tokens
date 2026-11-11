@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { post } from '../../hooks/usePluginMessages';
-import { TypeIcon, PlusIcon, FilterIcon } from '../Icons';
-import { IconTextButton } from '../common/Button';
+import { TypeIcon, PlusIcon, FilterIcon, CollapseAllIcon, ExpandAllIcon } from '../Icons';
+import { IconButton, IconTextButton } from '../common/Button';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { useModalContext } from '../Modals/ModalContext';
 import { compareGroupPaths, getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
@@ -75,6 +75,17 @@ function buildGroupTree(groupNames: string[]): GroupTreeNode[] {
 function collectGroupKeys(node: GroupTreeNode, collectionId: string): string[] {
   const own = node.isGroup ? [getCollectionGroupKey(collectionId, node.path)] : [];
   return [...own, ...node.children.flatMap(child => collectGroupKeys(child, collectionId))];
+}
+
+// Collapse keys of every row with a chevron (this node + descendants). Unlike
+// collectGroupKeys this includes folders that are not groups themselves
+// (`a` above `a/b`), since they fold too.
+function collectFoldableKeys(node: GroupTreeNode, collectionId: string): string[] {
+  if (node.children.length === 0) return [];
+  return [
+    getCollectionGroupKey(collectionId, node.path),
+    ...node.children.flatMap(child => collectFoldableKeys(child, collectionId)),
+  ];
 }
 
 // How one row was clicked: Cmd/Ctrl (or Enter/Space with it) adds to / removes
@@ -614,6 +625,36 @@ export function SidebarFilter({
     return map;
   }, [variables]);
 
+  // Collapse / expand all (like Figma's Layers panel). Only what is shown
+  // changes: marks and selection are untouched, "All variables" stays as is.
+  const foldable = React.useMemo(() => {
+    const collectionIdsWithGroups: string[] = [];
+    const folderKeys: string[] = [];
+    collections.forEach(collection => {
+      const groups = groupsByCollection.get(collection.id);
+      if (!groups || groups.size === 0) return;
+      collectionIdsWithGroups.push(collection.id);
+      buildGroupTree(Array.from(groups)).forEach(node =>
+        folderKeys.push(...collectFoldableKeys(node, collection.id))
+      );
+    });
+    return { collectionIdsWithGroups, folderKeys };
+  }, [collections, groupsByCollection]);
+  const anythingOpen =
+    foldable.collectionIdsWithGroups.some(id => expandedCollections.has(id)) ||
+    foldable.folderKeys.some(key => !collapsedGroups.has(key));
+  const canToggleAll = !isSearching && foldable.collectionIdsWithGroups.length > 0;
+  const toggleAllLabel = anythingOpen ? 'Collapse all' : 'Expand all';
+  const handleToggleAll = () => {
+    if (anythingOpen) {
+      setExpandedCollections(new Set());
+      setCollapsedGroups(new Set(foldable.folderKeys));
+    } else {
+      setExpandedCollections(new Set(foldable.collectionIdsWithGroups));
+      setCollapsedGroups(new Set());
+    }
+  };
+
   // Two-level mode picker: a collection tag opens that collection's mode
   // tags. `null` falls back to the collection owning the current mode.
   const [modePickerCollectionId, setModePickerCollectionId] = useState<string | null>(null);
@@ -788,13 +829,24 @@ export function SidebarFilter({
             </OptionsDropdown>
           )}
         </div>
-        <Search
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search collections & groups..."
-          className="mb-2"
-          fullWidth
-        />
+        <div className="flex items-center gap-1 mb-2">
+          <Search
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search collections & groups..."
+            className="flex-1 min-w-0"
+            fullWidth
+          />
+          <IconButton
+            size="sm"
+            icon={anythingOpen ? <CollapseAllIcon /> : <ExpandAllIcon />}
+            onClick={handleToggleAll}
+            disabled={!canToggleAll}
+            title={toggleAllLabel}
+            aria-label={toggleAllLabel}
+            className="shrink-0"
+          />
+        </div>
         <div ref={treeRef} role="tree" aria-multiselectable className="space-y-1 overflow-auto flex-1 min-h-0">
           {collections.length > 0 && (
             <TreeRow
