@@ -33,8 +33,9 @@ import { SidebarFilter } from '../Table/SidebarFilter';
 import { Icon } from '../icons/Icon';
 import { IconButton } from '../common/Button/IconButton/IconButton';
 import { TextButton } from '../common/Button/Button';
-import { Dropdown } from '../common/Dropdown/Dropdown';
+import { Modal } from '../Modals/Modal';
 import { Input } from '../common/Input/Input';
+import { FormGroup } from '../common/FormGroup';
 import { SegmentedControl } from '../common/SegmentedControl/SegmentedControl';
 
 // Import from extracted files
@@ -75,12 +76,14 @@ import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
+import { useZoomKeySync } from './GroupedGraph/useZoomKeySync';
 import { resolveNodeDrop, resolveNodeOverlaps } from './GroupedGraph/resolveOverlaps';
 import {
   buildCollectionColumnItems,
   layoutCollectionColumns,
   lockChangesToColumns,
   packCollectionColumns,
+  placeFreeCard,
 } from './GroupedGraph/columnLayout';
 import type { CollectionColumn, ColumnItem } from './GroupedGraph/columnLayout';
 import {
@@ -373,6 +376,7 @@ function GroupedGraphInner() {
   const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>(
     () => toGridLayoutDraft(normalizeGridLayoutSettings({}))
   );
+  const [gridSettingsOpen, setGridSettingsOpen] = useState(false);
   // The vertical gap the overlap nudge restores (see resolveOverlaps): a
   // number, so the layout effect re-runs only when it changes; the drop
   // handler reads it through the ref.
@@ -1956,6 +1960,10 @@ function GroupedGraphInner() {
 
   const closeSearch = useCallback(() => setSearchOpen(false), []);
 
+  // Cmd+scroll zoom must not depend on xyflow having seen the key press.
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  useZoomKeySync(graphContainerRef);
+
   useEffect(() => {
     if (!positionsHydrated || !collectionPositionsHydrated || !collectionOrderHydrated || !settingsHydrated) return;
     // Read through the refs: see savedPositionsRef and hidingLayout above.
@@ -2278,7 +2286,9 @@ function GroupedGraphInner() {
           kind: 'shader', sourceGroupName: bucket.title,
           headerFill: SHADER_GROUP_HEADER_FILL, collectionId: bucket.collectionId,
         };
-        const position = savedPositions[cardKey] || { x: externalX, y: externalY };
+        const position = placeFreeCard(
+          savedPositions[cardKey], { x: externalX, y: externalY }, packed, maxRight
+        );
         newNodes.push({
           id: cardKey,
           type: 'groupNode',
@@ -2319,7 +2329,9 @@ function GroupedGraphInner() {
         ? externalX + GROUP_WIDTH + PROPERTY_COLUMN_GAP
         : externalX;
       const selectionNodeId = getSelectionNodeId(selectedNode.id);
-      const position = savedPositions[selectionNodeId] || { x: selectionX, y: 0 };
+      const position = placeFreeCard(
+        savedPositions[selectionNodeId], { x: selectionX, y: 0 }, packed, maxRight
+      );
       newNodes.push({
         id: selectionNodeId,
         type: 'propertyNode',
@@ -3155,6 +3167,17 @@ function GroupedGraphInner() {
     return () => clearTimeout(timer);
   }, [isHidingUnused, highlightSignature, reactFlowInstance]);
 
+  // The modal edits a draft: opening starts from the saved settings, closing
+  // (Cancel, Escape, backdrop) discards it.
+  const openGridSettings = useCallback(() => {
+    setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings));
+    setGridSettingsOpen(true);
+  }, [gridLayoutSettings]);
+  const closeGridSettings = useCallback(() => {
+    setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings));
+    setGridSettingsOpen(false);
+  }, [gridLayoutSettings]);
+
   const handleApplyGridSettings = useCallback(() => {
     const settings = normalizeGridLayoutSettings({
       gapX: Number.parseInt(gridLayoutDraft.gapX, 10),
@@ -3232,73 +3255,9 @@ function GroupedGraphInner() {
           >
             {hideUnused ? 'Show all' : 'Hide unused'}
           </TextButton>
-          <Dropdown
-            position="bottom-right"
-            onOpenChange={(open) => {
-              if (open) {
-                setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings));
-              }
-            }}
-          >
-            <Dropdown.Trigger asChild>
-              <TextButton variant="secondary">
-                Grid Settings
-              </TextButton>
-            </Dropdown.Trigger>
-            <Dropdown.Menu className="min-w-50 p-3">
-              <div className="font-semibold mb-3 text-sm">Grid Layout</div>
-              <div className="mb-3">
-                {/* Edits the draft only, like the gap inputs: Apply saves the
-                    mode and arranges, Cancel discards a switch. */}
-                <span id="grid-sort-by" className="block text-[11px] mb-1 opacity-70">
-                  Sort by
-                </span>
-                <div aria-labelledby="grid-sort-by" role="group">
-                  <SegmentedControl
-                    options={SORT_BY_OPTIONS}
-                    value={gridLayoutDraft.sortBy}
-                    onChange={sortBy => setGridLayoutDraft(prev => ({ ...prev, sortBy }))}
-                    fullWidth
-                  />
-                </div>
-              </div>
-              <div className="mb-3">
-                <label htmlFor="grid-gap-x" className="block text-[11px] mb-1 opacity-70">
-                  Horizontal gap
-                </label>
-                <Input
-                  id="grid-gap-x"
-                  type="number"
-                  min="0"
-                  value={gridLayoutDraft.gapX}
-                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="grid-gap-y" className="block text-[11px] mb-1 opacity-70">
-                  Vertical gap
-                </label>
-                <Input
-                  id="grid-gap-y"
-                  type="number"
-                  min="0"
-                  value={gridLayoutDraft.gapY}
-                  onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <TextButton
-                  variant="ghost"
-                  onClick={() => setGridLayoutDraft(toGridLayoutDraft(gridLayoutSettings))}
-                >
-                  Cancel
-                </TextButton>
-                <TextButton variant="primary" onClick={handleApplyGridSettings}>
-                  Apply
-                </TextButton>
-              </div>
-            </Dropdown.Menu>
-          </Dropdown>
+          <TextButton variant="secondary" onClick={openGridSettings}>
+            Grid Settings
+          </TextButton>
         </div>
       </div>
       <div className="relative flex-1 w-full flex min-h-0">
@@ -3320,7 +3279,7 @@ function GroupedGraphInner() {
         />
 
         {/* Graph content */}
-        <div className="flex-1 relative" onKeyDownCapture={handleGraphKeyDownCapture}>
+        <div ref={graphContainerRef} className="flex-1 relative" onKeyDownCapture={handleGraphKeyDownCapture}>
           <ReactFlow
           nodes={nodes}
         edges={edges}
@@ -3355,6 +3314,62 @@ function GroupedGraphInner() {
           </ReactFlow>
         </div>
       </div>
+
+      <Modal
+        isOpen={gridSettingsOpen}
+        onClose={closeGridSettings}
+        title="Grid Layout"
+        width={400}
+        footer={
+          <>
+            <TextButton variant="ghost" onClick={closeGridSettings}>
+              Cancel
+            </TextButton>
+            <TextButton
+              variant="primary"
+              onClick={() => {
+                handleApplyGridSettings();
+                setGridSettingsOpen(false);
+              }}
+            >
+              Apply
+            </TextButton>
+          </>
+        }
+      >
+        <div className="py-2">
+          {/* Edits the draft only, like the gap inputs: Apply saves the mode and
+              arranges, Cancel discards a switch. */}
+          <FormGroup label="Sort by" className="flex flex-col gap-2 mb-5 last:mb-0">
+            <div role="group" aria-label="Sort by">
+              <SegmentedControl
+                options={SORT_BY_OPTIONS}
+                value={gridLayoutDraft.sortBy}
+                onChange={sortBy => setGridLayoutDraft(prev => ({ ...prev, sortBy }))}
+                fullWidth
+              />
+            </div>
+          </FormGroup>
+          <FormGroup label="Horizontal gap" htmlFor="grid-gap-x" className="flex flex-col gap-2 mb-5 last:mb-0">
+            <Input
+              id="grid-gap-x"
+              type="number"
+              min="0"
+              value={gridLayoutDraft.gapX}
+              onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapX: e.target.value }))}
+            />
+          </FormGroup>
+          <FormGroup label="Vertical gap" htmlFor="grid-gap-y" className="flex flex-col gap-2 mb-5 last:mb-0">
+            <Input
+              id="grid-gap-y"
+              type="number"
+              min="0"
+              value={gridLayoutDraft.gapY}
+              onChange={e => setGridLayoutDraft(prev => ({ ...prev, gapY: e.target.value }))}
+            />
+          </FormGroup>
+        </div>
+      </Modal>
 
       <GraphSearchPalette
         isOpen={searchOpen}

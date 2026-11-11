@@ -259,3 +259,27 @@ export function lockChangesToColumns<T extends NodeChange>(
   });
   return changed ? out : changes;
 }
+
+/** How far past the packed grid a stored free-card position may sit. */
+export const FREE_CARD_REACH = 1500;
+
+/**
+ * Where a library or selection card goes in Collection mode: its stored spot
+ * while that is within `FREE_CARD_REACH` of the packed grid, else `fallback`.
+ * A spot left from another grid size or file would otherwise park the card
+ * far off, and every fit-to-view would zoom out to include it.
+ */
+export function placeFreeCard(
+  stored: Point | undefined,
+  fallback: Point,
+  packed: ReadonlyMap<string, Point> | null,
+  maxRight: number
+): Point {
+  if (!stored) return fallback;
+  if (!packed) return stored;
+  let bottom = 0;
+  packed.forEach(pos => { bottom = Math.max(bottom, pos.y); });
+  const near = stored.x >= -FREE_CARD_REACH && stored.x <= maxRight + FREE_CARD_REACH
+    && stored.y >= -FREE_CARD_REACH && stored.y <= bottom + FREE_CARD_REACH;
+  return near ? stored : fallback;
+}

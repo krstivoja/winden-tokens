@@ -174,7 +174,7 @@ async function arrangeUndoLift(layoutSettings: unknown) {
   view.rerender(<GroupedGraph />);
 
   // c1's frame holds both its cards again.
-  const bothCards = CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2 + getCardHeightForRows(2) + WRAPPER_GAP;
+  const bothCards = CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2 + getCardHeightForRows(2, true) + WRAPPER_GAP;
   await waitFor(() => expect(nodeBox('wrapper:c1::').height).toBeGreaterThan(bothCards));
   return { one: nodeBox('wrapper:c1::'), two: nodeBox('wrapper:c2::') };
 }
@@ -217,6 +217,9 @@ describe('Grid Settings "Sort by"', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Collection' }));
     expect(selectedTab()).toBe('Collection');
     fireEvent.click(screen.getByText('Cancel'));
+    // Cancel closes the modal; reopening starts from the saved mode.
+    expect(screen.queryByRole('tab')).toBe(null);
+    openGridSettings();
     expect(selectedTab()).toBe('Tier');
     expect(writes('graph-layout-settings')).toEqual([]);
   });
@@ -270,6 +273,7 @@ describe('Grid Settings "Sort by"', () => {
     expect((saved[0] as { sortBy: string; gapX: number }).sortBy).toBe('tier');
     // The gaps stay as applied.
     expect((saved[0] as { sortBy: string; gapX: number }).gapX).toBe(100);
+    openGridSettings();
     expect(selectedTab()).toBe('Tier');
   });
 
@@ -326,7 +330,7 @@ describe('Collection mode: one column per collection', () => {
   });
 
   // Loose cards (no frames): c1's column is a, b, then its empty root card.
-  const CARD = getCardHeightForRows(2);
+  const CARD = getCardHeightForRows(2, true);
   const reversed = { v: 1, columns: [{ id: 'c1', name: 'One', items: ['path:b', 'path:a', 'path:'] }] };
 
   it('packs a column in the stored card order; a stored spot of a column unit is never used', async () => {

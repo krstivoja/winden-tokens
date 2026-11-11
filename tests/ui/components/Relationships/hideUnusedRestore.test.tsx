@@ -222,7 +222,8 @@ describe('Undo Arrange while hiding', () => {
     expect((saved[0] as { sortBy: string; gapX: number }).sortBy).toBe('tier');
     expect((saved[0] as { sortBy: string; gapX: number }).gapX).toBe(100);
     await waitFor(() => expect(document.querySelector('[data-id^="tier-label:collection:"]')).toBe(null));
-    // Grid Settings is still open from the Apply.
+    // Apply closed the modal: reopen it to read the restored mode.
+    fireEvent.click(screen.getByText('Grid Settings'));
     expect(selectedTab()).toBe('Tier');
 
     // Hiding is still on, still hiding the same cards, and nothing is left to undo.
