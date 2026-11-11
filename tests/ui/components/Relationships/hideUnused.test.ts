@@ -3,6 +3,7 @@ import {
   applySidebarUncheck,
   collectionToggleEndsHiding,
   computeHighlightPath,
+  extendHidingLayout,
   getActiveHidingLayout,
   mergeHidingPositions,
   getHidingPath,
@@ -11,6 +12,8 @@ import {
   planSidebarUncheck,
   isEdgeOffPath,
   isTierLabelHidden,
+  pruneOwnToExisting,
+  releaseCollectionsFromOwn,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import type { HidingLayout } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import { isCardHidden } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
@@ -416,5 +419,68 @@ describe('collectionToggleEndsHiding', () => {
 
   it('does nothing while not hiding', () => {
     expect(collectionToggleEndsHiding(false, 'two', selected)).toBe(false);
+  });
+});
+
+describe('extendHidingLayout', () => {
+  const savedUndo = { positions: {}, store: 'tier' as const, tierLabels: [] };
+
+  it('a plain arrange on no layout records no mode to go back to', () => {
+    const next = extendHidingLayout(null, { activation: 'a', positions: { u: { x: 1, y: 1 } }, tierLabels: [] }, null);
+    expect(next).toEqual({ activation: 'a', positions: { u: { x: 1, y: 1 } }, tierLabels: [] });
+  });
+
+  it('a switching arrange records the mode and the saved undo it left', () => {
+    const next = extendHidingLayout(null, { activation: 'a', positions: {}, tierLabels: [] },
+      { previousSortBy: 'tier', savedUndo });
+    expect(next.previousSortBy).toBe('tier');
+    expect(next.savedUndo).toBe(savedUndo);
+  });
+
+  it('keeps the mode from before the first arrange of the layout, and lays new positions over old', () => {
+    const first = extendHidingLayout(null, { activation: 'a', positions: { u: { x: 1, y: 1 }, v: { x: 2, y: 2 } }, tierLabels: [] },
+      { previousSortBy: 'tier', savedUndo });
+    const second = extendHidingLayout(first, { activation: 'a', positions: { u: { x: 9, y: 9 } }, tierLabels: [] },
+      { previousSortBy: 'collection', savedUndo: null });
+    expect(second.previousSortBy).toBe('tier');
+    expect(second.savedUndo).toBe(savedUndo);
+    expect(second.positions).toEqual({ u: { x: 9, y: 9 }, v: { x: 2, y: 2 } });
+  });
+
+  it('a switch on top of a plain temporary arrange records the switch', () => {
+    const plain = extendHidingLayout(null, { activation: 'a', positions: {}, tierLabels: [] }, null);
+    const next = extendHidingLayout(plain, { activation: 'a', positions: {}, tierLabels: [] },
+      { previousSortBy: 'tier', savedUndo: null });
+    expect(next.previousSortBy).toBe('tier');
+    expect(next.savedUndo).toBe(null);
+  });
+});
+
+describe('releaseCollectionsFromOwn', () => {
+  const keys = new Map([['c1', ['c1::a', 'c1::b']], ['c2', ['c2::x', 'c2::y']]]);
+  const own = { groups: new Set(['c1::a', 'c2::x', 'c2::y']), collections: new Set(['c2', 'c3']) };
+
+  it('drops only the collections the click turns on and every group key of theirs', () => {
+    const next = releaseCollectionsFromOwn(own, new Set(['c2']), keys);
+    expect(Array.from(next.groups)).toEqual(['c1::a']);
+    expect(Array.from(next.collections)).toEqual(['c3']);
+  });
+
+  it('keeps `own` as is when the click turns nothing on', () => {
+    expect(releaseCollectionsFromOwn(own, new Set(), keys)).toBe(own);
+  });
+});
+
+describe('pruneOwnToExisting', () => {
+  it('drops collections and group keys that no longer exist (ids recreated by a plugin undo)', () => {
+    const own = { groups: new Set(['old::a', 'n1::a']), collections: new Set(['old', 'n2']) };
+    const next = pruneOwnToExisting(own, new Set(['n1', 'n2']), new Map([['n1', ['n1::a']], ['n2', ['n2::z']]]));
+    expect(Array.from(next.groups)).toEqual(['n1::a']);
+    expect(Array.from(next.collections)).toEqual(['n2']);
+  });
+
+  it('keeps the same object when everything still exists', () => {
+    const own = { groups: new Set(['n1::a']), collections: new Set(['n1']) };
+    expect(pruneOwnToExisting(own, new Set(['n1']), new Map([['n1', ['n1::a']]]))).toBe(own);
   });
 });

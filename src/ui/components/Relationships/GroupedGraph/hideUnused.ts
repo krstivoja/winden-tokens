@@ -13,7 +13,8 @@
 // (`isCardHidden`), so hide-unused can never un-hide a filtered card.
 
 import { getCollectionGroupKey, getVariableGroupName } from '../../../utils/groupFilters';
-import type { ConnectionRecord, GroupData, TierLabelNodeData } from './types';
+import type { ConnectionRecord, GraphSortBy, GroupData, TierLabelNodeData } from './types';
+import type { ArrangeUndoSnapshot } from './arrangeUndo';
 
 export interface HighlightPath {
   /** Cards holding any variable on the path, plus the highlighted card. */
@@ -282,6 +283,47 @@ export function applySidebarUncheck(
 }
 
 /**
+ * `own` without the collections a sidebar click selects while they were off,
+ * and without every group key of those collections. That click is the
+ * user's whole choice for those collections, so hiding ending must not
+ * re-check anything of them on top of it; what hide-unused unchecked in the
+ * other collections stays held and comes back when hiding ends.
+ */
+export function releaseCollectionsFromOwn(
+  own: SidebarSelection,
+  collectionIds: ReadonlySet<string>,
+  groupKeysByCollection: ReadonlyMap<string, readonly string[]>
+): SidebarSelection {
+  if (collectionIds.size === 0) return own;
+  const released = new Set<string>();
+  collectionIds.forEach(id => groupKeysByCollection.get(id)?.forEach(k => released.add(k)));
+  return {
+    groups: new Set(Array.from(own.groups).filter(k => !released.has(k))),
+    collections: new Set(Array.from(own.collections).filter(id => !collectionIds.has(id))),
+  };
+}
+
+/**
+ * `own` cut down to collections and group keys that still exist. A plugin
+ * undo deletes and recreates every collection and variable, so every id —
+ * and with it every group key — changes; a held key from before it must not
+ * be written back into the selection.
+ */
+export function pruneOwnToExisting(
+  own: SidebarSelection,
+  collectionIds: ReadonlySet<string>,
+  groupKeysByCollection: ReadonlyMap<string, readonly string[]>
+): SidebarSelection {
+  const groupKeys = new Set<string>();
+  groupKeysByCollection.forEach(keys => keys.forEach(k => groupKeys.add(k)));
+  const groups = Array.from(own.groups).filter(k => groupKeys.has(k));
+  const collections = Array.from(own.collections).filter(id => collectionIds.has(id));
+  return groups.length === own.groups.size && collections.length === own.collections.size
+    ? own
+    : { groups: new Set(groups), collections: new Set(collections) };
+}
+
+/**
  * The group keys that count as selected for the loose-variable rule while
  * hiding: only what hide-unused itself unchecked (`own`), never the whole
  * plan, so keys the user had not selected stay unselected and their
@@ -352,6 +394,37 @@ export interface HidingLayout {
   /** Tier captions in Tier mode; the temporary layout's column headers in
    *  Collection mode. */
   tierLabels: TierLabelNodeData[];
+  /** The "Sort by" mode from before the temporary layout — set only when an
+   *  Apply that switched it made (or extended) the layout. Undo Arrange,
+   *  which drops the whole layout, switches back to it. */
+  previousSortBy?: GraphSortBy;
+  /** The saved one-step undo of the mode that switch left, set aside while
+   *  the layout lives in the other mode; Undo Arrange gives it back. */
+  savedUndo?: ArrangeUndoSnapshot | null;
+}
+
+/**
+ * The next temporary layout for an arrange made while hiding, laid over the
+ * active one (`previous`, null when none): new positions win, what the new
+ * arrange did not move keeps its spot. The mode and the saved undo step from
+ * before the FIRST arrange of the layout are kept, so dropping it (Undo
+ * Arrange) returns to the state before any of it; a switching arrange on a
+ * fresh layout records them from `switched`.
+ */
+export function extendHidingLayout(
+  previous: HidingLayout | null,
+  next: Pick<HidingLayout, 'activation' | 'positions' | 'tierLabels'>,
+  switched: { previousSortBy: GraphSortBy; savedUndo: ArrangeUndoSnapshot | null } | null
+): HidingLayout {
+  const origin = previous?.previousSortBy !== undefined
+    ? { previousSortBy: previous.previousSortBy, savedUndo: previous.savedUndo ?? null }
+    : switched;
+  return {
+    activation: next.activation,
+    positions: { ...previous?.positions, ...next.positions },
+    tierLabels: next.tierLabels,
+    ...(origin ? { previousSortBy: origin.previousSortBy, savedUndo: origin.savedUndo } : {}),
+  };
 }
 
 /**

@@ -216,18 +216,15 @@ function buildUnitForest(
  * room of the hidden ones; hidden cards take no space (they are not drawn
  * anyway) and the frame grows back when the filter is lifted.
  *
- * `naturalPositions` is an optional precomputed absolute spot per top-level
- * unit id. When given it REPLACES the natural-origin packing below for every
- * unit it covers; saved positions still win over it. Absent, the packing is
- * exactly as before. (Collection mode does not need it: it hands in every
- * column unit's spot through `savedPositions`, see resolveColumnPositions.)
+ * Collection mode hands in every column unit's spot through `savedPositions`
+ * (see resolveColumnPositions), so the packing below only ever fills in what
+ * the record does not cover.
  */
 export function buildWrapperLayout(
   cards: GroupData[],
   groupedPaths: Set<string>,
   savedPositions: Record<string, { x: number; y: number }>,
-  hiddenCardKeys: ReadonlySet<string> = new Set(),
-  naturalPositions?: ReadonlyMap<string, { x: number; y: number }>
+  hiddenCardKeys: ReadonlySet<string> = new Set()
 ): Placement[] {
   if (cards.length === 0) return [];
 
@@ -280,12 +277,9 @@ export function buildWrapperLayout(
   const columnBottoms = new Map<number, number>();
   sortedRoots.forEach(unit => {
     const saved = savedPositions[unitId(unit)];
-    const precomputed = naturalPositions?.get(unitId(unit));
     let pos: { x: number; y: number };
     if (saved) {
       pos = saved;
-    } else if (precomputed) {
-      pos = precomputed;
     } else {
       const natural = naturalPos(unit);
       const colKey = Math.round(natural.x);

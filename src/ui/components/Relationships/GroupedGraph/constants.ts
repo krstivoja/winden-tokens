@@ -36,14 +36,25 @@ export const WRAPPER_PADDING = 16;
 // children are separately-positioned nodes, so the same gutter has to be
 // added to the geometry or the two drift apart by 2px.
 export const CARD_BOX_PADDING = 2;
+// The card box's own 1px border (`border` on .rf-group-box / .rf-group-wrapper),
+// and the container's dashed ring (`border` on .rf-group-outline) is the same
+// width. Box-sizing is border-box, so both count towards the drawn height.
+export const CARD_BORDER_WIDTH = 1;
+// Everything a card box draws around its header and rows, per side: its
+// border plus its inner gutter. A leaf card is `h-fit`, so its rendered
+// height is the header, the rows and this chrome top and bottom — leaving it
+// out of the estimate made every card 6px taller than the layout assumed and
+// every gap between stacked cards 6px smaller than the Grid Settings gap.
+export const CARD_CHROME = CARD_BORDER_WIDTH + CARD_BOX_PADDING;
 // The gap between a container's dashed ring and the card box inside it. A
 // container is a normal card with a dashed outline drawn AROUND it, not a
 // card whose own border went dashed — so the ring needs room of its own.
 export const CONTAINER_OUTLINE_PADDING = 8;
-// Everything a container's content sits inside: the dashed ring's gap plus
-// the card box's own gutter. Child cards are separately-positioned nodes, so
-// this has to exist in the geometry, not only in the markup.
-export const CONTAINER_INSET = CONTAINER_OUTLINE_PADDING + CARD_BOX_PADDING;
+// Everything a container's content sits inside, per side: the dashed ring's
+// border and gap, then the card box's border and gutter. Child cards are
+// separately-positioned nodes, so this has to exist in the geometry, not only
+// in the markup.
+export const CONTAINER_INSET = CARD_BORDER_WIDTH + CONTAINER_OUTLINE_PADDING + CARD_CHROME;
 export const WRAPPER_GAP = 28;
 
 // ── Color Constants ────────────────────────────────────────────────

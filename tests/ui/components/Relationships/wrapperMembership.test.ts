@@ -602,32 +602,6 @@ describe('Arrange folds the self-path card into the same frame', () => {
   });
 });
 
-// ── Collection mode: precomputed natural positions ─────────────────
-
-describe('buildWrapperLayout naturalPositions (Collection mode)', () => {
-  const cards = [card('a', { collectionId: 'c1', initialY: 0 }), card('b', { collectionId: 'c1', initialY: 500 })];
-
-  it('replaces the natural-origin packing for the units it covers', () => {
-    const natural = new Map([['group:a', { x: 10, y: 20 }]]);
-    const placements = buildWrapperLayout(cards, new Set(), {}, new Set(), natural);
-    expect(placements.find(p => p.id === 'group:a')!.position).toEqual({ x: 10, y: 20 });
-    // Not covered: the old packing.
-    expect(placements.find(p => p.id === 'group:b')!.position).toEqual({ x: 0, y: 500 });
-  });
-
-  it('saved positions still win over it', () => {
-    const natural = new Map([['group:a', { x: 10, y: 20 }]]);
-    const placements = buildWrapperLayout(cards, new Set(), { 'group:a': { x: 7, y: 8 } }, new Set(), natural);
-    expect(placements.find(p => p.id === 'group:a')!.position).toEqual({ x: 7, y: 8 });
-  });
-
-  it('absent, the layout is identical to the four-argument call', () => {
-    const frames = new Set(['c1::']);
-    expect(buildWrapperLayout(cards, frames, {}, new Set(), undefined))
-      .toEqual(buildWrapperLayout(cards, frames, {}, new Set()));
-  });
-});
-
 describe('measureWrapperFrames', () => {
   it('reports every top-level unit at the size it is drawn', () => {
     const cards = [card('a', { collectionId: 'c1' }), card('b', { collectionId: 'c1' }), card('z', { collectionId: 'c2' })];

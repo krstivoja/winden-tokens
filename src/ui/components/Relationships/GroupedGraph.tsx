@@ -55,9 +55,6 @@ import {
 } from './GroupedGraph/types';
 import {
   GROUP_WIDTH,
-  ROW_HEIGHT,
-  HEADER_HEIGHT,
-  GROUP_PADDING,
   GROUP_GAP_X,
   GROUP_GAP_Y,
   DEFAULT_GROUP_CHILD_NAME,
@@ -78,6 +75,7 @@ import { TierLabelNode } from './GroupedGraph/TierLabelNode';
 import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
+import { resolveNodeOverlaps } from './GroupedGraph/resolveOverlaps';
 import {
   buildCollectionColumnItems,
   layoutCollectionColumns,
@@ -93,6 +91,7 @@ import {
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,
+  getCardHeightForRows,
   normalizeGridLayoutSettings,
   toGridLayoutDraft,
   sortGroupsByPosition,
@@ -136,6 +135,9 @@ import {
   planSidebarUncheck,
   applySidebarUncheck,
   getHideUnusedGroupKeys,
+  releaseCollectionsFromOwn,
+  pruneOwnToExisting,
+  extendHidingLayout,
   getActiveHidingLayout,
   mergeHidingPositions,
   collectionToggleEndsHiding,
@@ -260,6 +262,12 @@ function GroupedGraphInner() {
   const [gridLayoutDraft, setGridLayoutDraft] = useState<GridLayoutDraft>(
     () => toGridLayoutDraft(normalizeGridLayoutSettings({}))
   );
+  // The vertical gap the overlap nudge restores (see resolveOverlaps): a
+  // number, so the layout effect re-runs only when it changes; the drop
+  // handler reads it through the ref.
+  const layoutGapY = gridLayoutSettings.gapY;
+  const layoutGapYRef = useRef(layoutGapY);
+  layoutGapYRef.current = layoutGapY;
   // Tier captions from the last Arrange Grid run. Pure wayfinding chrome:
   // they carry no graph meaning, never reach `savedPositions`, and are
   // replaced only by a saved Arrange, its undo, or hydration (an arrange
@@ -426,15 +434,27 @@ function GroupedGraphInner() {
     setGlobalModeId(modeId);
   }, [setGlobalModeId]);
 
+  // Every tree group key, per collection. Declared before the sidebar
+  // handlers, which read it.
+  const groupKeysByCollection = useMemo(() => getGroupKeysByCollection(variables), [variables]);
+
   // One atomic write of the sidebar's click selection. Selecting a collection
   // that was off asks to see it — hiding would keep its off-path cards out (or
   // bring them back dimmed and unwired) — so that ends hiding. Narrowing the
   // selection or picking within selected collections keeps hiding on.
   const handleSelectionChange = useCallback((next: { collections: Set<string>; groups: Set<string> }) => {
-    const addsCollection = Array.from(next.collections).some(id =>
+    const addedCollections = new Set(Array.from(next.collections).filter(id =>
       collectionToggleEndsHiding(isHidingUnused, id, localSelectedCollections)
-    );
-    if (addsCollection) setHideUnused(false);
+    ));
+    if (addedCollections.size > 0) {
+      // The click is the user's whole choice for the collections it turns
+      // on: hiding ending must not re-check anything of theirs on top of it.
+      // What hide-unused unchecked elsewhere comes back as usual.
+      hideUnusedOwnRef.current = releaseCollectionsFromOwn(
+        hideUnusedOwnRef.current, addedCollections, groupKeysByCollection
+      );
+      setHideUnused(false);
+    }
     const changed =
       next.collections.size !== localSelectedCollections.size
       || next.groups.size !== selectedGroups.size
@@ -445,7 +465,8 @@ function GroupedGraphInner() {
     if (changed) selectionPendingLayoutRef.current = true;
     setSelectedCollectionIds(next.collections);
     setSelectedGroups(next.groups);
-  }, [isHidingUnused, localSelectedCollections, selectedGroups, setSelectedCollectionIds, setSelectedGroups]);
+  }, [isHidingUnused, localSelectedCollections, selectedGroups, setSelectedCollectionIds, setSelectedGroups,
+      groupKeysByCollection]);
 
   // Sidebar "Select All" means "show me everything": hiding ends with it.
   // The previous row's focus ring (and its canvas highlight) ends with it.
@@ -1100,10 +1121,7 @@ function GroupedGraphInner() {
       const shaderNode = createShaderNode(shadeGroup, sourceColor);
       const paletteNode = createPaletteNode(shadeGroup, shadeNodes.length, sourceColor);
 
-      const baseY = index * (Math.max(
-        HEADER_HEIGHT + ROW_HEIGHT + GROUP_PADDING * 2,
-        HEADER_HEIGHT + (shadeNodes.length + 1) * ROW_HEIGHT + GROUP_PADDING * 2
-      ) + GROUP_GAP_Y);
+      const baseY = index * (getCardHeightForRows(shadeNodes.length + 1) + GROUP_GAP_Y);
 
       const managedGroups: GroupData[] = [
         {
@@ -1168,10 +1186,7 @@ function GroupedGraphInner() {
       managedSourceIds.add(sourceVariable.id);
       stepGroup.stepVariables.forEach(v => managedGeneratedIds.add(v.id));
 
-      const baseY = index * (Math.max(
-        HEADER_HEIGHT + ROW_HEIGHT + GROUP_PADDING * 2,
-        HEADER_HEIGHT + (stepNodes.length + 1) * ROW_HEIGHT + GROUP_PADDING * 2
-      ) + GROUP_GAP_Y);
+      const baseY = index * (getCardHeightForRows(stepNodes.length + 1) + GROUP_GAP_Y);
 
       const managedGroups: GroupData[] = [
         {
@@ -1425,12 +1440,9 @@ function GroupedGraphInner() {
   // layout effect (which renders the answer as node.hidden) and Arrange Grid
   // (which must skip hidden cards instead of reserving empty grid slots).
   // What hide-unused unchecked and is still unchecked. Only these may come
-  // back, when a later activation puts them on the path again; anything the
-  // user unchecked never does. Kept across "Show all": turning hiding off
-  // re-checks nothing, but the next path must not be left hidden by an old
-  // one's write.
+  // back — when hiding ends ("Show all"), or when a later activation puts
+  // them on the path again; anything the user unchecked never does.
   const hideUnusedOwnRef = useRef<SidebarSelection>({ groups: new Set(), collections: new Set() });
-  const groupKeysByCollection = useMemo(() => getGroupKeysByCollection(variables), [variables]);
   const cardVisibilityFilters = useMemo<CardVisibilityFilters>(() => ({
     selectedCollections: localSelectedCollections,
     selectedTypes,
@@ -1466,19 +1478,24 @@ function GroupedGraphInner() {
   }, [selectedGroups, localSelectedCollections]);
   // One write per activation — toggled on with a highlight, card menu "Hide
   // unused", or the highlight moving while on — never a running override, so
-  // re-ticking a group while hiding stays on simply shows it. Turning hiding
-  // off re-checks nothing; the user re-ticks by hand. Keyed on the highlight
-  // target, not the path, so a data edit mid-hide does not write again.
+  // re-ticking a group while hiding stays on simply shows it. Hiding ending
+  // ("Show all", the highlight cleared) is one more write: an empty plan,
+  // which re-checks exactly what hide-unused unchecked and still holds, so
+  // the sidebar view from before comes back — the user's own narrowing
+  // included, since it was never ours. Keyed on the highlight target, not the
+  // path, so a data edit mid-hide does not write again.
   const hidingActivation = hidingPath ? highlightSignature : null;
   const lastHidingActivationRef = useRef<string | null>(null);
   useEffect(() => {
     if (hidingActivation === lastHidingActivationRef.current) return;
     lastHidingActivationRef.current = hidingActivation;
-    if (hidingActivation === null) return;
+    // With hiding ended `hidingPath` is null, so `sidebarUncheck` is the
+    // empty plan: every key still held comes back — but only keys that still
+    // exist (a plugin undo recreates every id).
     const result = applySidebarUncheck(
       sidebarUncheck,
       { groups: selectedGroups, collections: localSelectedCollections },
-      hideUnusedOwnRef.current
+      pruneOwnToExisting(hideUnusedOwnRef.current, new Set(collections.map(c => c.id)), groupKeysByCollection)
     );
     hideUnusedOwnRef.current = result.own;
     if (result.selection.groups !== selectedGroups) setSelectedGroups(result.selection.groups);
@@ -2158,6 +2175,21 @@ function GroupedGraphInner() {
       }));
     }
 
+    // No two boxes on screen overlap: a box that runs into one above it moves
+    // down to sit the Grid Settings gap below it (see resolveOverlaps). This
+    // is what keeps a record saved before the card-height fix — or a
+    // Collection-mode drag under computed cards that grew — from drawing
+    // cards on top of each other. Display only, never written back: the
+    // record stays the user's, a clean layout comes back untouched, and the
+    // next drag saves what is on screen. Hidden cards take no part.
+    const nudged = resolveNodeOverlaps(newNodes, layoutGapY);
+    if (nudged.size > 0) {
+      newNodes.forEach((node, index) => {
+        const position = nudged.get(node.id);
+        if (position) newNodes[index] = { ...node, position };
+      });
+    }
+
     // Tier captions (and Collection column headers) over a column hide-unused
     // emptied go with it. Only while hiding: a filter-emptied tier column
     // keeps its caption, as it always has (a filter-emptied collection column
@@ -2193,7 +2225,7 @@ function GroupedGraphInner() {
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
       handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
       handleHideUnusedFromCard, handleHighlightVariable, hasHighlight, highlightedVarName, highlightPath, hidingPath,
-      sidebarUncheck, isCardHiddenNow, setNodes, setEdges]);
+      sidebarUncheck, isCardHiddenNow, layoutGapY, setNodes, setEdges]);
 
   // Everything that can add, remove or move a handle *under an existing node
   // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
@@ -2285,6 +2317,31 @@ function GroupedGraphInner() {
     if (positionChanges.length > 0) {
       if (savePositionsTimeoutRef.current) clearTimeout(savePositionsTimeoutRef.current);
       positionChanges.forEach(c => { if (c.type === 'position') movedNodeIdsRef.current.add(c.id); });
+      // A drop (drag end or keyboard move — never a drag tick) that lands on
+      // another box resolves at once, with the same rule every layout pass
+      // uses (see resolveOverlaps): the box whose top is higher stays, the
+      // other moves down to the gap. Pushed boxes are not marked as moved:
+      // the rule is deterministic, so the next layout pass makes the same
+      // pushes from the stored drop alone — a drop is never undone by a later
+      // pass, and Collection mode keeps storing only what the user moved
+      // (Tier mode's save stores the whole canvas anyway).
+      const dropped = new Map<string, { x: number; y: number }>();
+      positionChanges.forEach(c => {
+        if (c.type === 'position' && c.dragging === false && c.position) dropped.set(c.id, c.position);
+      });
+      if (dropped.size > 0) {
+        const afterDrop = reactFlowInstance.getNodes().map(n => {
+          const position = dropped.get(n.id);
+          return position ? { ...n, position } : n;
+        });
+        const pushed = resolveNodeOverlaps(afterDrop, layoutGapYRef.current);
+        if (pushed.size > 0) {
+          setNodes(prev => prev.map(n => {
+            const position = pushed.get(n.id);
+            return position ? { ...n, position } : n;
+          }));
+        }
+      }
       // Decided when the drag happens, not when the save fires: a drag on a
       // temporary arrange only ever updates that layout, even if hiding ends
       // within the debounce (the layout is gone by then and the save is
@@ -2335,7 +2392,7 @@ function GroupedGraphInner() {
       pendingPositionSaveRef.current = save;
       savePositionsTimeoutRef.current = setTimeout(save, 300);
     }
-  }, [onNodesChange, reactFlowInstance, variableType, setSavedPositions]);
+  }, [onNodesChange, reactFlowInstance, variableType, setSavedPositions, setNodes]);
 
   // Handle new connections (drag from handle to handle)
   const handleConnect: OnConnect = useCallback((connection) => {
@@ -2391,6 +2448,18 @@ function GroupedGraphInner() {
     pendingPositionSaveRef.current();
   }, []);
 
+  // A temporary arrange (while hiding) from an Apply that switched "Sort by":
+  // the saved one-step undo belongs to the mode being left, so it moves into
+  // the temporary layout, and Undo Arrange gives it back with the mode
+  // (handleUndoArrange). Null for an arrange that switched nothing.
+  const setAsideSavedUndo = useCallback((previousSortBy: GraphSortBy | undefined) => {
+    if (!previousSortBy) return null;
+    const savedUndo = lastArrangeUndoRef.current;
+    lastArrangeUndoRef.current = null;
+    setHasArrangeUndo(false);
+    return { previousSortBy, savedUndo };
+  }, []);
+
   const handleArrangeGrid = useCallback((overrideSettings?: GridLayoutSettings) => {
     const settings = overrideSettings || gridLayoutSettings;
     // An Apply that switched "Sort by" also records the mode it left, so Undo
@@ -2418,11 +2487,12 @@ function GroupedGraphInner() {
         }));
         const packed: PositionRecord = {};
         layout.positions.forEach((pos, key) => { packed[key] = pos; });
-        setHidingLayout(prev => ({
-          activation: hidingActivation,
-          positions: { ...getActiveHidingLayout(prev, hidingActivation)?.positions, ...packed },
-          tierLabels: headers,
-        }));
+        const switched = setAsideSavedUndo(previousSortBy);
+        setHidingLayout(prev => extendHidingLayout(
+          getActiveHidingLayout(prev, hidingActivation),
+          { activation: hidingActivation, positions: packed, tierLabels: headers },
+          switched
+        ));
         setSavedPositionsRevision(rev => rev + 1);
         setTimeout(() => {
           reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
@@ -2513,11 +2583,12 @@ function GroupedGraphInner() {
       newPositions.forEach((pos, key) => { packed[key] = pos; });
       // Re-arranging on top of a temporary layout keeps what it did not move
       // (a card the user dragged, then unticked) where it is now.
-      setHidingLayout(prev => ({
-        activation: hidingActivation,
-        positions: { ...getActiveHidingLayout(prev, hidingActivation)?.positions, ...packed },
-        tierLabels: tiers,
-      }));
+      const switched = setAsideSavedUndo(previousSortBy);
+      setHidingLayout(prev => extendHidingLayout(
+        getActiveHidingLayout(prev, hidingActivation),
+        { activation: hidingActivation, positions: packed, tierLabels: tiers },
+        switched
+      ));
       // The captions come from `hidingLayout`, which the layout effect reads
       // through its ref.
       setSavedPositionsRevision(rev => rev + 1);
@@ -2578,14 +2649,32 @@ function GroupedGraphInner() {
       reactFlowInstance.fitView({ padding: 0.15, duration: 400 });
     }, 50);
   }, [reactFlowInstance, groupsData, connectionData, collections, collectionNameById, gridLayoutSettings, groupedPaths,
-      cardVisibilityFilters, isCardHiddenNow, setNodes, nodeIdForCard, hidingActivation, flushPendingPositionSave]);
+      cardVisibilityFilters, isCardHiddenNow, setNodes, nodeIdForCard, hidingActivation, flushPendingPositionSave,
+      setAsideSavedUndo]);
+
+  // Undo of an Apply that switched "Sort by": the mode goes back, saved; the
+  // gaps stay as applied.
+  const restoreSortBy = useCallback((sortBy: GraphSortBy) => {
+    const restored = normalizeGridLayoutSettings({ ...gridLayoutSettings, sortBy });
+    setGridLayoutSettings(restored);
+    setGridLayoutDraft(toGridLayoutDraft(restored));
+    post({ type: 'set-client-storage', key: `graph-layout-settings`, value: restored });
+  }, [gridLayoutSettings]);
 
   const handleUndoArrange = useCallback(() => {
     // A temporary arrange is undone by dropping it: the saved layout comes
-    // back, and the saved one-step snapshot stays for a later undo.
-    if (hidingLayoutRef.current !== null) {
+    // back, and the saved one-step snapshot stays for a later undo. One that
+    // came from an Apply switching "Sort by" also switches back (saved, as a
+    // saved undo does) and returns the old mode's undo step it set aside.
+    const temporary = hidingLayoutRef.current;
+    if (temporary !== null) {
       setHidingLayout(null);
       setSavedPositionsRevision(rev => rev + 1);
+      if (temporary.previousSortBy) {
+        restoreSortBy(temporary.previousSortBy);
+        lastArrangeUndoRef.current = temporary.savedUndo ?? null;
+        setHasArrangeUndo(lastArrangeUndoRef.current !== null);
+      }
       return;
     }
     const snapshot = lastArrangeUndoRef.current;
@@ -2611,16 +2700,11 @@ function GroupedGraphInner() {
     setSavedPositionsRevision(rev => rev + 1);
 
     // The arrange was an Apply that switched "Sort by": switch it back, saved.
-    if (previous.sortBy) {
-      const restored = normalizeGridLayoutSettings({ ...gridLayoutSettings, sortBy: previous.sortBy });
-      setGridLayoutSettings(restored);
-      setGridLayoutDraft(toGridLayoutDraft(restored));
-      post({ type: 'set-client-storage', key: `graph-layout-settings`, value: restored });
-    }
+    if (previous.sortBy) restoreSortBy(previous.sortBy);
 
     lastArrangeUndoRef.current = null;
     setHasArrangeUndo(false);
-  }, [gridLayoutSettings]);
+  }, [restoreSortBy]);
 
   const handleFocusSelection = useCallback(() => {
     if (!selectedNode) return;

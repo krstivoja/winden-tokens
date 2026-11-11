@@ -127,16 +127,16 @@ describe('getGroupHeight', () => {
   });
 
   it('reserves one row of body for an empty card', () => {
-    // 36 header + 1 * 32 row + 2 * 8 padding
-    expect(getGroupHeight(card([]))).toBe(84);
+    // 2 * (1 border + 2 gutter) + 36 header + 1 * 32 row + 2 * 8 padding
+    expect(getGroupHeight(card([]))).toBe(90);
   });
 
   it('is unchanged for cards that do have rows', () => {
-    expect(getGroupHeight(card([row('v1', 'red')]))).toBe(84);
+    expect(getGroupHeight(card([row('v1', 'red')]))).toBe(90);
   });
 
   it('grows with the rows a collection root card now carries', () => {
-    expect(getGroupHeight(card([row('v1', 'a'), row('v2', 'b')]))).toBe(116);
+    expect(getGroupHeight(card([row('v1', 'a'), row('v2', 'b')]))).toBe(122);
   });
 });
 

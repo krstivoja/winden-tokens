@@ -19,6 +19,7 @@ import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
   GROUP_PADDING,
+  CARD_CHROME,
   GROUP_GAP_X,
   GROUP_GAP_Y,
   GROUP_WIDTH,
@@ -52,11 +53,20 @@ function normalizePathSegment(value: string): string {
   return value.trim().replace(/^\/+|\/+$/g, '');
 }
 
+/**
+ * The drawn height of a leaf card with `rowCount` rows: its border and inner
+ * gutter (CARD_CHROME) top and bottom, the header, and the rows box (`py-2`
+ * around `h-8` rows). Exactly what GraphNode renders, so a gap the layout
+ * leaves between two stacked cards is the gap on screen.
+ */
+function getCardHeightForRows(rowCount: number): number {
+  return CARD_CHROME * 2 + HEADER_HEIGHT + rowCount * ROW_HEIGHT + GROUP_PADDING * 2;
+}
+
 function getGroupHeight(group: GroupData): number {
   // An empty collection placeholder has no rows but still reserves one row's
   // worth of body, so its empty-root line has somewhere to sit.
-  const rows = Math.max(group.variables.length, 1);
-  return HEADER_HEIGHT + rows * ROW_HEIGHT + GROUP_PADDING * 2;
+  return getCardHeightForRows(Math.max(group.variables.length, 1));
 }
 
 /**
@@ -1032,9 +1042,9 @@ function buildArrangeUnits(
     const below = stack > 0
       ? stack - WRAPPER_GAP + WRAPPER_PADDING * 2
       : (ownRows > 0 ? 0 : WRAPPER_PADDING * 2);
-    // `CONTAINER_INSET * 2`: the container carries the card box's own inner
-    // gutter (`p-0.5`) top and bottom, exactly as sizeUnit does — otherwise
-    // this estimate and the measured frame disagree by 4px on the first pass.
+    // `CONTAINER_INSET * 2`: the container carries its ring and the card
+    // box's border and gutter top and bottom, exactly as sizeUnit does —
+    // otherwise this estimate and the measured frame disagree on the first pass.
     heightOverrides.set(
       unitKey,
       CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + ownRows + below
@@ -1461,6 +1471,7 @@ export {
   getDefaultVariableValue,
   normalizePathSegment,
   getGroupHeight,
+  getCardHeightForRows,
   getCardRowsHeight,
   normalizeGridLayoutSettings,
   toGridLayoutDraft,

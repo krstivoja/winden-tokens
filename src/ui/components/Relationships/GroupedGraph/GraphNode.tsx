@@ -14,23 +14,13 @@ import { Dropdown } from '../../common/Dropdown/Dropdown';
 import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { GroupNodeData } from './types';
 import { GraphHandle } from './GraphHandle';
-import { getCardTitleSegments, isStructurallyEqual } from './utils';
+import { getCardTitleSegments, getGroupHeight, isStructurallyEqual } from './utils';
 import {
   GENERATED_CONNECTION_COLOR,
   REFERENCE_CONNECTION_COLOR,
   IDLE_HANDLE_FILL_COLOR,
   IDLE_HANDLE_BORDER_COLOR,
 } from './constants';
-
-// Helper function to calculate group height.
-// Mirrors getGroupHeight() in ./utils, including its one-row floor for the
-// empty collection placeholder — keep the two in step.
-function getGroupHeight(variableCount: number): number {
-  const HEADER_HEIGHT = 36;
-  const ROW_HEIGHT = 32;
-  const GROUP_PADDING = 8;
-  return HEADER_HEIGHT + Math.max(variableCount, 1) * ROW_HEIGHT + GROUP_PADDING * 2;
-}
 
 /**
  * The header bar: the title, and whatever actions the caller puts on the
@@ -440,7 +430,9 @@ const CardRowsList = React.memo(function CardRowsList({
 function GroupNodeComponentInner({ data }: NodeProps<Node<GroupNodeData>>) {
   const { group, isHighlighted, isDimmed } = data;
 
-  const height = getGroupHeight(group.variables.length);
+  // The layout's estimate of this card's height. `h-fit!` lets the markup
+  // win, so this only seeds the box; getGroupHeight matches the drawn height.
+  const height = getGroupHeight(group);
 
   return (
     <div

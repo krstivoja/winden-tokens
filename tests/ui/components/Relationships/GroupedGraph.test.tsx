@@ -55,7 +55,15 @@ import {
   CONTAINER_INSET,
   WRAPPER_HEADER_HEIGHT,
   WRAPPER_PADDING,
+  GROUP_WIDTH,
+  GROUP_GAP_X,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/constants';
+import { getCardHeightForRows } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
+
+// A one-card-wide collection frame, and so where the second collection's
+// column starts at the default horizontal gap.
+const FRAME_WIDTH = GROUP_WIDTH + (CONTAINER_INSET + WRAPPER_PADDING) * 2;
+const COLUMN_2_X = FRAME_WIDTH + GROUP_GAP_X;
 
 beforeAll(() => {
   // xyflow measures through ResizeObserver, which jsdom lacks.
@@ -165,7 +173,7 @@ async function arrangeUndoLift(layoutSettings: unknown) {
   view.rerender(<GroupedGraph />);
 
   // c1's frame holds both its cards again.
-  const bothCards = CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2 + 116 + WRAPPER_GAP;
+  const bothCards = CONTAINER_INSET * 2 + WRAPPER_HEADER_HEIGHT + WRAPPER_PADDING * 2 + getCardHeightForRows(2) + WRAPPER_GAP;
   await waitFor(() => expect(nodeBox('wrapper:c1::').height).toBeGreaterThan(bothCards));
   return { one: nodeBox('wrapper:c1::'), two: nodeBox('wrapper:c2::') };
 }
@@ -243,7 +251,7 @@ describe('Grid Settings "Sort by"', () => {
     expect(writes('graph-positions-collection')).toEqual([{}]);
     expect(writes('graph-positions')).toEqual([]);
     expect(writes('graph-tier-labels')).toEqual([]);
-    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(312 + 100));
+    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(FRAME_WIDTH + 100));
     posted.length = 0;
 
     fireEvent.click(await screen.findByText('Undo Arrange'));
@@ -293,17 +301,17 @@ describe('Collection mode: one column per collection', () => {
     expect(h1.textContent).toBe('One');
     expect(h2.textContent).toBe('Two');
     expect(nodeBox('tier-label:collection:c1').x).toBe(0);
-    // A collection frame is 312 wide; the default horizontal gap is 180.
-    expect(nodeBox('tier-label:collection:c2').x).toBe(312 + 180);
+    // One frame width, then the default horizontal gap.
+    expect(nodeBox('tier-label:collection:c2').x).toBe(COLUMN_2_X);
     expect(nodeBox('wrapper:c1::')).toMatchObject({ x: 0, y: 0 });
-    expect(nodeBox('wrapper:c2::')).toMatchObject({ x: 492, y: 0 });
+    expect(nodeBox('wrapper:c2::')).toMatchObject({ x: COLUMN_2_X, y: 0 });
     // No tier captions in Collection mode.
     expect(document.querySelector('[data-id="tier-label:1"]')).toBe(null);
   });
 
   it('a deselected collection collapses: no header, no gap', async () => {
     const view = mount(allGroups, { sortBy: 'collection' });
-    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(492));
+    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(COLUMN_2_X));
     ctx.value = { ...ctx.value, selectedCollectionIds: new Set(['c2']) };
     view.rerender(<GroupedGraph />);
     await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(0));
@@ -312,7 +320,7 @@ describe('Collection mode: one column per collection', () => {
 
   it('a stored x is never trusted: a unit stays in its column, keeping its stored y', async () => {
     mount(allGroups, { sortBy: 'collection' }, { collectionPositions: { 'wrapper:c2::': { x: 5000, y: 300 } } });
-    await waitFor(() => expect(nodeBox('wrapper:c2::')).toMatchObject({ x: 492, y: 300 }));
+    await waitFor(() => expect(nodeBox('wrapper:c2::')).toMatchObject({ x: COLUMN_2_X, y: 300 }));
   });
 
   it('a keyboard move keeps the column x and saves only the moved card, to the Collection record', async () => {
@@ -337,7 +345,7 @@ describe('Collection mode: one column per collection', () => {
   });
 
   it('Arrange resets the Collection record; Undo restores the previous one', async () => {
-    const record = { 'wrapper:c2::': { x: 492, y: 300 } };
+    const record = { 'wrapper:c2::': { x: COLUMN_2_X, y: 300 } };
     mount(allGroups, { sortBy: 'collection' }, { collectionPositions: record });
     await waitFor(() => expect(nodeBox('wrapper:c2::').y).toBe(300));
     fireEvent.click(screen.getByText('Arrange Grid'));
@@ -353,7 +361,7 @@ describe('Collection mode: one column per collection', () => {
   it('switching back to Tier shows the Tier record, untouched by Collection mode', async () => {
     const tierRecord = { 'wrapper:c2::': { x: 1000, y: 40 } };
     mount(allGroups, { sortBy: 'collection' }, { positions: tierRecord });
-    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(492));
+    await waitFor(() => expect(nodeBox('wrapper:c2::').x).toBe(COLUMN_2_X));
     openGridSettings();
     fireEvent.click(screen.getByRole('tab', { name: 'Tier' }));
     fireEvent.click(screen.getByText('Apply'));

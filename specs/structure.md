@@ -106,6 +106,7 @@ winden-tokens/
 │   │   │   │   └── GroupedGraph/    # Graph nodes, layout and pure helpers
 │   │   │   │       ├── wrapperLayout.ts  # Frames + default packing
 │   │   │   │       ├── columnLayout.ts   # Collection mode: one column per collection
+│   │   │   │       ├── resolveOverlaps.ts # Overlap nudge: push overlapping cards/frames down to the gap
 │   │   │   │       ├── arrangeUndo.ts    # Undo Arrange snapshot
 │   │   │   │       ├── hideUnused.ts     # Highlight path + Hide unused
 │   │   │   │       └── sidebarFocus.ts   # Sidebar row → canvas focus
