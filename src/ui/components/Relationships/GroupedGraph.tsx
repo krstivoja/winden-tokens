@@ -88,11 +88,13 @@ import {
 import type { CollectionColumn, ColumnItem } from './GroupedGraph/columnLayout';
 import {
   getColumnItemKey,
+  matchColumnOffsets,
   matchColumnOrders,
   migrateCollectionPositions,
   moveItems,
   orderColumnItems,
   parseColumnOrder,
+  writeColumnOffset,
   writeColumnOrder,
 } from './GroupedGraph/columnOrder';
 import type { ColumnOrderRecord, MigrationColumn, MoveTarget } from './GroupedGraph/columnOrder';
@@ -148,8 +150,6 @@ import {
   isTierLabelHidden,
   planSidebarUncheck,
   applySidebarUncheck,
-  getHideUnusedGroupKeys,
-  releaseCollectionsFromOwn,
   pruneOwnToExisting,
   extendHidingLayout,
   getActiveHidingLayout,
@@ -177,6 +177,11 @@ const nodeTypes: NodeTypes = {
 // just above that.
 const TIER_LABEL_Y = -(TIER_LABEL_HEIGHT + TIER_LABEL_GAP_Y);
 
+/** A caption's y: a Collection-mode column header follows its column's offset. */
+const getTierLabelY = (label: TierLabelNodeData, offsets: ReadonlyMap<string, number>) => (
+  isCollectionHeader(label) ? TIER_LABEL_Y + (offsets.get(label.collectionId) ?? 0) : TIER_LABEL_Y
+);
+
 const PROPERTY_COLUMN_GAP = 220;
 
 /** Node id of a caption: `tier-label:<n>` for a tier, and
@@ -196,6 +201,8 @@ interface CollectionPack {
   columns: CollectionColumn[];
   /** Stored order per collection id the pack used (matchColumnOrders). */
   orders: Map<string, string[]>;
+  /** Stored vertical offset per collection id the pack used (matchColumnOffsets). */
+  offsets: Map<string, number>;
   /** Packed spot of every visible column node, by node id. */
   packed: Map<string, { x: number; y: number }>;
   /** Column node id → its item. */
@@ -231,19 +238,30 @@ function packedItemBox(item: ColumnItem, packed: ReadonlyMap<string, { x: number
  *   visible units whose packed centre is above the block's centre.
  * - Key press: one visible slot in the direction of the move; a press with
  *   no vertical move (Left/Right — x is locked) changes nothing.
- * The collection's own frame is the whole column: dropping it does nothing.
+ * The collection's own frame is the whole column: dropping it moves the
+ * column's vertical offset instead (`offsets`), by the drop's dy from its
+ * packed spot, never above 0; a drop under 0.5 px, or one that leaves the
+ * offset as it is, changes nothing.
  */
 function resolveCollectionDrop(
   pack: CollectionPack,
   dropped: ReadonlyMap<string, { x: number; y: number }>,
   mouse: ReadonlySet<string>
-): Map<string, string[]> {
+): { orders: Map<string, string[]>; offsets: Map<string, number> } {
   const byColumn = new Map<string, { items: Set<ColumnItem>; dy: number; mouse: boolean }>();
+  const offsets = new Map<string, number>();
   dropped.forEach((position, id) => {
     const item = pack.itemByNodeId.get(id);
     const at = pack.packed.get(id);
     if (!item || !at) return;
-    if (item.path === '' && !item.chain && id.startsWith(WRAPPER_NODE_PREFIX)) return;
+    if (item.path === '' && !item.chain && id.startsWith(WRAPPER_NODE_PREFIX)) {
+      const dy = position.y - at.y;
+      if (Math.abs(dy) < 0.5) return;
+      const current = pack.offsets.get(item.collectionId) ?? 0;
+      const next = Math.max(0, current + dy);
+      if (next !== current) offsets.set(item.collectionId, next);
+      return;
+    }
     const entry = byColumn.get(item.collectionId) || { items: new Set<ColumnItem>(), dy: 0, mouse: false };
     entry.items.add(item);
     // Everything of one gesture moves by the same delta; keep the largest.
@@ -287,7 +305,7 @@ function resolveCollectionDrop(
     const next = moveItems(order, visibleKeys, movedKeys, target);
     if (next !== order) out.set(collectionId, next);
   });
-  return out;
+  return { orders: out, offsets };
 }
 
 // The selection card's xyflow id is derived from the selected Figma node id so
@@ -455,10 +473,6 @@ function GroupedGraphInner() {
   // `<collectionId>::<path>`), ringed there. Cleared by every other way of
   // setting or clearing the highlight; see setCardHighlight.
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
-  // Sidebar click = select, then focus. Both refs bridge the gap until the
-  // layout effect has applied the new selection to the nodes.
-  const selectionPendingLayoutRef = useRef(false);
-  const pendingFocusRef = useRef<{ collectionId: string; path: string } | null>(null);
   // Sidebar rows with something visible under them, as one sorted
   // `\n`-joined string of row keys (see collectFocusableRowKeys). Written by
   // the layout effect — the only place visibility changes — and a string, so
@@ -532,6 +546,8 @@ function GroupedGraphInner() {
     selectedCollectionIds: localSelectedCollections,
     selectedGroups,
     toggleVariableType,
+    toggleCollection,
+    toggleSelectedGroup,
     setSelectedCollectionIds,
     setSelectedGroups,
   } = useAppContext();
@@ -566,39 +582,18 @@ function GroupedGraphInner() {
     setGlobalModeId(modeId);
   }, [setGlobalModeId]);
 
-  // Every tree group key, per collection. Declared before the sidebar
-  // handlers, which read it.
+  // Every tree group key, per collection (Hide unused's undo pruning reads it).
   const groupKeysByCollection = useMemo(() => getGroupKeysByCollection(variables), [variables]);
 
-  // One atomic write of the sidebar's click selection. Selecting a collection
-  // that was off asks to see it — hiding would keep its off-path cards out (or
-  // bring them back dimmed and unwired) — so that ends hiding. Narrowing the
-  // selection or picking within selected collections keeps hiding on.
-  const handleSelectionChange = useCallback((next: { collections: Set<string>; groups: Set<string> }) => {
-    const addedCollections = new Set(Array.from(next.collections).filter(id =>
-      collectionToggleEndsHiding(isHidingUnused, id, localSelectedCollections)
-    ));
-    if (addedCollections.size > 0) {
-      // The click is the user's whole choice for the collections it turns
-      // on: hiding ending must not re-check anything of theirs on top of it.
-      // What hide-unused unchecked elsewhere comes back as usual.
-      hideUnusedOwnRef.current = releaseCollectionsFromOwn(
-        hideUnusedOwnRef.current, addedCollections, groupKeysByCollection
-      );
+  const handleCollectionToggle = useCallback((collectionId: string) => {
+    // Ticking a whole collection on asks to see it — hiding would keep its
+    // off-path cards out (or bring them back dimmed and unwired). A single
+    // group tick keeps hiding on.
+    if (collectionToggleEndsHiding(isHidingUnused, collectionId, localSelectedCollections)) {
       setHideUnused(false);
     }
-    const changed =
-      next.collections.size !== localSelectedCollections.size
-      || next.groups.size !== selectedGroups.size
-      || Array.from(next.collections).some(id => !localSelectedCollections.has(id))
-      || Array.from(next.groups).some(key => !selectedGroups.has(key));
-    // The layout has not seen the new visibility yet: a focus request that
-    // follows (the row click) waits for it (see handleFocusPath).
-    if (changed) selectionPendingLayoutRef.current = true;
-    setSelectedCollectionIds(next.collections);
-    setSelectedGroups(next.groups);
-  }, [isHidingUnused, localSelectedCollections, selectedGroups, setSelectedCollectionIds, setSelectedGroups,
-      groupKeysByCollection]);
+    toggleCollection(collectionId);
+  }, [toggleCollection, isHidingUnused, localSelectedCollections]);
 
   // Sidebar "Select All" means "show me everything": hiding ends with it.
   // The previous row's focus ring (and its canvas highlight) ends with it.
@@ -611,6 +606,10 @@ function GroupedGraphInner() {
   const handleTypeToggle = useCallback((type: string) => {
     toggleVariableType(type);
   }, [toggleVariableType]);
+
+  const handleGroupToggle = useCallback((groupName: string) => {
+    toggleSelectedGroup(groupName);
+  }, [toggleSelectedGroup]);
 
   const handleShowColorMenu = useCallback((event: React.MouseEvent, node: VariableNode) => {
     event.stopPropagation();
@@ -1178,7 +1177,7 @@ function GroupedGraphInner() {
     else zoomToNodeId(first);
   }, [isCollectionSort, zoomToNodeId, fitToNodeIds]);
 
-  const runFocusPath = useCallback((collectionId: string, path: string) => {
+  const handleFocusPath = useCallback((collectionId: string, path: string) => {
     const nodes = reactFlowInstance.getNodes();
     const scope = selectFocusScope(nodes, collectionId, path);
     if (!scope) return;
@@ -1190,25 +1189,6 @@ function GroupedGraphInner() {
     }
     moveCameraToScope(nodes, collectionId, path, scope.nodeIds);
   }, [reactFlowInstance, moveCameraToScope]);
-
-  // A row click selects, then asks to focus. When the selection just changed
-  // the canvas still shows the old visibility, so the request is parked and
-  // run by the effect below once the layout has applied the new one.
-  const handleFocusPath = useCallback((collectionId: string, path: string) => {
-    if (selectionPendingLayoutRef.current) {
-      pendingFocusRef.current = { collectionId, path };
-      return;
-    }
-    runFocusPath(collectionId, path);
-  }, [runFocusPath]);
-
-  useEffect(() => {
-    selectionPendingLayoutRef.current = false;
-    const pending = pendingFocusRef.current;
-    if (!pending) return;
-    pendingFocusRef.current = null;
-    runFocusPath(pending.collectionId, pending.path);
-  }, [nodes, runFocusPath]);
 
   // Quick-search's collection jump: fit every visible card of the collection,
   // no highlight. Same scope as the sidebar's collection row.
@@ -1619,11 +1599,7 @@ function GroupedGraphInner() {
     selectedGroups,
     variablesById,
     selectionProviderGroupKeys,
-    groupKeysByCollection,
-    // Only while hiding: just the keys Hide unused itself unchecked (never the
-    // plan's other keys), so the user's own narrowing is kept.
-    hideUnusedGroupKeys: getHideUnusedGroupKeys(!!hidingPath, hideUnusedOwnRef.current),
-  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys, groupKeysByCollection, hidingPath]);
+  }), [localSelectedCollections, selectedTypes, selectedGroups, variablesById, selectionProviderGroupKeys]);
 
   // Whether a card is hidden on the canvas right now: the shared filter
   // predicate, with hide-unused OR'd on top for what the sidebar uncheck
@@ -1976,18 +1952,21 @@ function GroupedGraphInner() {
     // library cards and the selection card keep their stored spot.
     const columns = collectionColumns;
     let packed: Map<string, { x: number; y: number }> | null = null;
+    // Collection mode: each column's vertical offset (its header follows).
+    let columnOffsets: ReadonlyMap<string, number> = new Map();
     if (columns) {
-      const orders = matchColumnOrders(
-        columns.collections,
-        temporaryLayout?.collectionOrder ?? collectionOrderRef.current
-      );
-      packed = packCollectionColumns(columns.items, columns.columns, orders, columns.gapX, columns.gapY);
+      const orderRecord = temporaryLayout?.collectionOrder ?? collectionOrderRef.current;
+      const orders = matchColumnOrders(columns.collections, orderRecord);
+      const offsets = matchColumnOffsets(columns.collections, orderRecord);
+      columnOffsets = offsets;
+      packed = packCollectionColumns(columns.items, columns.columns, orders, columns.gapX, columns.gapY, offsets);
       const itemByNodeId = new Map<string, ColumnItem>();
       columns.items.forEach(item => item.members.forEach(member => itemByNodeId.set(member.id, item)));
       collectionPackRef.current = {
         items: columns.items,
         columns: columns.columns,
         orders,
+        offsets,
         packed,
         itemByNodeId,
         gapX: columns.gapX,
@@ -2175,7 +2154,7 @@ function GroupedGraphInner() {
       newNodes.push({
         id: getTierLabelNodeId(label),
         type: 'tierLabel',
-        position: { x: label.x, y: TIER_LABEL_Y },
+        position: { x: label.x, y: getTierLabelY(label, columnOffsets) },
         // `pointerEvents: none` on the node wrapper itself, so panning and
         // rubber-band selection pass straight through the caption row.
         style: { width: label.width, height: TIER_LABEL_HEIGHT, pointerEvents: 'none' },
@@ -2610,19 +2589,38 @@ function GroupedGraphInner() {
     dropped.forEach((_position, id) => {
       if (mouseDragIdsRef.current.delete(id)) mouse.add(id);
     });
-    const changed = resolveCollectionDrop(pack, dropped, mouse);
+    const { orders: changed, offsets: movedOffsets } = resolveCollectionDrop(pack, dropped, mouse);
 
     let packed = pack.packed;
-    if (changed.size > 0) {
+    let offsets = pack.offsets;
+    if (changed.size > 0 || movedOffsets.size > 0) {
       const temporary = hidingLayoutRef.current;
-      let record: ColumnOrderRecord | null = temporary ? temporary.collectionOrder ?? null : collectionOrderRef.current;
+      // A temporary layout with no order of its own yet starts from the saved
+      // one, so this drop keeps every other column's order and offset.
+      let record: ColumnOrderRecord | null = temporary
+        ? temporary.collectionOrder ?? collectionOrderRef.current
+        : collectionOrderRef.current;
       const orders = new Map(pack.orders);
+      const findCollection = (collectionId: string) => pack.collections.find(c => c.id === collectionId)
+        ?? { id: collectionId, name: collectionId };
       changed.forEach((order, collectionId) => {
-        const collection = pack.collections.find(c => c.id === collectionId)
-          ?? { id: collectionId, name: collectionId };
-        record = writeColumnOrder(record, collection, order, pack.collections);
+        record = writeColumnOrder(record, findCollection(collectionId), order, pack.collections);
         orders.set(collectionId, order);
       });
+      if (movedOffsets.size > 0) {
+        offsets = new Map(pack.offsets);
+        movedOffsets.forEach((offsetY, collectionId) => {
+          // The column's order as items: the one this same drop wrote, else
+          // the stored one as is (it may name cards a frame absorbs now),
+          // else the natural order it is packed in.
+          const items = orders.get(collectionId) ?? orderColumnItems(
+            pack.items.filter(item => item.collectionId === collectionId)
+          ).map(getColumnItemKey);
+          record = writeColumnOffset(record, findCollection(collectionId), offsetY, items, pack.collections);
+          if (offsetY > 0) offsets.set(collectionId, offsetY);
+          else offsets.delete(collectionId);
+        });
+      }
       if (temporary) {
         const next = { ...temporary, collectionOrder: record! };
         hidingLayoutRef.current = next;
@@ -2633,15 +2631,23 @@ function GroupedGraphInner() {
       }
       const repacked = packCollectionColumns(
         pack.items,
-        pack.columns.filter(column => changed.has(column.collectionId)),
-        orders, pack.gapX, pack.gapY
+        pack.columns.filter(column => changed.has(column.collectionId) || movedOffsets.has(column.collectionId)),
+        orders, pack.gapX, pack.gapY, offsets
       );
       packed = new Map(pack.packed);
       repacked.forEach((pos, id) => packed.set(id, pos));
-      collectionPackRef.current = { ...pack, orders, packed };
+      collectionPackRef.current = { ...pack, orders, offsets, packed };
     }
 
+    // Column headers follow their column's offset.
+    const headerY = new Map<string, number>();
+    movedOffsets.forEach((offsetY, collectionId) => {
+      headerY.set(`${TIER_LABEL_NODE_PREFIX}collection:${collectionId}`, TIER_LABEL_Y + (offsets.get(collectionId) ?? 0));
+    });
+
     setNodes(prev => prev.map(n => {
+      const labelY = headerY.get(n.id);
+      if (labelY !== undefined) return n.position.y === labelY ? n : { ...n, position: { x: n.position.x, y: labelY } };
       const at = packed.get(n.id);
       if (!at || (n.position.x === at.x && n.position.y === at.y)) return n;
       return { ...n, position: { x: at.x, y: at.y } };
@@ -3268,8 +3274,9 @@ function GroupedGraphInner() {
           selectedTypes={selectedTypes}
           onTypeToggle={handleTypeToggle}
           selectedCollections={localSelectedCollections}
+          onCollectionToggle={handleCollectionToggle}
           selectedGroups={selectedGroups}
-          onSelectionChange={handleSelectionChange}
+          onGroupToggle={handleGroupToggle}
           highlightedGroupKey={highlightedGroupKey}
           onFocusPath={handleFocusPath}
           isPathFocusable={isPathFocusable}

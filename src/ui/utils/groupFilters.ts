@@ -50,22 +50,14 @@ export function getGroupKeysByCollection(
 
 /**
  * Grouped variables show when their own group is selected. Ungrouped
- * (collection root) variables belong to no group row, so with
- * `groupKeysByCollection` they show only while every group of their
- * collection is selected (or it has none): picking one group in the sidebar
- * shows just that group. Without the map they always show.
+ * (collection root) variables belong to no group row, so they always show.
  */
 export function isVariableVisibleForGroupFilters(
   variable: Pick<VariableData, 'collectionId' | 'name'>,
-  selectedGroupKeys: Set<string>,
-  groupKeysByCollection?: Map<string, string[]>
+  selectedGroupKeys: Set<string>
 ): boolean {
   const groupName = getVariableGroupName(variable.name);
-  if (!groupName) {
-    if (!groupKeysByCollection) return true;
-    const own = groupKeysByCollection.get(variable.collectionId) ?? [];
-    return own.every(key => selectedGroupKeys.has(key));
-  }
+  if (!groupName) return true;
 
   return selectedGroupKeys.has(getCollectionGroupKey(variable.collectionId, groupName));
 }

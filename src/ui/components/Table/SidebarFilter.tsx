@@ -7,19 +7,7 @@ import { TypeIcon, PlusIcon, FilterIcon, CollapseAllIcon, ExpandAllIcon } from '
 import { IconButton, IconTextButton } from '../common/Button';
 import { OptionsDropdown } from '../common/OptionsDropdown/OptionsDropdown';
 import { useModalContext } from '../Modals/ModalContext';
-import { compareGroupPaths, getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../../utils/groupFilters';
-import {
-  isRootMarked,
-  isRowSelected,
-  markId,
-  ownMarkId,
-  selectOnly,
-  toggleMark,
-  visibleMarks,
-  type SidebarRow,
-  type SidebarSelection,
-  type SidebarUniverse,
-} from '../../utils/sidebarSelection';
+import { compareGroupPaths, getCollectionGroupKey, getVariableGroupName } from '../../utils/groupFilters';
 import { getGroupCardKey } from '../Relationships/GroupedGraph/utils';
 import { resolveModeIdForCollection } from '../../utils/modes';
 import { VariableData } from '../../types';
@@ -88,112 +76,146 @@ function collectFoldableKeys(node: GroupTreeNode, collectionId: string): string[
   ];
 }
 
-// How one row was clicked: Cmd/Ctrl (or Enter/Space with it) adds to / removes
-// from the selection, anything else selects only that row.
-type RowActivation = { additive: boolean; pointer?: boolean };
-const isAdditive = (e: { metaKey: boolean; ctrlKey: boolean }): RowActivation => ({
-  additive: e.metaKey || e.ctrlKey,
-});
+// Label props for a sidebar row that focuses its cards on the canvas. Without
+// `onFocusPath` (Table view) the label stays plain text. A disabled row
+// (nothing of it visible on the canvas) is muted and out of the Tab order.
+// The label never toggles the row's checkbox: only the checkbox does.
+function getFocusLabelProps(
+  collectionId: string,
+  path: string,
+  focusNoun: string,
+  onFocusPath?: (collectionId: string, path: string) => void,
+  isPathFocusable?: (collectionId: string, path: string) => boolean
+): { props: React.HTMLAttributes<HTMLSpanElement>; className: string } {
+  if (!onFocusPath) return { props: {}, className: '' };
 
-const SELECTED_ROW_CLASS = 'bg-primary/10 ring-1 ring-primary';
-// A folder picked only for the variables it holds itself (its subgroups were
-// Cmd/Ctrl-clicked out): dashed, so it does not read as the whole folder.
-const OWN_SELECTED_ROW_CLASS = 'bg-primary/10 outline-1 outline-dashed outline-primary -outline-offset-1';
-// A row under the clicked one: part of the selection, so a fill but no ring.
-const DESCENDANT_ROW_CLASS = 'bg-primary/10';
+  if (isPathFocusable && !isPathFocusable(collectionId, path)) {
+    return {
+      props: {
+        tabIndex: -1,
+        'aria-disabled': true,
+        title: `Not shown in ${focusNoun}`,
+        onClick: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+      },
+      className: 'text-text-secondary cursor-default',
+    };
+  }
+
+  return {
+    props: {
+      role: 'button',
+      tabIndex: 0,
+      title: `Click to find in ${focusNoun}`,
+      onClick: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onFocusPath(collectionId, path);
+      },
+      onKeyDown: (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        // Space would otherwise scroll the tree.
+        e.preventDefault();
+        e.stopPropagation();
+        onFocusPath(collectionId, path);
+      },
+    },
+    className:
+      'cursor-pointer hover:underline rounded-sm focus-visible:outline-1 focus-visible:outline-text focus-visible:outline-offset-2',
+  };
+}
+
+// The row whose card is focused on the canvas (or that was focused last from
+// the sidebar) is ringed.
+const HIGHLIGHTED_ROW_CLASS = 'bg-primary/10 ring-1 ring-primary';
+
+interface RowCheckbox {
+  checked: boolean;
+  indeterminate: boolean;
+  onToggle: () => void;
+}
 
 interface TreeRowProps {
   label: string;
   count: number;
   variant: 'root' | 'collection' | 'group';
-  /** Drives `aria-selected` and the selected fill. */
-  selected: boolean;
-  /** Selected only for the folder's own variables: dashed instead of the ring. */
-  ownOnly?: boolean;
-  /** Part of the selection only through an ancestor row: fill, no ring. */
-  descendant?: boolean;
-  /** Ringed like a selected row: its card is the one focused on the canvas. */
+  /** Absent: the row has no checkbox (groups in a view without group filters). */
+  checkbox?: RowCheckbox;
+  /** Props and classes of the label (see getFocusLabelProps). */
+  focusLabel?: { props: React.HTMLAttributes<HTMLSpanElement>; className: string };
+  /** Ringed: its card is the one focused on the canvas. */
   highlighted?: boolean;
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
   expandLabel?: string;
-  /** Nothing of this row is visible on the canvas: muted label. */
-  muted?: boolean;
   title?: string;
   indent?: number;
-  onActivate: (activation: RowActivation) => void;
   /** Collection rows only: the row can be dragged to reorder collections. */
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
   /** This row is the one being dragged: dimmed. */
   dragging?: boolean;
-  /** Alt+ArrowUp (-1) / Alt+ArrowDown (1) on the focused row. */
-  onReorderKey?: (direction: -1 | 1) => void;
+  /** Alt+ArrowUp (-1) / Alt+ArrowDown (1) on the row's checkbox or label. */
+  onReorderKey?: (direction: -1 | 1, target: HTMLElement) => void;
+  /** Swallow every click inside the row (the click that follows a drag). */
+  onClickCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** Lets the parent find the row again (focus after a keyboard move). */
   dataCollectionId?: string;
 }
 
-// One selectable row of the tree (root, collection, group or folder). The
-// chevron is its own button and never changes the selection.
+// One row of the tree (root, collection, group or folder): chevron, checkbox,
+// label and count. The checkbox is the only control that changes the
+// selection; the chevron folds, the label focuses the canvas.
 function TreeRow({
   label,
   count,
   variant,
-  selected,
-  ownOnly = false,
+  checkbox,
+  focusLabel,
   highlighted = false,
-  descendant = false,
   expandable = false,
   expanded = false,
   onToggleExpand,
   expandLabel,
-  muted = false,
   title,
   indent = 0,
-  onActivate,
   draggable = false,
   onDragStart,
   onDragEnd,
   dragging = false,
   onReorderKey,
+  onClickCapture,
   dataCollectionId,
 }: TreeRowProps) {
   const textClass =
     variant === 'root' ? 'text-sm font-semibold' : variant === 'collection' ? 'text-sm' : 'text-xs';
+  const checkboxClass = variant === 'group' ? 'w-3.5 h-3.5 cursor-pointer' : 'w-4 h-4 cursor-pointer';
   return (
     <div
       role="treeitem"
-      tabIndex={0}
-      aria-selected={selected || descendant}
       aria-expanded={expandable ? expanded : undefined}
       title={title}
       data-collection-id={dataCollectionId}
       draggable={draggable || undefined}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
-      onClick={e => onActivate({ ...isAdditive(e), pointer: true })}
-      onKeyDown={e => {
-        if (onReorderKey && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-          // Would otherwise scroll the tree.
-          e.preventDefault();
-          onReorderKey(e.key === 'ArrowUp' ? -1 : 1);
-          return;
-        }
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        // Space would otherwise scroll the tree.
-        e.preventDefault();
-        onActivate(isAdditive(e));
-      }}
-      className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer select-none focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-text focus-visible:outline-offset-2 ${
-        highlighted || (selected && !ownOnly)
-          ? SELECTED_ROW_CLASS
-          : selected
-            ? OWN_SELECTED_ROW_CLASS
-            : descendant
-            ? DESCENDANT_ROW_CLASS
-            : 'hover:bg-base-2'
+      onClickCapture={onClickCapture}
+      onKeyDown={
+        onReorderKey
+          ? e => {
+              if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+              // Would otherwise scroll the tree.
+              e.preventDefault();
+              onReorderKey(e.key === 'ArrowUp' ? -1 : 1, e.target as HTMLElement);
+            }
+          : undefined
+      }
+      className={`flex items-center gap-2 px-2 py-1 rounded transition-colors ${
+        highlighted ? HIGHLIGHTED_ROW_CLASS : 'hover:bg-base-2'
       }${dragging ? ' opacity-50' : ''}`}
       style={indent ? { marginLeft: indent } : undefined}
     >
@@ -214,7 +236,21 @@ function TreeRow({
       ) : (
         <div className="w-4 shrink-0" />
       )}
-      <span className={`${textClass} flex-1 ${muted ? 'text-text-secondary' : ''}`}>{label}</span>
+      {checkbox && (
+        <input
+          type="checkbox"
+          aria-label={label}
+          ref={el => {
+            if (el) el.indeterminate = checkbox.indeterminate;
+          }}
+          checked={checkbox.checked}
+          onChange={checkbox.onToggle}
+          className={`${checkboxClass} shrink-0`}
+        />
+      )}
+      <span {...focusLabel?.props} className={`${textClass} flex-1 ${focusLabel?.className ?? ''}`}>
+        {label}
+      </span>
       <span className="text-xs opacity-60">{count}</span>
     </div>
   );
@@ -225,18 +261,15 @@ interface GroupNodeRowProps {
   depth: number;
   collectionId: string;
   variables: VariableData[];
-  selection: SidebarSelection;
-  universe: SidebarUniverse;
-  /** Marked rows (`markId`) that are shown: the rows the user clicked. */
-  marks: ReadonlySet<string>;
-  /** Some ancestor row (collection or group) is marked. */
-  ancestorMarked: boolean;
-  onActivate: (row: SidebarRow, activation: RowActivation, focusPath: string | null) => void;
+  selectedGroups: Set<string>;
+  onGroupToggle?: (groupKey: string) => void;
+  selectedCollections: Set<string>;
+  onCollectionToggle: (collectionId: string) => void;
   collapsedGroups: Set<string>;
   setCollapsedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
   highlightedGroupKey?: string | null;
   focusedRowKey?: string | null;
-  canFocus: boolean;
+  onFocusPath?: (collectionId: string, path: string) => void;
   focusNoun: string;
   isPathFocusable?: (collectionId: string, path: string) => boolean;
   forceExpanded?: boolean;
@@ -247,16 +280,15 @@ function GroupNodeRow({
   depth,
   collectionId,
   variables,
-  selection,
-  universe,
-  marks,
-  ancestorMarked,
-  onActivate,
+  selectedGroups,
+  onGroupToggle,
+  selectedCollections,
+  onCollectionToggle,
   collapsedGroups,
   setCollapsedGroups,
   highlightedGroupKey,
   focusedRowKey,
-  canFocus,
+  onFocusPath,
   focusNoun,
   isPathFocusable,
   forceExpanded = false,
@@ -272,30 +304,36 @@ function GroupNodeRow({
   // last one focused from the sidebar (folder rows have no card of their own).
   // A highlight set from a sidebar row rings only that row: a folder whose
   // only card is this group must not ring the group too.
-  const isFocusTarget =
+  const isHighlighted =
     (!focusedRowKey && node.isGroup && highlightedGroupKey === graphGroupKey) || focusedRowKey === nodeKey;
+  const focusLabel = getFocusLabelProps(collectionId, node.path, focusNoun, onFocusPath, isPathFocusable);
 
   const count = variables.filter(
     v => v.collectionId === collectionId && v.name.startsWith(`${node.path}/`)
   ).length;
 
-  const row = React.useMemo<SidebarRow>(
-    () => ({ kind: 'group', collectionId, groupKeys: collectGroupKeys(node, collectionId) }),
+  const descendantGroupKeys = React.useMemo(
+    () => collectGroupKeys(node, collectionId),
     [node, collectionId]
   );
-  // Only a row the user clicked gets the ring, never one that is merely
-  // visible or covers the same variables; rows under it just a fill. An own
-  // mark rings the folder for the variables it holds itself, without the fill
-  // below it.
-  const wholeMarked = marks.has(nodeKey);
-  const ownOnly = !wholeMarked && marks.has(ownMarkId(collectionId, node.path));
-  const selected = wholeMarked || ownOnly;
-  // No focus ring on a row whose variables are no longer selected (e.g. it
-  // was Cmd/Ctrl-clicked out of the selection after being focused), nor a
-  // sidebar focus ring inside a ringed folder (no rings inside rings).
-  const sidebarFocusUnderRing = focusedRowKey === nodeKey && ancestorMarked;
-  const isHighlighted = isFocusTarget && !sidebarFocusUnderRing && isRowSelected(selection, row, universe);
-  const muted = canFocus && !!isPathFocusable && !isPathFocusable(collectionId, node.path);
+  const allChecked = descendantGroupKeys.every(k => selectedGroups.has(k));
+  const someChecked = descendantGroupKeys.some(k => selectedGroups.has(k));
+
+  // Fully on -> every group under the row off; otherwise -> every one on
+  // (and its collection too, so the groups show).
+  const handleToggle = () => {
+    if (!onGroupToggle) return;
+    if (allChecked) {
+      descendantGroupKeys.forEach(k => {
+        if (selectedGroups.has(k)) onGroupToggle(k);
+      });
+    } else {
+      descendantGroupKeys.forEach(k => {
+        if (!selectedGroups.has(k)) onGroupToggle(k);
+      });
+      if (!selectedCollections.has(collectionId)) onCollectionToggle(collectionId);
+    }
+  };
 
   return (
     <div className="space-y-0.5">
@@ -303,9 +341,12 @@ function GroupNodeRow({
         variant="group"
         label={node.label}
         count={count}
-        selected={selected}
-        ownOnly={ownOnly}
-        descendant={!selected && ancestorMarked}
+        checkbox={
+          onGroupToggle
+            ? { checked: allChecked, indeterminate: someChecked && !allChecked, onToggle: handleToggle }
+            : undefined
+        }
+        focusLabel={focusLabel}
         highlighted={isHighlighted}
         indent={depth * 16}
         expandable={hasChildren}
@@ -322,9 +363,6 @@ function GroupNodeRow({
             return next;
           })
         }
-        muted={muted}
-        title={canFocus ? (muted ? 'Not shown in graph' : `Click to select and find in ${focusNoun}`) : undefined}
-        onActivate={activation => onActivate(row, activation, node.path)}
       />
 
       {hasChildren && !isCollapsed && (
@@ -336,16 +374,15 @@ function GroupNodeRow({
               depth={depth + 1}
               collectionId={collectionId}
               variables={variables}
-              selection={selection}
-              universe={universe}
-              marks={marks}
-              ancestorMarked={ancestorMarked || wholeMarked}
-              onActivate={onActivate}
+              selectedGroups={selectedGroups}
+              onGroupToggle={onGroupToggle}
+              selectedCollections={selectedCollections}
+              onCollectionToggle={onCollectionToggle}
               collapsedGroups={collapsedGroups}
               setCollapsedGroups={setCollapsedGroups}
               highlightedGroupKey={highlightedGroupKey}
               focusedRowKey={focusedRowKey}
-              canFocus={canFocus}
+              onFocusPath={onFocusPath}
               focusNoun={focusNoun}
               isPathFocusable={isPathFocusable}
               forceExpanded={forceExpanded}
@@ -363,28 +400,26 @@ interface SidebarFilterProps {
   selectedTypes?: Set<string>;
   onTypeToggle?: (type: string) => void;
   selectedCollections: Set<string>;
+  onCollectionToggle: (collectionId: string) => void;
   selectedGroups: Set<string>;
-  /** Fired once per row click with the whole next selection (both sets), so a
-   *  click is one atomic write. Plain click selects only that row (root =
-   *  everything), Cmd/Ctrl-click toggles it. Never fired for a click that
-   *  would empty the selection. */
-  onSelectionChange: (next: SidebarSelection) => void;
+  /** Absent: group rows have no checkbox (no group filtering). */
+  onGroupToggle?: (groupKey: string) => void;
   highlightedGroupKey?: string | null;
   /** Focus the graph on every card under a row: `path` is '' for the
    *  collection row, otherwise the tree node's path ('badge', 'badge/color').
-   *  A plain row click selects, then calls this. Absent in views with no
-   *  canvas, where a click only selects. */
+   *  Fired by a click (or Enter/Space) on a row's label, never by its
+   *  checkbox. Absent in views with no canvas, where labels are plain text. */
   onFocusPath?: (collectionId: string, path: string) => void;
   /** What a click finds the row in, for the tooltip ('graph' or 'table'). */
   focusNoun?: string;
   /** False when nothing under the row is visible on the canvas: the label is
-   *  then muted (a click still selects it, which may bring it back). Absent =
-   *  every row is focusable. */
+   *  then muted and inert. Absent = every row is focusable. */
   isPathFocusable?: (collectionId: string, path: string) => boolean;
   /** `${collectionId}::${path}` of the row last focused; that row is ringed. */
   focusedRowKey?: string | null;
-  /** Fired by a click on "All variables", after `onSelectionChange`. The graph
-   *  turns "Hide unused" off here. */
+  /** Fired once by the "All variables" checkbox when it selects everything
+   *  (never when it deselects), after the per-collection and per-group
+   *  toggles. The graph turns "Hide unused" off here. */
   onSelectAllCollections?: () => void;
   showTypeFilters?: boolean;
   footer?: React.ReactNode;
@@ -396,8 +431,9 @@ export function SidebarFilter({
   selectedTypes,
   onTypeToggle,
   selectedCollections,
+  onCollectionToggle,
   selectedGroups,
-  onSelectionChange,
+  onGroupToggle,
   highlightedGroupKey,
   onFocusPath,
   focusNoun = 'graph',
@@ -407,7 +443,7 @@ export function SidebarFilter({
   showTypeFilters = true,
   footer,
 }: SidebarFilterProps) {
-  const { collections, variables, reorderCollections, sidebarMarks, setSidebarMarks } = useAppContext();
+  const { collections, variables, reorderCollections } = useAppContext();
   const { openInputModal } = useModalContext();
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -426,7 +462,8 @@ export function SidebarFilter({
   // The browser may follow a drag with a click on the source row: ignore it.
   const suppressClickRef = React.useRef(false);
   const treeRef = React.useRef<HTMLDivElement>(null);
-  const pendingFocusIdRef = React.useRef<string | null>(null);
+  // Row moved by keyboard, and which of its controls had focus.
+  const pendingFocusRef = React.useRef<{ id: string; part: 'checkbox' | 'label' } | null>(null);
 
   const collectionIds = React.useMemo(() => collections.map(c => c.id), [collections]);
   const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
@@ -488,27 +525,35 @@ export function SidebarFilter({
     if (!sameOrder(next, collectionIds)) reorderCollections(next);
   };
 
-  const handleReorderKey = (id: string, direction: -1 | 1) => {
+  const handleReorderKey = (id: string, direction: -1 | 1, target: HTMLElement) => {
     const index = collectionIds.indexOf(id);
     const neighbor = collectionIds[index + direction];
     if (index === -1 || !neighbor) return;
     const next = moveCollectionId(collectionIds, id, neighbor, direction === -1 ? 'before' : 'after');
     if (sameOrder(next, collectionIds)) return;
     const name = collections[index].name;
-    pendingFocusIdRef.current = id;
+    pendingFocusRef.current = { id, part: target.tagName === 'INPUT' ? 'checkbox' : 'label' };
     reorderCollections(next);
     setReorderAnnouncement(`Moved ${name} to position ${next.indexOf(id) + 1} of ${next.length}`);
   };
 
-  // A moved DOM node can lose focus: put it back on the row moved by keyboard.
+  // A moved DOM node can lose focus: put it back on the control (checkbox or
+  // label) of the row moved by keyboard.
   React.useLayoutEffect(() => {
-    const id = pendingFocusIdRef.current;
-    if (!id) return;
-    pendingFocusIdRef.current = null;
+    const pending = pendingFocusRef.current;
+    if (!pending) return;
+    pendingFocusRef.current = null;
     const row = Array.from(
       treeRef.current?.querySelectorAll<HTMLElement>('[data-collection-id]') ?? []
-    ).find(el => el.dataset.collectionId === id);
-    if (row && document.activeElement !== row) row.focus();
+    ).find(el => el.dataset.collectionId === pending.id);
+    const control = row?.querySelector<HTMLElement>(
+      // A greyed-out label (getFocusLabelProps) is not a button but still
+      // takes focus on click: tabIndex -1 + aria-disabled.
+      pending.part === 'checkbox'
+        ? 'input[type="checkbox"]'
+        : '[role="button"], [aria-disabled="true"][tabindex="-1"]'
+    );
+    if (control && document.activeElement !== control) control.focus();
   }, [collections]);
 
   // Sidebar width — draggable via the handle on the right edge, persisted across sessions.
@@ -626,7 +671,7 @@ export function SidebarFilter({
   }, [variables]);
 
   // Collapse / expand all (like Figma's Layers panel). Only what is shown
-  // changes: marks and selection are untouched, "All variables" stays as is.
+  // changes: the checked state is untouched, "All variables" stays as is.
   const foldable = React.useMemo(() => {
     const collectionIdsWithGroups: string[] = [];
     const folderKeys: string[] = [];
@@ -675,62 +720,53 @@ export function SidebarFilter({
   const hasTypeFilter = showTypeFilters && !!selectedTypes && !!onTypeToggle && availableTypes.length > 0;
   const typesFiltered = hasTypeFilter && availableTypes.some(type => !selectedTypes!.has(type));
 
-  // What a row click can select: every collection and its group keys.
-  const universe = React.useMemo<SidebarUniverse>(
-    () => ({
-      collectionIds: collections.map(c => c.id),
-      groupKeysByCollection: getGroupKeysByCollection(variables),
-    }),
-    [collections, variables]
-  );
-  const selection = React.useMemo<SidebarSelection>(
-    () => ({ collections: selectedCollections, groups: selectedGroups }),
-    [selectedCollections, selectedGroups]
-  );
-  // Rows the user clicked (plain or Cmd/Ctrl), ringed only while the row
-  // still exists and is fully selected: a selection changed elsewhere (Hide
-  // unused, Show all, plugin undo) never rings a row that is not shown.
-  const marks = React.useMemo(
-    () => visibleMarks(sidebarMarks, selection, universe),
-    [sidebarMarks, selection, universe]
-  );
-  const rootMarked = collections.length > 0 && isRootMarked(selection, universe, marks);
+  // All group keys across every collection (for tri-state / select-all).
+  const allGroupKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    groupsByCollection.forEach((groups, collectionId) => {
+      groups.forEach(groupName => keys.push(getCollectionGroupKey(collectionId, groupName)));
+    });
+    return keys;
+  }, [groupsByCollection]);
 
-  // Plain click: select only the row, mark it, then find it in the graph.
-  // Cmd/Ctrl: toggle it in the selection and the marks and leave the camera
-  // alone. "All variables" always means everything and clears every mark.
-  const handleRowActivate = (
-    row: SidebarRow,
-    { additive, pointer }: RowActivation,
-    focus: { collectionId: string; path: string } | null
-  ) => {
-    if (row.kind === 'root') {
-      setSidebarMarks(new Set());
-      onSelectionChange(selectOnly(row, universe));
+  // "All variables" checkbox: select all / deselect all (drives the groups
+  // too). A group unticked under a ticked collection counts: otherwise it
+  // reads checked while cards are still hidden (Hide unused unticks groups
+  // only), and select-all could never be reached.
+  const canFilterGroups = !!onGroupToggle;
+  const allCollectionsSelected =
+    collections.every(c => selectedCollections.has(c.id)) &&
+    (!canFilterGroups || allGroupKeys.every(key => selectedGroups.has(key)));
+  const someCollectionsSelected =
+    collections.some(c => selectedCollections.has(c.id)) ||
+    (canFilterGroups && allGroupKeys.some(key => selectedGroups.has(key)));
+  const handleToggleAllCollections = () => {
+    if (allCollectionsSelected) {
+      collections.forEach(c => onCollectionToggle(c.id));
+      if (onGroupToggle) {
+        allGroupKeys.forEach(key => {
+          if (selectedGroups.has(key)) onGroupToggle(key);
+        });
+      }
+    } else {
+      collections.forEach(c => {
+        if (!selectedCollections.has(c.id)) onCollectionToggle(c.id);
+      });
+      if (onGroupToggle) {
+        allGroupKeys.forEach(key => {
+          if (!selectedGroups.has(key)) onGroupToggle(key);
+        });
+      }
       onSelectAllCollections?.();
-      return;
     }
-    const id = markId(row.collectionId, focus?.path ?? '');
-    if (additive) {
-      // A collection mark never filters; a group one narrows its collection.
-      const next = toggleMark(selection, sidebarMarks, id, universe);
-      if (!next) return;
-      setSidebarMarks(next.marks);
-      if (next.selection !== selection) onSelectionChange(next.selection);
-      return;
-    }
-    // Clicking the one row that is already the whole selection deselects it:
-    // the same reset as "All variables" (marks, filter, highlight, focus).
-    // Enter/Space on it still re-focuses the camera instead.
-    if (pointer && sidebarMarks.size === 1 && sidebarMarks.has(id)) {
-      handleRowActivate({ kind: 'root' }, { additive: false }, null);
-      return;
-    }
-    // A collection row never filters: it clears every narrowing.
-    setSidebarMarks(new Set([id]));
-    onSelectionChange(selectOnly(row, universe));
-    if (row.kind === 'collection') onSelectAllCollections?.();
-    if (focus) onFocusPath?.(focus.collectionId, focus.path);
+  };
+
+  // The click a browser may send to the source row after a drag: swallowed
+  // before it reaches the checkbox or the label.
+  const swallowClickAfterDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressClickRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
@@ -854,18 +890,21 @@ export function SidebarFilter({
             className="shrink-0"
           />
         </div>
-        <div ref={treeRef} role="tree" aria-multiselectable className="space-y-1 overflow-auto flex-1 min-h-0">
+        <div ref={treeRef} role="tree" className="space-y-1 overflow-auto flex-1 min-h-0">
           {collections.length > 0 && (
             <TreeRow
               variant="root"
               label="All variables"
               count={variables.length}
-              selected={rootMarked}
+              checkbox={{
+                checked: allCollectionsSelected,
+                indeterminate: !allCollectionsSelected && someCollectionsSelected,
+                onToggle: handleToggleAllCollections,
+              }}
               expandable
               expanded={rootExpanded || isSearching}
               expandLabel={rootExpanded || isSearching ? 'Collapse all variables' : 'Expand all variables'}
               onToggleExpand={() => setRootExpanded(prev => !prev)}
-              onActivate={() => handleRowActivate({ kind: 'root' }, { additive: false }, null)}
             />
           )}
           {(rootExpanded || isSearching) && (
@@ -902,16 +941,37 @@ export function SidebarFilter({
             if (!collectionMatches) return null;
 
             const isExpanded = isSearching ? true : expandedCollections.has(collection.id);
-            const collectionRow: SidebarRow = { kind: 'collection', collectionId: collection.id };
-            const collectionSelected = marks.has(markId(collection.id));
-            const collectionMuted = !!onFocusPath && !!isPathFocusable && !isPathFocusable(collection.id, '');
+            const collSelected = selectedCollections.has(collection.id);
+            const filtersGroups = !!hasGroups && canFilterGroups;
+
+            // Tri-state parent: derived from the collection + its group checkboxes.
+            const groupKeys = filtersGroups
+              ? Array.from(groups!).map(g => getCollectionGroupKey(collection.id, g))
+              : [];
+            const allGroupsSelected = groupKeys.length > 0 && groupKeys.every(k => selectedGroups.has(k));
+            const parentChecked = filtersGroups ? collSelected && allGroupsSelected : collSelected;
+            const parentIndeterminate = filtersGroups && collSelected && !allGroupsSelected;
+
+            // One click: fully on -> off (collection + all groups), otherwise -> on.
+            const handleParentToggle = () => {
+              if (!filtersGroups) {
+                onCollectionToggle(collection.id);
+                return;
+              }
+              if (parentChecked) {
+                onCollectionToggle(collection.id);
+                groupKeys.forEach(k => {
+                  if (selectedGroups.has(k)) onGroupToggle!(k);
+                });
+              } else {
+                if (!collSelected) onCollectionToggle(collection.id);
+                groupKeys.forEach(k => {
+                  if (!selectedGroups.has(k)) onGroupToggle!(k);
+                });
+              }
+            };
 
             const indicator = dropTarget?.id === collection.id ? dropTarget.position : null;
-            const focusTitle = onFocusPath
-              ? collectionMuted
-                ? 'Not shown in graph'
-                : `Click to select and find in ${focusNoun}`
-              : undefined;
             const reorderTitle = canReorder ? 'Drag or Alt+↑/↓ to reorder' : undefined;
 
             return (
@@ -936,8 +996,13 @@ export function SidebarFilter({
                   variant="collection"
                   label={collection.name}
                   count={variableCount}
-                  selected={collectionSelected}
-                  highlighted={focusedRowKey === markId(collection.id) && selection.collections.has(collection.id)}
+                  checkbox={{
+                    checked: parentChecked,
+                    indeterminate: parentIndeterminate,
+                    onToggle: handleParentToggle,
+                  }}
+                  focusLabel={getFocusLabelProps(collection.id, '', focusNoun, onFocusPath, isPathFocusable)}
+                  highlighted={focusedRowKey === `${collection.id}::`}
                   expandable={!!hasGroups}
                   expanded={isExpanded}
                   expandLabel={`${isExpanded ? 'Collapse' : 'Expand'} ${collection.name}`}
@@ -952,18 +1017,14 @@ export function SidebarFilter({
                       return next;
                     })
                   }
-                  muted={collectionMuted}
-                  title={[focusTitle, reorderTitle].filter(Boolean).join(' · ') || undefined}
-                  onActivate={activation => {
-                    if (suppressClickRef.current) return;
-                    handleRowActivate(collectionRow, activation, { collectionId: collection.id, path: '' });
-                  }}
+                  title={reorderTitle}
+                  onClickCapture={swallowClickAfterDrag}
                   dataCollectionId={collection.id}
                   draggable={canReorder}
                   dragging={draggedCollectionId === collection.id}
                   onDragStart={e => handleCollectionDragStart(e, collection.id)}
                   onDragEnd={handleCollectionDragEnd}
-                  onReorderKey={canReorder ? direction => handleReorderKey(collection.id, direction) : undefined}
+                  onReorderKey={canReorder ? (direction, target) => handleReorderKey(collection.id, direction, target) : undefined}
                 />
 
                 {/* Groups (nested, collapsible subgroups) */}
@@ -976,18 +1037,15 @@ export function SidebarFilter({
                         depth={0}
                         collectionId={collection.id}
                         variables={variables}
-                        selection={selection}
-                        universe={universe}
-                        marks={marks}
-                        ancestorMarked={collectionSelected}
-                        onActivate={(row, activation, path) =>
-                          handleRowActivate(row, activation, path === null ? null : { collectionId: collection.id, path })
-                        }
+                        selectedGroups={selectedGroups}
+                        onGroupToggle={onGroupToggle}
+                        selectedCollections={selectedCollections}
+                        onCollectionToggle={onCollectionToggle}
                         collapsedGroups={collapsedGroups}
                         setCollapsedGroups={setCollapsedGroups}
                         highlightedGroupKey={highlightedGroupKey}
                         focusedRowKey={focusedRowKey}
-                        canFocus={!!onFocusPath}
+                        onFocusPath={onFocusPath}
                         focusNoun={focusNoun}
                         isPathFocusable={isPathFocusable}
                         forceExpanded={isSearching}

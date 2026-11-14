@@ -115,4 +115,38 @@ describe('collection card order', () => {
     expect('collectionOrder' in takeArrangeSnapshot({}, [], 'tier')).toBe(false);
     expect('collectionOrder' in restoreArrangeSnapshot(takeArrangeSnapshot({}, [], 'tier'))).toBe(false);
   });
+
+  describe('column offset (offsetY)', () => {
+    const offsetOrder = {
+      v: 1 as const,
+      columns: [
+        { id: 'c1', name: 'Color', items: ['path:b', 'path:a'], offsetY: 120 },
+        { id: 'c2', name: 'Size', items: ['path:s'] },
+      ],
+    };
+
+    it('round-trips the exact offsetY through snapshot and restore', () => {
+      const snapshot = takeArrangeSnapshot({}, [], 'collection', undefined, offsetOrder);
+      expect(snapshot.collectionOrder!.columns[0].offsetY).toBe(120);
+      const restored = restoreArrangeSnapshot(snapshot);
+      expect(restored.collectionOrder).toEqual(offsetOrder);
+      expect(restored.collectionOrder!.columns[0].offsetY).toBe(120);
+    });
+
+    it('an entry without offsetY stays without the key', () => {
+      const snapshot = takeArrangeSnapshot({}, [], 'collection', undefined, offsetOrder);
+      expect('offsetY' in snapshot.collectionOrder!.columns[1]).toBe(false);
+      expect('offsetY' in restoreArrangeSnapshot(snapshot).collectionOrder!.columns[1]).toBe(false);
+    });
+
+    it('is deep-copied: mutating the source offset after the snapshot cannot change it', () => {
+      const live = { v: 1 as const, columns: offsetOrder.columns.map(c => ({ ...c, items: c.items.slice() })) };
+      const snapshot = takeArrangeSnapshot({}, [], 'collection', undefined, live);
+      live.columns[0].offsetY = 300;
+      (live.columns[1] as { offsetY?: number }).offsetY = 40;
+      live.columns[0].items.push('path:c');
+      expect(snapshot.collectionOrder).toEqual(offsetOrder);
+      expect(snapshot.collectionOrder!.columns[0]).not.toBe(live.columns[0]);
+    });
+  });
 });

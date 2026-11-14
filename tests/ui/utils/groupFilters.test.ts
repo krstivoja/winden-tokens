@@ -23,45 +23,26 @@ describe('getGroupKeysByCollection', () => {
   });
 });
 
-describe('isVariableVisibleForGroupFilters with group keys per collection', () => {
+describe('isVariableVisibleForGroupFilters', () => {
   const root = { collectionId: 'c1', name: 'root-token' };
 
-  it('shows ungrouped variables only while every group of their collection is selected', () => {
-    const all = new Set(['c1::color', 'c1::color/dark']);
-    expect(isVariableVisibleForGroupFilters(root, all, byCollection)).toBe(true);
-    expect(isVariableVisibleForGroupFilters(root, new Set(['c1::color']), byCollection)).toBe(false);
-    expect(isVariableVisibleForGroupFilters(root, new Set(), byCollection)).toBe(false);
-  });
-
-  it('always shows ungrouped variables of a collection without groups', () => {
-    expect(isVariableVisibleForGroupFilters({ collectionId: 'c3', name: 'loose' }, new Set(), byCollection)).toBe(true);
-  });
-
-  it('a picked group leaves only that group\'s rows', () => {
-    const picked = new Set([getCollectionGroupKey('c1', 'color')]);
-    const visible = variables.filter(v => isVariableVisibleForGroupFilters(v, picked, byCollection));
-    expect(visible.map(v => v.name)).toEqual(['color/brand', 'loose']);
-  });
-
-  it('without the map ungrouped variables always show', () => {
+  it('always shows ungrouped (collection root) variables, whatever groups are selected', () => {
+    expect(isVariableVisibleForGroupFilters(root, new Set(['c1::color', 'c1::color/dark']))).toBe(true);
+    expect(isVariableVisibleForGroupFilters(root, new Set(['c1::color']))).toBe(true);
     expect(isVariableVisibleForGroupFilters(root, new Set())).toBe(true);
   });
-});
 
-describe('isVariableVisibleForGroupFilters - other collections untouched by a group click', () => {
-  it('keeps every variable of the other collections visible, filters only the clicked collection', () => {
-    const vars = [
-      { collectionId: 'color', name: 'color/background/a' },
-      { collectionId: 'color', name: 'checkbox/color/b' },
-      { collectionId: 'color', name: 'screen' },
-      { collectionId: 'dim', name: 'spacing/s' },
-      { collectionId: 'dim', name: 'loose' },
-    ];
-    const keys = getGroupKeysByCollection(vars);
-    // What clicking color/color/background selects: other collections keep all keys.
-    const selected = new Set(['color::color/background', 'dim::spacing']);
-    const visible = vars.filter(v => isVariableVisibleForGroupFilters(v, selected, keys)).map(v => v.name);
-    expect(visible).toEqual(['color/background/a', 'spacing/s', 'loose']);
+  it('shows a grouped variable only while its own group is selected', () => {
+    const brand = { collectionId: 'c1', name: 'color/brand' };
+    expect(isVariableVisibleForGroupFilters(brand, new Set(['c1::color']))).toBe(true);
+    expect(isVariableVisibleForGroupFilters(brand, new Set(['c1::color/dark']))).toBe(false);
+    expect(isVariableVisibleForGroupFilters(brand, new Set(['c2::color']))).toBe(false);
+  });
+
+  it('a checked group keeps its rows and every loose row', () => {
+    const picked = new Set([getCollectionGroupKey('c1', 'color')]);
+    const visible = variables.filter(v => isVariableVisibleForGroupFilters(v, picked));
+    expect(visible.map(v => v.name)).toEqual(['root-token', 'color/brand', 'loose']);
   });
 });
 

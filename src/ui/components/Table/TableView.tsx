@@ -8,7 +8,7 @@ import { GroupHeader } from './GroupHeader';
 import { SidebarFilter } from './SidebarFilter';
 import { TableHeader } from './TableHeader';
 import { ExpandAllIcon, CollapseAllIcon } from '../Icons';
-import { getGroupKeysByCollection, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
+import { getVariableGroupName, isVariableVisibleForGroupFilters } from '../../utils/groupFilters';
 
 interface TableViewProps {
   status: { message: string; type: string };
@@ -30,27 +30,15 @@ export function TableView({ status }: TableViewProps) {
     selectedCollectionIds: selectedCollections,
     selectedGroups,
     toggleVariableType: handleTypeToggle,
-    setSelectedCollectionIds,
-    setSelectedGroups,
-    variables,
+    toggleCollection: handleCollectionToggle,
+    toggleSelectedGroup: handleGroupToggle,
   } = useAppContext();
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Apply sidebar group filter to variables (type and collection filters are applied in AppContext)
-  const groupKeysByCollection = useMemo(() => getGroupKeysByCollection(variables), [variables]);
   const sidebarFilteredVariables = useMemo(() => {
-    return filteredVariables.filter(v =>
-      isVariableVisibleForGroupFilters(v, selectedGroups, groupKeysByCollection)
-    );
-  }, [filteredVariables, selectedGroups, groupKeysByCollection]);
-
-  const handleSelectionChange = useCallback(
-    (next: { collections: Set<string>; groups: Set<string> }) => {
-      setSelectedCollectionIds(next.collections);
-      setSelectedGroups(next.groups);
-    },
-    [setSelectedCollectionIds, setSelectedGroups]
-  );
+    return filteredVariables.filter(v => isVariableVisibleForGroupFilters(v, selectedGroups));
+  }, [filteredVariables, selectedGroups]);
 
   // A collection row click scrolls the table to the collection's first
   // visible row (rows of a collection are spread over the group sections).
@@ -125,8 +113,9 @@ export function TableView({ status }: TableViewProps) {
         selectedTypes={selectedTypes}
         onTypeToggle={handleTypeToggle}
         selectedCollections={selectedCollections}
+        onCollectionToggle={handleCollectionToggle}
         selectedGroups={selectedGroups}
-        onSelectionChange={handleSelectionChange}
+        onGroupToggle={handleGroupToggle}
         onFocusPath={handleFocusPath}
         focusNoun="table"
       />

@@ -134,7 +134,7 @@ export function layoutCollectionColumns(input: CollectionColumnsInput): Collecti
 /**
  * Every visible member's spot, column by column: the column's items in
  * `orders.get(collectionId)` order (orderColumnItems; a missing entry is
- * natural order), stacked from y = 0 with exactly `gapY` between visible
+ * natural order), stacked from y = 0 (or the column's offset) with exactly `gapY` between visible
  * items. An item is hidden when every member is (`member.hidden`); it keeps
  * its list slot but takes no room and gets no position. A chain line is as
  * tall as its tallest visible lane, its lanes at `gapX` steps (a hidden lane
@@ -142,13 +142,16 @@ export function layoutCollectionColumns(input: CollectionColumnsInput): Collecti
  * (buildCollectionColumnItems / measureWrapperFrames). Keyed by member id —
  * the xyflow node id (card key, `wrapper:<collectionId>::<path>`, chain lane
  * keys). Items of a collection with no entry in `columns` get nothing.
+ * `offsets` (by collectionId) starts a column that far below y = 0 instead,
+ * shifting every member of it; a missing entry is 0.
  */
 export function packCollectionColumns(
   items: readonly ColumnItem[],
   columns: readonly CollectionColumn[],
   orders: ReadonlyMap<string, string[]>,
   gapX: number,
-  gapY: number
+  gapY: number,
+  offsets?: ReadonlyMap<string, number>
 ): Map<string, Point> {
   const byCollection = new Map<string, ColumnItem[]>();
   items.forEach(item => {
@@ -160,7 +163,7 @@ export function packCollectionColumns(
   const positions = new Map<string, Point>();
   columns.forEach(column => {
     const ordered = orderColumnItems(byCollection.get(column.collectionId) || [], orders.get(column.collectionId));
-    let y = 0;
+    let y = offsets?.get(column.collectionId) ?? 0;
     ordered.forEach(item => {
       if (!isVisible(item)) return;
       const line = measureLine(item, gapX);

@@ -49,7 +49,12 @@ function copyColumnOrder(record: ColumnOrderRecord | null): ColumnOrderRecord | 
   if (!record) return null;
   return {
     v: record.v,
-    columns: record.columns.map(column => ({ id: column.id, name: column.name, items: column.items.slice() })),
+    columns: record.columns.map(column => ({
+      id: column.id,
+      name: column.name,
+      items: column.items.slice(),
+      ...(column.offsetY !== undefined ? { offsetY: column.offsetY } : {}),
+    })),
   };
 }
 

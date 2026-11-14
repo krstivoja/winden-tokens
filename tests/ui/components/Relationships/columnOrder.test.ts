@@ -3,11 +3,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   getColumnItemKey,
+  matchColumnOffsets,
   matchColumnOrders,
   migrateCollectionPositions,
   moveItems,
   orderColumnItems,
   parseColumnOrder,
+  writeColumnOffset,
   writeColumnOrder,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/columnOrder';
 import type { ColumnOrderRecord } from '../../../../src/ui/components/Relationships/GroupedGraph/columnOrder';
@@ -73,6 +75,20 @@ describe('parseColumnOrder', () => {
     });
     expect(parsed).toEqual({ v: 1, columns: [{ id: 'c1', name: 'A', items: ['path:a', 'path:b'] }] });
   });
+
+  it('keeps a valid offsetY', () => {
+    const raw = { v: 1, columns: [{ id: 'c1', name: 'A', items: ['path:a'], offsetY: 140.5 }] };
+    expect(parseColumnOrder(raw)).toEqual(raw);
+  });
+
+  it('drops a bad, negative, zero, NaN or string offsetY but keeps the entry', () => {
+    const bad: unknown[] = [0, -10, Number.NaN, Number.POSITIVE_INFINITY, '40', null, {}];
+    bad.forEach(offsetY => {
+      const parsed = parseColumnOrder({ v: 1, columns: [{ id: 'c1', name: 'A', items: ['path:a'], offsetY }] });
+      expect(parsed).toEqual({ v: 1, columns: [{ id: 'c1', name: 'A', items: ['path:a'] }] });
+      expect(Object.prototype.hasOwnProperty.call(parsed!.columns[0], 'offsetY')).toBe(false);
+    });
+  });
 });
 
 describe('getColumnItemKey', () => {
@@ -131,6 +147,46 @@ describe('matchColumnOrders', () => {
 
   it('returns nothing for a null record', () => {
     expect(matchColumnOrders([{ id: 'c1', name: 'A' }], null).size).toBe(0);
+  });
+});
+
+describe('matchColumnOffsets', () => {
+  const record = (columns: ColumnOrderRecord['columns']): ColumnOrderRecord => ({ v: 1, columns });
+
+  it('matches by id, then a stale entry by name', () => {
+    const map = matchColumnOffsets(
+      [{ id: 'c1', name: 'A' }, { id: 'new', name: 'Colors' }],
+      record([
+        { id: 'old', name: 'Colors', items: [], offsetY: 80 },
+        { id: 'c1', name: 'A', items: [], offsetY: 30 },
+      ])
+    );
+    expect(map.get('c1')).toBe(30);
+    expect(map.get('new')).toBe(80);
+  });
+
+  it('never lets a stale name take a slot matched by id', () => {
+    const map = matchColumnOffsets(
+      [{ id: 'c1', name: 'Colors' }],
+      record([
+        { id: 'stale', name: 'Colors', items: [], offsetY: 999 },
+        { id: 'c1', name: 'Renamed', items: [], offsetY: 10 },
+      ])
+    );
+    expect(map.get('c1')).toBe(10);
+    expect(map.size).toBe(1);
+  });
+
+  it('omits missing and zero offsets and unmatched collections', () => {
+    const map = matchColumnOffsets(
+      [{ id: 'c1', name: 'A' }, { id: 'c2', name: 'B' }, { id: 'c3', name: 'C' }],
+      record([
+        { id: 'c1', name: 'A', items: [] },
+        { id: 'c2', name: 'B', items: [], offsetY: 0 },
+      ])
+    );
+    expect(map.size).toBe(0);
+    expect(matchColumnOffsets([{ id: 'c1', name: 'A' }], null).size).toBe(0);
   });
 });
 
@@ -315,6 +371,75 @@ describe('writeColumnOrder', () => {
       v: 1,
       columns: [{ id: 'c1', name: 'A', items: ['path:a'] }],
     });
+  });
+});
+
+describe('writeColumnOrder keeps the offset', () => {
+  it('carries the matched entry\'s offsetY through a reorder, by id and by name', () => {
+    const record: ColumnOrderRecord = {
+      v: 1,
+      columns: [{ id: 'old', name: 'Colors', items: ['path:a', 'path:b'], offsetY: 60 }],
+    };
+    expect(writeColumnOrder(record, { id: 'old', name: 'Colors' }, ['path:b', 'path:a'], [{ id: 'old', name: 'Colors' }]).columns)
+      .toEqual([{ id: 'old', name: 'Colors', items: ['path:b', 'path:a'], offsetY: 60 }]);
+    expect(writeColumnOrder(record, { id: 'new', name: 'Colors' }, ['path:a'], [{ id: 'new', name: 'Colors' }]).columns)
+      .toEqual([{ id: 'new', name: 'Colors', items: ['path:a'], offsetY: 60 }]);
+  });
+
+  it('a new column gets no offset', () => {
+    const next = writeColumnOrder(null, { id: 'c1', name: 'A' }, ['path:a'], [{ id: 'c1', name: 'A' }]);
+    expect(Object.prototype.hasOwnProperty.call(next.columns[0], 'offsetY')).toBe(false);
+  });
+});
+
+describe('writeColumnOffset', () => {
+  const record: ColumnOrderRecord = {
+    v: 1,
+    columns: [
+      { id: 'old', name: 'Colors', items: ['path:a', 'path:gone'] },
+      { id: 'c2', name: 'Spacing', items: ['path:x'], offsetY: 40 },
+    ],
+  };
+  const live = [{ id: 'new', name: 'Colors' }, { id: 'c2', name: 'Spacing' }];
+
+  it('matches by id, sets offset and items, passes others through', () => {
+    const next = writeColumnOffset(record, { id: 'c2', name: 'Spacing' }, 90, ['path:x', 'path:y'], live);
+    expect(next.columns[1]).toEqual({ id: 'c2', name: 'Spacing', items: ['path:x', 'path:y'], offsetY: 90 });
+    expect(next.columns[0]).toBe(record.columns[0]);
+  });
+
+  it('falls back to a stale entry by name and refreshes its id', () => {
+    const next = writeColumnOffset(record, live[0], 25, ['path:a'], live);
+    expect(next.columns).toEqual([
+      { id: 'new', name: 'Colors', items: ['path:a'], offsetY: 25 },
+      record.columns[1],
+    ]);
+  });
+
+  it('appends a new column and starts from a null record', () => {
+    const radius = { id: 'c3', name: 'Radius' };
+    const next = writeColumnOffset(record, radius, 15, ['path:'], [...live, radius]);
+    expect(next.columns).toHaveLength(3);
+    expect(next.columns[2]).toEqual({ id: 'c3', name: 'Radius', items: ['path:'], offsetY: 15 });
+    expect(writeColumnOffset(null, radius, 15, ['path:'], [radius])).toEqual({
+      v: 1,
+      columns: [{ id: 'c3', name: 'Radius', items: ['path:'], offsetY: 15 }],
+    });
+  });
+
+  it('writes no offsetY for 0 or less', () => {
+    [0, -5].forEach(offsetY => {
+      const next = writeColumnOffset(record, { id: 'c2', name: 'Spacing' }, offsetY, ['path:x'], live);
+      expect(next.columns[1]).toEqual({ id: 'c2', name: 'Spacing', items: ['path:x'] });
+      expect(Object.prototype.hasOwnProperty.call(next.columns[1], 'offsetY')).toBe(false);
+    });
+  });
+
+  it('never mutates the input record', () => {
+    const snapshot = JSON.parse(JSON.stringify(record));
+    writeColumnOffset(record, { id: 'c2', name: 'Spacing' }, 0, ['path:x'], live);
+    writeColumnOffset(record, live[0], 50, ['path:a'], live);
+    expect(record).toEqual(snapshot);
   });
 });
 

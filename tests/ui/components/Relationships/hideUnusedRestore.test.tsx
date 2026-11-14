@@ -70,7 +70,13 @@ const ALL_GROUPS = ['c1::alpha', 'c1::beta', 'c1::gamma', 'c2::omega'];
 function Harness() {
   const [collectionIds, setCollectionIds] = useState<Set<string>>(new Set(['c1', 'c2']));
   const [groups, setGroups] = useState<Set<string>>(new Set(ALL_GROUPS));
-  const [sidebarMarks, setSidebarMarks] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (set: React.Dispatch<React.SetStateAction<Set<string>>>) => (key: string) =>
+    set(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   ctx.value = {
     collections,
     variables,
@@ -85,8 +91,8 @@ function Harness() {
     toggleVariableType: () => {},
     setSelectedCollectionIds: setCollectionIds,
     setSelectedGroups: setGroups,
-    sidebarMarks,
-    setSidebarMarks,
+    toggleCollection: toggle(setCollectionIds),
+    toggleSelectedGroup: toggle(setGroups),
   };
   return <GroupedGraph />;
 }
@@ -115,8 +121,15 @@ const cardNode = (id: string) => document.querySelector(`.react-flow__node[data-
 const visibleCards = () => Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node[data-id^="group:"]'))
   .map(el => el.dataset.id)
   .sort();
-const sidebarRow = (text: string) =>
-  screen.getByText(text, { selector: '[role="tree"] span' }).closest('[role="treeitem"]') as HTMLElement;
+/** A sidebar row's label (a click focuses its cards on the canvas). */
+const sidebarLabel = (text: string) => {
+  const label = screen.getAllByText(text).find(el => el.parentElement?.querySelector(':scope > input[type="checkbox"]'));
+  if (!label) throw new Error(`No sidebar row "${text}"`);
+  return label;
+};
+/** A sidebar row's checkbox. */
+const sidebarCheckbox = (text: string) =>
+  sidebarLabel(text).parentElement!.querySelector(':scope > input[type="checkbox"]') as HTMLInputElement;
 /** The toolbar Hide unused / Show all toggle. */
 const toolbarToggle = () => document.querySelector('button[aria-pressed]') as HTMLElement;
 /** A card menu item (the toolbar toggle has the same text). */
@@ -134,10 +147,12 @@ beforeEach(() => {
 });
 
 describe('Show all after Hide unused', () => {
-  it('returns to the sidebar group view: the group narrows its own collection only', async () => {
+  it('returns to the sidebar group view: unchecked groups stay unchecked', async () => {
     await mount();
-    fireEvent.click(sidebarRow('alpha'));
-    // The group click narrows c1 to alpha; c2 stays whole.
+    // Narrow c1 to alpha; c2 stays whole. Then focus alpha.
+    fireEvent.click(sidebarCheckbox('beta'));
+    fireEvent.click(sidebarCheckbox('gamma'));
+    fireEvent.click(sidebarLabel('alpha'));
     await waitFor(() => expect(visibleCards()).toEqual(['group:c1::alpha', 'group:c2::omega']));
     const before = selection();
 
@@ -167,20 +182,22 @@ describe('Show all after Hide unused', () => {
 
   it('keeps a group the user re-ticked while hiding, and brings the rest back', async () => {
     await mount();
-    fireEvent.click(sidebarRow('alpha'));
+    fireEvent.click(sidebarCheckbox('beta'));
+    fireEvent.click(sidebarCheckbox('gamma'));
+    fireEvent.click(sidebarLabel('alpha'));
     await waitFor(() => expect(visibleCards()).toEqual(['group:c1::alpha', 'group:c2::omega']));
     fireEvent.click(toolbarToggle());
     await waitFor(() => expect(visibleCards()).toEqual(['group:c1::alpha']));
 
-    // Cmd-click gamma: shown again while hiding stays on.
-    fireEvent.click(sidebarRow('gamma'), { metaKey: true });
+    // Tick gamma: shown again while hiding stays on.
+    fireEvent.click(sidebarCheckbox('gamma'));
     await waitFor(() => expect(visibleCards()).toContain('group:c1::gamma'));
 
     fireEvent.click(toolbarToggle());
     await waitFor(() => expect(visibleCards()).toEqual(['group:c1::alpha', 'group:c1::gamma', 'group:c2::omega']));
   });
 
-  it('Cmd-click on a group of a collection Hide unused turned off ends hiding and brings the rest back', async () => {
+  it('ticking a group of a collection Hide unused turned off ends hiding and brings the rest back', async () => {
     await mount();
     fireEvent.click(screen.getByLabelText('Open actions for gamma'));
     fireEvent.click(menuItem('Hide unused'));
@@ -188,9 +205,9 @@ describe('Show all after Hide unused', () => {
     await waitFor(() => expect(visibleCards()).toEqual(['group:c1::gamma']));
     expect(selection().collections).toEqual(['c1']);
 
-    // The click selects c2 (off), so hiding ends; it is the user's choice for
-    // c2 only — c1's groups Hide unused unchecked come back.
-    fireEvent.click(sidebarRow('omega'), { metaKey: true });
+    // The tick turns c2 (off) back on, so hiding ends; c1's groups Hide
+    // unused unchecked come back too.
+    fireEvent.click(sidebarCheckbox('omega'));
     await waitFor(() => expect(toolbarToggle().textContent).toBe('Hide unused'));
     await waitFor(() => expect(visibleCards()).toEqual(
       ['group:c1::alpha', 'group:c1::beta', 'group:c1::gamma', 'group:c2::omega']

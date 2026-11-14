@@ -466,3 +466,126 @@ describe('Collection mode: the card order', () => {
     expect(writes('graph-order-collection')).toEqual([]);
   });
 });
+
+describe('Collection mode: a column\'s vertical offset', () => {
+  const FRAME = 'wrapper:c1::';
+  const HEADER = 'tier-label:collection:c1';
+  const withOffset = (items: string[], offsetY: number, id = 'c1') =>
+    ({ v: 1, columns: [{ id, name: 'One', items, offsetY }] });
+  const NATURAL = ['path:a', 'path:b', 'path:c', 'path:'];
+
+  it('17. dragging the collection frame down keeps it there; the header follows; the offset is written', async () => {
+    await mount({ groupedPaths: ['c1::'] });
+    expect(pos(FRAME).y).toBe(0);
+    const header = pos(HEADER);
+    mouseDrag(FRAME, 120);
+    await waitFor(() => expect(writes('graph-order-collection').length).toBe(1), { timeout: 1000 });
+    const record = lastWrite('graph-order-collection') as { columns: Array<{ id: string; offsetY?: number; items: string[] }> };
+    expect(record.columns).toHaveLength(1);
+    expect(record.columns[0].id).toBe('c1');
+    const offsetY = record.columns[0].offsetY!;
+    expect(offsetY).toBeGreaterThan(100);
+    expect(pos(FRAME).y).toBe(offsetY);
+    expect(pos(FRAME).x).toBe(0);
+    expect(pos(HEADER)).toMatchObject({ x: header.x, y: header.y + offsetY });
+    // The other column stays at the top.
+    expect(pos('group:c2::x').y).toBe(0);
+    expect(writes('graph-positions-collection')).toEqual([]);
+  });
+
+  it('18. a frame dragged above the top clamps to 0 (no offset stored); a sub-0.5 px drag changes nothing', async () => {
+    await mount({ groupedPaths: ['c1::'], order: withOffset(NATURAL, 80) });
+    expect(pos(FRAME).y).toBe(80);
+    mouseDrag(FRAME, -5000);
+    await waitFor(() => expect(pos(FRAME).y).toBe(0));
+    await waitFor(() => expect(writes('graph-order-collection').length).toBe(1), { timeout: 1000 });
+    expect(lastWrite('graph-order-collection')).toEqual(orderOf(NATURAL));
+    expect(pos(HEADER).y).toBeLessThan(0);
+
+    // Already at the top: dragging up again writes nothing.
+    posted.length = 0;
+    mouseDrag(FRAME, -200);
+    await waitFor(() => expect(pos(FRAME).y).toBe(0));
+    await settle();
+    expect(writes('graph-order-collection')).toEqual([]);
+  });
+
+  it('19. a drop under 0.5 px leaves the offset and writes nothing', async () => {
+    await mount({ groupedPaths: ['c1::'], order: withOffset(NATURAL, 80) });
+    mouseDrag(FRAME, 0.3);
+    await settle();
+    expect(pos(FRAME).y).toBe(80);
+    expect(writes('graph-order-collection')).toEqual([]);
+  });
+
+  it('20. the offset survives a reload and a plugin undo (ids recreated)', async () => {
+    await mount({ order: withOffset(['path:b', 'path:a', 'path:c', 'path:'], 60) });
+    expect(shown()).toEqual({ b: 60, a: 60 + STEP, c: 60 + STEP * 2 });
+    expect(pos('group:c2::x').y).toBe(0);
+    act(() => {
+      harness.setData!({ collections: makeCollections('d1', 'd2'), variables: makeVariables('d1', 'd2', 'w') });
+      harness.setCollectionIds!(new Set(['d1', 'd2']));
+      harness.setGroups!(new Set(groupsOf('d1', 'd2')));
+    });
+    await waitFor(() => expect(nodeEl('group:d1::a')).not.toBe(null));
+    expect(pos('group:d1::b').y).toBe(60);
+    expect(pos('group:d1::a').y).toBe(60 + STEP);
+    expect(pos('tier-label:collection:d1').y).toBe(pos('tier-label:collection:d2').y + 60);
+
+    // A reorder after the undo keeps the offset.
+    const c = await select('group:d1::c');
+    fireEvent.keyDown(c, { key: 'ArrowUp' });
+    await waitFor(() => expect(pos('group:d1::c').y).toBe(60 + STEP));
+    await waitFor(() => expect(writes('graph-order-collection').length).toBe(1), { timeout: 1000 });
+    expect(writes('graph-order-collection')[0]).toEqual(withOffset(['path:b', 'path:c', 'path:a', 'path:'], 60, 'd1'));
+  });
+
+  it('21. Arrange Grid resets the offset; Undo Arrange restores it', async () => {
+    const order = withOffset(NATURAL, 90);
+    await mount({ groupedPaths: ['c1::'], order });
+    expect(pos(FRAME).y).toBe(90);
+    fireEvent.click(screen.getByText('Arrange Grid'));
+    expect(writes('graph-order-collection')).toEqual([{ v: 1, columns: [] }]);
+    await waitFor(() => expect(pos(FRAME).y).toBe(0));
+    expect(pos(HEADER).y).toBe(pos('tier-label:collection:c2').y);
+
+    fireEvent.click(await screen.findByText('Undo Arrange'));
+    expect(writes('graph-order-collection')).toEqual([{ v: 1, columns: [] }, order]);
+    await waitFor(() => expect(pos(FRAME).y).toBe(90));
+    expect(pos(HEADER).y).toBe(pos('tier-label:collection:c2').y + 90);
+  });
+
+  it('22. a card drop while Hide unused is on keeps every column\'s offset', async () => {
+    const order = {
+      v: 1,
+      columns: [
+        { id: 'c1', name: 'One', items: NATURAL, offsetY: 100 },
+        { id: 'c2', name: 'Two', items: ['path:x', 'path:'], offsetY: 50 },
+      ],
+    };
+    await mount({ order });
+    expect(pos('group:c2::x').y).toBe(50);
+    fireEvent.click(screen.getByLabelText('Open actions for a'));
+    fireEvent.click(screen.getAllByText('Hide unused').find(el => !el.closest('[aria-pressed]'))!);
+    await waitFor(() => expect(nodeEl('group:c1::b')).toBe(null));
+    expect(pos('group:c1::a').y).toBe(100);
+    expect(pos('group:c1::c').y).toBe(100 + STEP);
+
+    mouseDrag('group:c1::c', -5000);
+    await waitFor(() => expect(pos('group:c1::c').y).toBe(100));
+    expect(pos('group:c1::a').y).toBe(100 + STEP);
+    await waitFor(() => expect(writes('graph-order-collection').length).toBe(1), { timeout: 1000 });
+    expect(lastWrite('graph-order-collection')).toEqual({
+      v: 1,
+      columns: [
+        { id: 'c1', name: 'One', items: ['path:c', 'path:a', 'path:b', 'path:'], offsetY: 100 },
+        { id: 'c2', name: 'Two', items: ['path:x', 'path:'], offsetY: 50 },
+      ],
+    });
+
+    fireEvent.click(document.querySelector('button[aria-pressed]') as HTMLElement);
+    await waitFor(() => expect(nodeEl('group:c1::b')).not.toBe(null));
+    await waitFor(() => expect(pos('group:c2::x').y).toBe(50));
+    expect(pos('group:c1::c').y).toBe(100);
+  });
+});

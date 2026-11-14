@@ -1,4 +1,4 @@
-// Types filter dropdown (its checkboxes stay) and the "All variables" root row of the sidebar.
+// Types filter dropdown and the "All variables" root row of the sidebar.
 
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -17,10 +17,7 @@ const variables: VariableData[] = [
 ];
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => {
-    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
-    return { collections, variables, sidebarMarks, setSidebarMarks };
-  },
+  useAppContext: () => ({ collections, variables }),
 }));
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
   useModalContext: () => ({ openInputModal: vi.fn() }),
@@ -28,7 +25,7 @@ vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
 vi.mock('../../../../src/ui/hooks/usePluginMessages', () => ({ post: vi.fn() }));
 
 function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}) {
-  const onSelectionChange = vi.fn();
+  const onCollectionToggle = vi.fn();
   const onTypeToggle = vi.fn();
   const utils = render(
     <SidebarFilter
@@ -38,15 +35,15 @@ function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>
       onTypeToggle={onTypeToggle}
       selectedCollections={new Set(['c1', 'c2'])}
       selectedGroups={new Set(['c1::color', 'c2::space'])}
-      onSelectionChange={onSelectionChange}
+      onCollectionToggle={onCollectionToggle}
       {...props}
     />
   );
-  return { onSelectionChange, onTypeToggle, ...utils };
+  return { onCollectionToggle, onTypeToggle, ...utils };
 }
 
 const openFilter = () => fireEvent.click(screen.getByLabelText('Filter by type'));
-const root = () => screen.getByText('All variables').closest('[role="treeitem"]') as HTMLElement;
+const root = () => screen.getByLabelText('All variables') as HTMLInputElement;
 
 describe('SidebarFilter types dropdown', () => {
   it('no longer renders the Types block or the bulk text button', () => {
@@ -109,30 +106,33 @@ describe('SidebarFilter All variables root row', () => {
     expect(screen.getByText('Primitives', { selector: 'span' })).toBeTruthy();
   });
 
-  it('is selected only while everything is selected', () => {
+  it('is checked when all, indeterminate when some, unchecked when none', () => {
     const { unmount } = renderSidebar();
-    expect(root().getAttribute('aria-selected')).toBe('true');
+    expect(root().checked).toBe(true);
+    expect(root().indeterminate).toBe(false);
     unmount();
 
     const partial = renderSidebar({ selectedCollections: new Set(['c1']) });
-    expect(root().getAttribute('aria-selected')).toBe('false');
+    expect(root().checked).toBe(false);
+    expect(root().indeterminate).toBe(true);
     partial.unmount();
 
     renderSidebar({ selectedCollections: new Set() });
-    expect(root().getAttribute('aria-selected')).toBe('false');
+    expect(root().checked).toBe(false);
+    expect(root().indeterminate).toBe(false);
   });
 
-  it('has no checkbox and a click selects everything, firing onSelectAllCollections', () => {
+  it('deselects all without firing onSelectAllCollections, selects with it', () => {
     const onSelectAllCollections = vi.fn();
-    const { onSelectionChange } = renderSidebar({
-      selectedCollections: new Set(['c1']),
-      onSelectAllCollections,
-    });
-    expect(root().querySelector('input')).toBe(null);
+    const all = renderSidebar({ onSelectAllCollections });
     fireEvent.click(root());
-    const next = onSelectionChange.mock.calls[0][0];
-    expect(Array.from(next.collections)).toEqual(['c1', 'c2']);
-    expect(Array.from(next.groups)).toEqual(['c1::color', 'c2::space']);
+    expect(all.onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
+    expect(onSelectAllCollections).not.toHaveBeenCalled();
+    all.unmount();
+
+    const none = renderSidebar({ selectedCollections: new Set(['c1']), onSelectAllCollections });
+    fireEvent.click(root());
+    expect(none.onCollectionToggle.mock.calls).toEqual([['c2']]);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
   });
 

@@ -206,6 +206,44 @@ describe('packCollectionColumns', () => {
     const empty = new Map(natural.columns.map(c => [c.collectionId, [] as string[]]));
     expect(packCollectionColumns(items, natural.columns, empty, gapX, gapY)).toEqual(natural.positions);
   });
+
+  it('an offset shifts every member of that column only, the others stay at 0', () => {
+    const cols: CollectionColumn[] = [
+      { collectionId: 'color', x: 360, width: 260 },
+      { collectionId: 'typography', x: 720, width: 260 },
+    ];
+    const items = [
+      card('color', 'a', { height: 50 }), card('color', 'b', { height: 70 }),
+      card('typography', 'font', { height: 40 }), card('typography', 'size', { height: 60 }),
+    ];
+    const base = packCollectionColumns(items, cols, new Map(), gapX, gapY);
+    const shifted = packCollectionColumns(items, cols, new Map(), gapX, gapY, new Map([['color', 120]]));
+    expect(ys(shifted, ['color::a', 'color::b'])).toEqual([120, 120 + 50 + gapY]);
+    expect(shifted.get('color::a')!.x).toBe(360);
+    expect(ys(shifted, ['typography::font', 'typography::size'])).toEqual([0, 40 + gapY]);
+    expect(shifted.get('typography::font')).toEqual(base.get('typography::font'));
+  });
+
+  it('an offset shifts a frame member and a chain line too', () => {
+    const items: ColumnItem[] = [
+      card('color', 'a', { height: 50 }),
+      { collectionId: 'color', path: 'f', members: [{ id: 'wrapper:color::f', width: 260, height: 90 }] },
+      {
+        collectionId: 'color', path: 'brand', chain: true,
+        members: [{ id: 'source:x', width: 240, height: 40 }, { id: 'shader:x', width: 240, height: 60 }],
+      },
+    ];
+    const base = packCollectionColumns(items, columns, new Map(), gapX, gapY);
+    const shifted = packCollectionColumns(items, columns, new Map(), gapX, gapY, new Map([['color', 35]]));
+    expect(shifted.size).toBe(base.size);
+    base.forEach((point, id) => expect(shifted.get(id)).toEqual({ x: point.x, y: point.y + 35 }));
+  });
+
+  it('ignores an offset keyed by a collection with no column', () => {
+    const items = [card('color', 'a', { height: 50 })];
+    const base = pack(items);
+    expect(packCollectionColumns(items, columns, new Map(), gapX, gapY, new Map([['nope', 99]]))).toEqual(base);
+  });
 });
 
 describe('lockChangesToColumns', () => {

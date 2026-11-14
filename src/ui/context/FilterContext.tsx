@@ -4,8 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { CollectionData, VariableData } from '../types';
 import { useToggleSet } from '../hooks/useToggleSet';
 import { useDataContext } from './DataContext';
-import { getCollectionGroupKey, getGroupKeysByCollection, getVariableGroupName } from '../utils/groupFilters';
-import { pruneMarks, type SidebarMarks } from '../utils/sidebarSelection';
+import { getCollectionGroupKey, getVariableGroupName } from '../utils/groupFilters';
 
 interface FilterContextValue {
   selectedModeId: string | null;
@@ -23,11 +22,6 @@ interface FilterContextValue {
   // (the Relationships graph's "Hide unused").
   setSelectedCollectionIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   setSelectedGroups: React.Dispatch<React.SetStateAction<Set<string>>>;
-  // Rows the user clicked in the sidebar Collections tree (`markId` ids):
-  // only these are ringed. Kept here so the rings survive switching between
-  // the Table and Relationships tabs, like the selection itself.
-  sidebarMarks: SidebarMarks;
-  setSidebarMarks: React.Dispatch<React.SetStateAction<SidebarMarks>>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   filteredVariables: VariableData[];
@@ -45,7 +39,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   const collectionFilter = useToggleSet<string>(new Set());
   const typeFilter = useToggleSet<string>(new Set(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']));
   const groupFilter = useToggleSet<string>(new Set());
-  const [sidebarMarks, setSidebarMarks] = useState<SidebarMarks>(() => new Set());
 
   // Track if filters have been initialized
   const hasInitialized = React.useRef(false);
@@ -137,16 +130,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variables]);
 
-  // Drop marks of rows that no longer exist (deleted, or every id recreated by
-  // a plugin undo), so they can never come back.
-  useEffect(() => {
-    const universe = {
-      collectionIds: collections.map(c => c.id),
-      groupKeysByCollection: getGroupKeysByCollection(variables),
-    };
-    setSidebarMarks(prev => pruneMarks(prev, universe));
-  }, [collections, variables]);
-
   const setSearchQuery = useCallback((query: string) => {
     setSearchQueryState(query.toLowerCase().trim());
   }, []);
@@ -220,8 +203,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     toggleAllGroups,
     setSelectedCollectionIds: collectionFilter.setItems,
     setSelectedGroups: groupFilter.setItems,
-    sidebarMarks,
-    setSidebarMarks,
     searchQuery,
     setSearchQuery,
     filteredVariables,
@@ -240,7 +221,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     toggleAllGroups,
     collectionFilter.setItems,
     groupFilter.setItems,
-    sidebarMarks,
     searchQuery,
     setSearchQuery,
     filteredVariables,

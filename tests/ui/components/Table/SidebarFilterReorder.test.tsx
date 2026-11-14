@@ -25,10 +25,7 @@ let currentCollections = collections;
 const reorderCollections = vi.fn();
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => {
-    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
-    return { collections: currentCollections, variables, reorderCollections, sidebarMarks, setSidebarMarks };
-  },
+  useAppContext: () => ({ collections: currentCollections, variables, reorderCollections }),
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
@@ -40,7 +37,8 @@ vi.mock('../../../../src/ui/hooks/usePluginMessages', () => ({
 }));
 
 function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}) {
-  const onSelectionChange = vi.fn();
+  const onCollectionToggle = vi.fn();
+  const onGroupToggle = vi.fn();
   const onFocusPath = vi.fn();
   const ui = () => (
     <SidebarFilter
@@ -48,17 +46,19 @@ function renderSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>
       onModeChange={() => {}}
       selectedCollections={new Set(['c1', 'c2', 'c3'])}
       selectedGroups={new Set(['c1::color', 'c2::space'])}
-      onSelectionChange={onSelectionChange}
+      onCollectionToggle={onCollectionToggle}
+      onGroupToggle={onGroupToggle}
       onFocusPath={onFocusPath}
       {...props}
     />
   );
   const { rerender } = render(ui());
-  return { onSelectionChange, onFocusPath, rerender: () => rerender(ui()) };
+  return { onCollectionToggle, onGroupToggle, onFocusPath, rerender: () => rerender(ui()) };
 }
 
-const rowOf = (text: string) =>
-  screen.getByText(text, { selector: '[role="treeitem"] span' }).closest('[role="treeitem"]') as HTMLElement;
+const labelOf = (text: string) => screen.getByText(text, { selector: '[role="treeitem"] span' });
+const rowOf = (text: string) => labelOf(text).closest('[role="treeitem"]') as HTMLElement;
+const checkboxOf = (text: string) => rowOf(text).querySelector('input[type="checkbox"]') as HTMLInputElement;
 // The drop target: the collection block around the row.
 const blockOf = (text: string) => rowOf(text).parentElement as HTMLElement;
 const indicators = () =>
@@ -99,7 +99,7 @@ describe('SidebarFilter reorder: draggable rows', () => {
     renderSidebar();
     fireEvent.change(screen.getByPlaceholderText('Search collections & groups...'), { target: { value: 'e' } });
     expect(rowOf('Theme').getAttribute('draggable')).toBe(null);
-    expect(rowOf('Theme').getAttribute('title')).not.toContain('reorder');
+    expect(rowOf('Theme').getAttribute('title')).toBe(null);
   });
 
   it('turns dragging off with a single collection', () => {
@@ -110,7 +110,7 @@ describe('SidebarFilter reorder: draggable rows', () => {
 
   it('adds the reorder hint to the row tooltip', () => {
     renderSidebar();
-    expect(rowOf('Theme').getAttribute('title')).toBe('Click to select and find in graph · Drag or Alt+↑/↓ to reorder');
+    expect(rowOf('Theme').getAttribute('title')).toBe('Drag or Alt+↑/↓ to reorder');
   });
 });
 
@@ -185,11 +185,13 @@ describe('SidebarFilter reorder: drag and drop', () => {
   });
 
   it('swallows the click that follows a drag on the source row', () => {
-    const { onSelectionChange, onFocusPath } = renderSidebar();
+    const { onCollectionToggle, onGroupToggle, onFocusPath } = renderSidebar();
     fireEvent.dragStart(rowOf('Theme'), { dataTransfer: dataTransfer() });
     fireEvent.dragEnd(rowOf('Theme'));
-    fireEvent.click(rowOf('Theme'));
-    expect(onSelectionChange).not.toHaveBeenCalled();
+    fireEvent.click(labelOf('Theme'));
+    fireEvent.click(checkboxOf('Theme'));
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
     expect(onFocusPath).not.toHaveBeenCalled();
   });
 });
@@ -223,37 +225,59 @@ describe('SidebarFilter reorder: keyboard', () => {
     expect(reorderCollections).not.toHaveBeenCalled();
   });
 
-  it('keeps focus on the moved row after the order changes', () => {
+  it('works from the focused checkbox too', () => {
+    renderSidebar();
+    fireEvent.keyDown(checkboxOf('Theme'), { key: 'ArrowDown', altKey: true });
+    expect(reorderCollections).toHaveBeenLastCalledWith(['c2', 'c1', 'c3']);
+  });
+
+  it.each([
+    ['label', labelOf],
+    ['checkbox', checkboxOf],
+  ])('keeps focus on the moved row\'s %s after the order changes', (_part, controlOf) => {
     const view = renderSidebar();
-    rowOf('Theme').focus();
-    fireEvent.keyDown(rowOf('Theme'), { key: 'ArrowDown', altKey: true });
+    controlOf('Theme').focus();
+    fireEvent.keyDown(controlOf('Theme'), { key: 'ArrowDown', altKey: true });
     // DataContext applies the order optimistically: re-render with it.
     currentCollections = [collections[1], collections[0], collections[2]];
     view.rerender();
     expect(screen.getAllByRole('treeitem').filter(r => r.dataset.collectionId).map(r => r.dataset.collectionId)).toEqual(['c2', 'c1', 'c3']);
-    expect(document.activeElement).toBe(rowOf('Theme'));
+    expect(document.activeElement).toBe(controlOf('Theme'));
+  });
+
+  it('keeps focus on a greyed-out (not focusable) label after the order changes', () => {
+    const view = renderSidebar({ isPathFocusable: (id: string) => id !== 'c2' });
+    expect(labelOf('Primitives').getAttribute('aria-disabled')).toBe('true');
+    labelOf('Primitives').focus();
+    fireEvent.keyDown(labelOf('Primitives'), { key: 'ArrowDown', altKey: true });
+    // jsdom keeps focus through the move; a real browser can drop it.
+    labelOf('Primitives').blur();
+    currentCollections = [collections[0], collections[2], collections[1]];
+    view.rerender();
+    expect(document.activeElement).toBe(labelOf('Primitives'));
   });
 });
 
 describe('SidebarFilter reorder: click behaviour unchanged', () => {
-  it('plain click still selects and focuses the collection', () => {
-    const { onSelectionChange, onFocusPath } = renderSidebar();
-    fireEvent.click(rowOf('Primitives'));
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  it('a label click only focuses the collection', () => {
+    const { onCollectionToggle, onGroupToggle, onFocusPath } = renderSidebar();
+    fireEvent.click(labelOf('Primitives'));
     expect(onFocusPath).toHaveBeenCalledWith('c2', '');
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
   });
 
-  it('Cmd-click still marks without filtering or focusing', () => {
-    const { onSelectionChange, onFocusPath } = renderSidebar();
-    fireEvent.click(rowOf('Primitives'), { metaKey: true });
-    expect(onSelectionChange).not.toHaveBeenCalled();
+  it('the checkbox toggles the collection without focusing', () => {
+    const { onCollectionToggle, onGroupToggle, onFocusPath } = renderSidebar();
+    fireEvent.click(checkboxOf('Primitives'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c2']]);
+    expect(onGroupToggle.mock.calls).toEqual([['c2::space']]);
     expect(onFocusPath).not.toHaveBeenCalled();
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
   });
 
-  it('Enter still activates the row', () => {
+  it('Enter on the label still focuses the collection', () => {
     const { onFocusPath } = renderSidebar();
-    fireEvent.keyDown(rowOf('Spacing'), { key: 'Enter' });
+    fireEvent.keyDown(labelOf('Spacing'), { key: 'Enter' });
     expect(onFocusPath).toHaveBeenCalledWith('c3', '');
   });
 });
@@ -264,6 +288,8 @@ describe('SidebarFilter reorder: mode picker', () => {
     renderSidebar();
     const tags = screen
       .getAllByRole('button')
+      // Tree labels are role="button" spans: only the mode picker's buttons.
+      .filter(b => b.tagName === 'BUTTON')
       .map(b => b.textContent)
       .filter(t => t === 'Theme' || t === 'Primitives' || t === 'Spacing');
     expect(tags).toEqual(['Spacing', 'Theme', 'Primitives']);

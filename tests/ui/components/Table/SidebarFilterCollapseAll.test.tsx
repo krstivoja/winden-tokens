@@ -1,6 +1,6 @@
 // Sidebar "Collapse all" / "Expand all" button next to the search box (like
 // Figma's Layers panel): folds every collection and folder at once, unfolds
-// them again, and only changes what is shown (no marks, no selection).
+// them again, and only changes what is shown (never the checked state).
 
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -25,10 +25,7 @@ const variables: VariableData[] = [
 const ALL_GROUPS = new Set(['c1::color', 'c1::color/text', 'c1::shadow/inner', 'c2::space']);
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  useAppContext: () => {
-    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
-    return { collections, variables, reorderCollections: vi.fn(), sidebarMarks, setSidebarMarks };
-  },
+  useAppContext: () => ({ collections, variables, reorderCollections: vi.fn() }),
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
@@ -39,18 +36,29 @@ vi.mock('../../../../src/ui/hooks/usePluginMessages', () => ({
   post: vi.fn(),
 }));
 
-// Holds the selection like TableView / GroupedGraph do, so rings follow it.
-function StatefulSidebar({ onSelectionChange }: { onSelectionChange: (next: { collections: Set<string>; groups: Set<string> }) => void }) {
-  const [selection, setSelection] = React.useState({ collections: new Set(['c1', 'c2']), groups: ALL_GROUPS });
+// Holds the selection like TableView / GroupedGraph do, so checkboxes follow it.
+function StatefulSidebar({ onToggle }: { onToggle: (kind: 'collection' | 'group', key: string) => void }) {
+  const [selectedCollections, setSelectedCollections] = React.useState(new Set(['c1', 'c2']));
+  const [selectedGroups, setSelectedGroups] = React.useState(ALL_GROUPS);
+  const flip = (set: Set<string>, key: string) => {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  };
   return (
     <SidebarFilter
       selectedModeId="m1"
       onModeChange={() => {}}
-      selectedCollections={selection.collections}
-      selectedGroups={selection.groups}
-      onSelectionChange={next => {
-        onSelectionChange(next);
-        setSelection(next);
+      selectedCollections={selectedCollections}
+      onCollectionToggle={id => {
+        onToggle('collection', id);
+        setSelectedCollections(prev => flip(prev, id));
+      }}
+      selectedGroups={selectedGroups}
+      onGroupToggle={key => {
+        onToggle('group', key);
+        setSelectedGroups(prev => flip(prev, key));
       }}
       showTypeFilters={false}
     />
@@ -58,9 +66,9 @@ function StatefulSidebar({ onSelectionChange }: { onSelectionChange: (next: { co
 }
 
 function renderSidebar() {
-  const onSelectionChange = vi.fn();
-  render(<StatefulSidebar onSelectionChange={onSelectionChange} />);
-  return { onSelectionChange };
+  const onToggle = vi.fn();
+  render(<StatefulSidebar onToggle={onToggle} />);
+  return { onToggle };
 }
 
 const queryRow = (text: string) =>
@@ -146,19 +154,21 @@ describe('SidebarFilter collapse / expand all', () => {
     for (const text of FOLDABLE) expect(rowOf(text).getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('keeps marks and selection through a fold and unfold', () => {
-    const { onSelectionChange } = renderSidebar();
-    fireEvent.click(rowOf('text'));
-    const calls = onSelectionChange.mock.calls.length;
-    expect(rowOf('text').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('text').className).toContain('ring-primary');
+  it('keeps the checked state through a fold and unfold', () => {
+    const { onToggle } = renderSidebar();
+    const checkboxOf = (text: string) => rowOf(text).querySelector('input[type="checkbox"]') as HTMLInputElement;
+    fireEvent.click(checkboxOf('text'));
+    const calls = onToggle.mock.calls.length;
+    expect(checkboxOf('text').checked).toBe(false);
+    expect(checkboxOf('color').indeterminate).toBe(true);
 
     fireEvent.click(screen.getByLabelText('Collapse all'));
     fireEvent.click(screen.getByLabelText('Expand all'));
 
-    expect(onSelectionChange.mock.calls.length).toBe(calls);
-    expect(rowOf('text').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('text').className).toContain('ring-primary');
+    expect(onToggle.mock.calls.length).toBe(calls);
+    expect(checkboxOf('text').checked).toBe(false);
+    expect(checkboxOf('color').indeterminate).toBe(true);
+    expect(checkboxOf('space').checked).toBe(true);
   });
 
   it('a folder folded by hand is open after Collapse all then Expand all', () => {

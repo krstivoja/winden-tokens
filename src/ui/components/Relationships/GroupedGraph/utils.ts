@@ -2,7 +2,7 @@
 
 import { VariableData, CollectionData, ShadeGroupData } from '../../../types';
 import { parseColorToRgb, rgbObjToHex } from '../../../utils/color';
-import { getCollectionGroupKey, getVariableGroupName, isVariableVisibleForGroupFilters } from '../../../utils/groupFilters';
+import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../../utils/groupFilters';
 import { getVariableValueForMode } from '../../../utils/modes';
 import {
   GroupData,
@@ -1116,14 +1116,6 @@ interface CardVisibilityFilters {
   // even when the filters above would hide them, so the selection's link is
   // never drawn to nothing. Omit for "filters only".
   selectionProviderGroupKeys?: Set<string>;
-  // Every real group key per collection. With it, a collection's loose
-  // (root-level) variables show only while all its group keys are selected,
-  // the same rule the Table applies. Omit to always show loose variables.
-  groupKeysByCollection?: Map<string, string[]>;
-  // Group keys Hide unused unchecked itself. They count as selected for the
-  // loose-variable rule above, so Hide unused never hides root cards by
-  // merely removing group keys (it hides them through its own path rule).
-  hideUnusedGroupKeys?: Set<string>;
 }
 
 /**
@@ -1154,11 +1146,6 @@ function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean
   });
   if (!hasMatchingType) return true;
 
-  // Loose variables count what Hide unused unchecked as still selected.
-  const looseSelection = filters.hideUnusedGroupKeys?.size
-    ? new Set([...filters.selectedGroups, ...filters.hideUnusedGroupKeys])
-    : filters.selectedGroups;
-
   let hasMatchingGroup = false;
   if (group.kind === 'shader' || group.kind === 'shades') {
     if (group.sourceGroupName) {
@@ -1171,8 +1158,7 @@ function isCardHidden(group: GroupData, filters: CardVisibilityFilters): boolean
       if (v.isVirtual) return false;
       return isVariableVisibleForGroupFilters(
         { collectionId: group.collectionId, name: v.name },
-        getVariableGroupName(v.name) ? filters.selectedGroups : looseSelection,
-        filters.groupKeysByCollection
+        filters.selectedGroups
       );
     });
   }

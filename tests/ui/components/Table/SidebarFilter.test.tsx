@@ -1,11 +1,13 @@
-// The Collections tree is click-to-select (no checkboxes): a plain click
-// selects only that row and its subgroups, Cmd/Ctrl-click toggles it, and
-// "All variables" selects everything (and fires onSelectAllCollections).
-// A plain click also asks the graph to focus the row through onFocusPath.
+// The Collections tree has checkboxes: a checkbox toggles its row (tri-state
+// for collections and folders), and the "All variables" checkbox fires
+// onSelectAllCollections when it selects everything (the graph turns "Hide
+// unused" off there); deselecting never does.
+// Every tree label (collection, folder row, real group) focuses the graph
+// through onFocusPath, by click and by Enter/Space, and never toggles.
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { CollectionData, VariableData } from '../../../../src/ui/types';
 import { SidebarFilter } from '../../../../src/ui/components/Table/SidebarFilter';
 
@@ -14,6 +16,7 @@ const collections: CollectionData[] = [
   { id: 'c2', name: 'Primitives', modes: [{ modeId: 'm2', name: 'Default' }] },
 ];
 
+// Group keys of the two variables below (`<collectionId>::<group>`).
 const ALL_GROUPS = new Set(['c1::color', 'c2::space']);
 
 const variables: VariableData[] = [
@@ -26,11 +29,7 @@ let currentCollections = collections;
 let currentVariables = variables;
 
 vi.mock('../../../../src/ui/context/AppContext', () => ({
-  // The sidebar marks (rings) live in FilterContext; here, state of the sidebar itself.
-  useAppContext: () => {
-    const [sidebarMarks, setSidebarMarks] = React.useState<ReadonlySet<string>>(new Set());
-    return { collections: currentCollections, variables: currentVariables, reorderCollections: vi.fn(), sidebarMarks, setSidebarMarks };
-  },
+  useAppContext: () => ({ collections: currentCollections, variables: currentVariables, reorderCollections: vi.fn() }),
 }));
 
 vi.mock('../../../../src/ui/components/Modals/ModalContext', () => ({
@@ -45,290 +44,166 @@ function renderSidebar(
   selectedCollections: Set<string>,
   props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}
 ) {
-  const onSelectionChange = vi.fn();
+  const onCollectionToggle = vi.fn();
   render(
     <SidebarFilter
       selectedModeId="m1"
       onModeChange={() => {}}
       selectedCollections={selectedCollections}
+      onCollectionToggle={onCollectionToggle}
       selectedGroups={ALL_GROUPS}
-      onSelectionChange={onSelectionChange}
+      onGroupToggle={() => {}}
       {...props}
     />
   );
-  return { onSelectionChange };
+  return { onCollectionToggle };
 }
 
-// The selection held by a parent (as TableView / GroupedGraph do), so rings
-// can follow what a click wrote. `onSelectionChange` is spied on as well.
-type Selection = { collections: Set<string>; groups: Set<string> };
-let setOutside: (next: Selection) => void = () => {};
-function StatefulSidebar({
-  initial,
-  onSelectionChange,
-  ...props
-}: Partial<React.ComponentProps<typeof SidebarFilter>> & { initial: Selection }) {
-  const [selection, setSelection] = React.useState(initial);
-  setOutside = setSelection;
-  return (
-    <SidebarFilter
-      selectedModeId="m1"
-      onModeChange={() => {}}
-      selectedCollections={selection.collections}
-      selectedGroups={selection.groups}
-      onSelectionChange={next => {
-        onSelectionChange?.(next);
-        setSelection(next);
-      }}
-      {...props}
-    />
-  );
-}
-
-// Tree row of a label ('color' etc. are unique: the type filter only lists
-// COLOR / FLOAT in upper case).
+// Label <span> of a tree row ('color' is unique here: the type filter only
+// lists COLOR / FLOAT in upper case), its row and its checkbox.
 const label = (text: string) => screen.getByText(text, { selector: 'span' });
 const rowOf = (text: string) => label(text).closest('[role="treeitem"]') as HTMLElement;
-const lastCall = (fn: ReturnType<typeof vi.fn>) => {
-  const next = fn.mock.calls[fn.mock.calls.length - 1][0];
-  return { collections: Array.from(next.collections).sort(), groups: Array.from(next.groups).sort() };
-};
+const checkboxOf = (text: string) =>
+  rowOf(text).querySelector('input[type="checkbox"]') as HTMLInputElement;
 
-describe('SidebarFilter tree has no checkboxes', () => {
-  it('renders every row as a selectable treeitem and no checkbox in the tree', () => {
-    renderSidebar(new Set(['c1', 'c2']));
-    const tree = screen.getByRole('tree');
-    expect(tree.querySelectorAll('input[type="checkbox"]').length).toBe(0);
-    expect(screen.getAllByRole('treeitem').length).toBeGreaterThanOrEqual(5);
-    expect(rowOf('Theme').getAttribute('tabindex')).toBe('0');
-  });
-});
-
-describe('SidebarFilter All variables row', () => {
-  it('selects everything and fires onSelectAllCollections once', () => {
+describe('SidebarFilter All variables checkbox', () => {
+  it('calls onSelectAllCollections after toggling the unselected collections on', () => {
     const onSelectAllCollections = vi.fn();
-    const { onSelectionChange } = renderSidebar(new Set(['c1']), {
+    const { onCollectionToggle } = renderSidebar(new Set(['c1']), { onSelectAllCollections });
+    fireEvent.click(screen.getByLabelText('All variables'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c2']]);
+    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call it when deselecting', () => {
+    const onSelectAllCollections = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onSelectAllCollections });
+    fireEvent.click(screen.getByLabelText('All variables'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
+    expect(onSelectAllCollections).toHaveBeenCalledTimes(0);
+  });
+
+  it('keeps working without the callback', () => {
+    const { onCollectionToggle } = renderSidebar(new Set());
+    fireEvent.click(screen.getByLabelText('All variables'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c1'], ['c2']]);
+  });
+
+  it('selects all while a group is unticked under ticked collections', () => {
+    const onSelectAllCollections = vi.fn();
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), {
       selectedGroups: new Set(['c1::color']),
+      onGroupToggle,
       onSelectAllCollections,
     });
-    fireEvent.click(rowOf('All variables'));
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    expect(lastCall(onSelectionChange)).toEqual({
-      collections: ['c1', 'c2'],
-      groups: ['c1::color', 'c2::space'],
-    });
+    const root = screen.getByLabelText('All variables') as HTMLInputElement;
+    expect(root.checked).toBe(false);
+    expect(root.indeterminate).toBe(true);
+    fireEvent.click(root);
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle.mock.calls).toEqual([['c2::space']]);
     expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
   });
 
-  it('Cmd-click behaves like a plain click and it works without the callback', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1']), { selectedGroups: new Set(['c1::color']) });
-    fireEvent.click(rowOf('All variables'), { metaKey: true });
-    expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
-  });
-
-  it('is the only selected row while everything is selected', () => {
-    renderSidebar(new Set(['c1', 'c2']));
-    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('All variables').className).toContain('bg-primary/10');
-    for (const text of ['Theme', 'Primitives', 'color', 'space']) {
-      expect(rowOf(text).getAttribute('aria-selected')).toBe('false');
-      expect(rowOf(text).className).not.toContain('ring-primary');
-    }
+  it('clicking the "All variables" text does not toggle it', () => {
+    const onSelectAllCollections = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1']), { onSelectAllCollections });
+    fireEvent.click(label('All variables'));
+    fireEvent.click(rowOf('All variables'));
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onSelectAllCollections).not.toHaveBeenCalled();
   });
 });
 
-describe('SidebarFilter row selection', () => {
-  afterEach(() => {
-    currentVariables = variables;
+describe('SidebarFilter collection checkboxes', () => {
+  it('a fully checked collection unticks itself and every group', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onGroupToggle });
+    expect(checkboxOf('Theme').checked).toBe(true);
+    expect(checkboxOf('Theme').indeterminate).toBe(false);
+    fireEvent.click(checkboxOf('Theme'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c1']]);
+    expect(onGroupToggle.mock.calls).toEqual([['c1::color']]);
   });
 
-  it('plain click on a collection hides nothing: it clears filters, rings the row and focuses it', () => {
-    const onFocusPath = vi.fn();
-    const onSelectAllCollections = vi.fn();
-    const onSelectionChange = vi.fn();
-    render(
-      <StatefulSidebar
-        initial={{ collections: new Set(['c1', 'c2']), groups: new Set(['c1::color']) }}
-        onSelectionChange={onSelectionChange}
-        onFocusPath={onFocusPath}
-        onSelectAllCollections={onSelectAllCollections}
-      />
-    );
-    fireEvent.click(rowOf('Primitives'));
-    expect(lastCall(onSelectionChange)).toEqual({
-      collections: ['c1', 'c2'],
-      groups: ['c1::color', 'c2::space'],
+  it('is indeterminate while one of its groups is unticked, and a click ticks the rest', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), {
+      selectedGroups: new Set(['c2::space']),
+      onGroupToggle,
     });
-    expect(onFocusPath.mock.calls).toEqual([['c2', '']]);
-    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('Primitives').className).toContain('ring-primary');
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
-    // Clicking another collection moves the mark.
-    fireEvent.click(rowOf('Theme'));
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('false');
+    expect(checkboxOf('Theme').checked).toBe(false);
+    expect(checkboxOf('Theme').indeterminate).toBe(true);
+    fireEvent.click(checkboxOf('Theme'));
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle.mock.calls).toEqual([['c1::color']]);
   });
 
-  it('Cmd-click on a collection toggles only its mark: no selection write, no focus', () => {
-    const onFocusPath = vi.fn();
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']), { onFocusPath });
-    fireEvent.click(rowOf('Theme'), { metaKey: true });
-    fireEvent.click(rowOf('Primitives'), { ctrlKey: true });
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(rowOf('Theme'), { metaKey: true });
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
-    // The last mark stays while nothing is narrowed.
-    fireEvent.click(rowOf('Primitives'), { metaKey: true });
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
-    expect(onSelectionChange).not.toHaveBeenCalled();
-    expect(onFocusPath).not.toHaveBeenCalled();
+  it('an unticked collection ticks itself and its groups', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c2']), {
+      selectedGroups: new Set(['c2::space']),
+      onGroupToggle,
+    });
+    expect(checkboxOf('Theme').checked).toBe(false);
+    expect(checkboxOf('Theme').indeterminate).toBe(false);
+    fireEvent.click(checkboxOf('Theme'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c1']]);
+    expect(onGroupToggle.mock.calls).toEqual([['c1::color']]);
   });
 
-  it('clicking the already-selected row again deselects it like All variables', () => {
-    const onSelectAllCollections = vi.fn();
-    const onFocusPath = vi.fn();
-    render(
-      <StatefulSidebar
-        initial={{ collections: new Set(['c1', 'c2']), groups: new Set(['c1::color', 'c2::space']) }}
-        onSelectAllCollections={onSelectAllCollections}
-        onFocusPath={onFocusPath}
-      />
-    );
-    fireEvent.click(rowOf('space'));
-    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
-    expect(onSelectAllCollections).not.toHaveBeenCalled();
-    fireEvent.click(rowOf('space'));
-    expect(rowOf('space').getAttribute('aria-selected')).toBe('false');
-    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('true');
-    expect(onSelectAllCollections).toHaveBeenCalledTimes(1);
-    // Only the first click focused the graph.
-    expect(onFocusPath).toHaveBeenCalledTimes(1);
-    // A third click selects it again.
-    fireEvent.click(rowOf('space'));
-    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
+  it('a group checkbox also ticks its collection when that is off', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c2']), {
+      selectedGroups: new Set(['c2::space']),
+      onGroupToggle,
+    });
+    fireEvent.click(checkboxOf('color'));
+    expect(onGroupToggle.mock.calls).toEqual([['c1::color']]);
+    expect(onCollectionToggle.mock.calls).toEqual([['c1']]);
   });
 
-  it('a plain click on a group or All variables clears the collection marks', () => {
-    renderSidebar(new Set(['c1', 'c2']));
-    fireEvent.click(rowOf('Theme'));
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(rowOf('space'));
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
-    fireEvent.click(rowOf('Theme'));
-    fireEvent.click(rowOf('All variables'));
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
+  it('without onGroupToggle group rows have no checkbox and the collection toggles alone', () => {
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onGroupToggle: undefined });
+    expect(checkboxOf('color')).toBe(null);
+    fireEvent.click(checkboxOf('Theme'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c1']]);
   });
 
-  it('plain click on a group keeps every collection selected (others stay unfiltered)', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
-    fireEvent.click(rowOf('color'));
-    // c2 keeps all its groups; the clicked group is the only c1 key. With two
-    // collections of one group each that is "everything", so use a second group below.
-    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c1', 'c2'], groups: ['c1::color', 'c2::space'] });
-  });
-
-  it('highlights the clicked group with a ring, not the other (merely visible) collections', () => {
-    currentVariables = [
-      ...variables,
-      { id: 'v3', collectionId: 'c1', name: 'size/sm', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
-    ];
-    renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
-    fireEvent.click(rowOf('color'));
-    expect(rowOf('color').className).toContain('ring-primary');
-    expect(rowOf('color').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('size').className).not.toContain('bg-primary/10');
-    for (const text of ['Theme', 'Primitives', 'space', 'All variables']) {
-      expect(rowOf(text).getAttribute('aria-selected')).toBe('false');
-      expect(rowOf(text).className).not.toContain('ring-primary');
+  it('a click on a row, its label or its count never toggles', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onGroupToggle });
+    for (const text of ['Theme', 'color']) {
+      fireEvent.click(rowOf(text));
+      fireEvent.click(label(text));
+      fireEvent.click(rowOf(text).lastElementChild!);
     }
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
   });
 
-  it('rings only a clicked row, never one that is merely the remaining selection', () => {
-    renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
-    for (const text of ['Theme', 'Primitives', 'space', 'All variables']) {
-      expect(rowOf(text).className).not.toContain('ring-primary');
-    }
-    fireEvent.click(rowOf('Primitives'));
-    expect(rowOf('Primitives').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('Primitives').className).toContain('bg-primary/10');
-    expect(rowOf('Primitives').className).toContain('ring-primary');
-    expect(rowOf('space').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('space').className).not.toContain('ring-primary');
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('false');
-    expect(rowOf('All variables').getAttribute('aria-selected')).toBe('false');
-  });
-
-  // Theme gets a second group so one group click narrows it.
-  const withSecondGroup = () => {
-    currentVariables = [
-      ...variables,
-      { id: 'v3', collectionId: 'c1', name: 'size/sm', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
-    ];
-  };
-
-  it('Cmd-click adds a group within a collection, and narrows a fully visible one to that group', () => {
-    withSecondGroup();
-    const add = renderSidebar(new Set(['c1', 'c2']), { selectedGroups: new Set(['c1::color', 'c2::space']) });
-    fireEvent.click(rowOf('color'));
-    fireEvent.click(rowOf('size'), { metaKey: true });
-    expect(lastCall(add.onSelectionChange)).toEqual({
-      collections: ['c1', 'c2'],
-      groups: ['c1::color', 'c1::size', 'c2::space'],
-    });
-    document.body.innerHTML = '';
-
-    // Other collections stay visible; only the picked group narrows its collection.
-    const narrow = renderSidebar(new Set(['c1', 'c2']), {
-      selectedGroups: new Set(['c1::color', 'c1::size', 'c2::space']),
-    });
-    fireEvent.click(rowOf('size'), { metaKey: true });
-    expect(lastCall(narrow.onSelectionChange)).toEqual({
-      collections: ['c1', 'c2'],
-      groups: ['c1::size', 'c2::space'],
-    });
-  });
-
-  it('Cmd-click cannot remove the last selected collection', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c2']), { selectedGroups: new Set(['c2::space']) });
-    fireEvent.click(rowOf('Primitives'), { metaKey: true });
-    fireEvent.click(rowOf('space'), { metaKey: true });
-    expect(onSelectionChange).not.toHaveBeenCalled();
-  });
-
-  it('Enter and Space select, with the modifier they toggle', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
-    // fireEvent returns false when the handler called preventDefault (no scroll).
-    expect(fireEvent.keyDown(rowOf('Primitives'), { key: 'Enter' })).toBe(false);
-    expect(lastCall(onSelectionChange).collections).toEqual(['c1', 'c2']);
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    // A modified collection row only flips its mark.
-    expect(fireEvent.keyDown(rowOf('Theme'), { key: ' ', metaKey: true })).toBe(false);
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    expect(rowOf('Theme').getAttribute('aria-selected')).toBe('true');
-    fireEvent.keyDown(rowOf('Theme'), { key: 'a' });
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-  });
-
-  it('chevrons expand and collapse without changing the selection', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+  it('chevrons expand and collapse without toggling', () => {
+    const onGroupToggle = vi.fn();
+    const { onCollectionToggle } = renderSidebar(new Set(['c1', 'c2']), { onGroupToggle });
     fireEvent.click(screen.getByLabelText('Collapse Theme'));
     expect(screen.queryByText('color', { selector: 'span' })).toBe(null);
     fireEvent.keyDown(screen.getByLabelText('Expand Theme'), { key: 'Enter' });
     fireEvent.click(screen.getByLabelText('Expand Theme'));
     expect(screen.getByText('color', { selector: 'span' })).toBeTruthy();
-    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
   });
 
-  it('search forces the tree open and matching rows still select', () => {
-    const { onSelectionChange } = renderSidebar(new Set(['c1', 'c2']));
+  it('search forces the tree open and matching rows still toggle', () => {
+    const onGroupToggle = vi.fn();
+    renderSidebar(new Set(['c1', 'c2']), { onGroupToggle });
     fireEvent.change(screen.getByPlaceholderText('Search collections & groups...'), {
       target: { value: 'space' },
     });
     expect(screen.queryByText('Theme', { selector: 'span' })).toBe(null);
-    fireEvent.click(rowOf('space'));
-    expect(lastCall(onSelectionChange)).toEqual({ collections: ['c1', 'c2'], groups: ['c1::color', 'c2::space'] });
+    fireEvent.click(checkboxOf('space'));
+    expect(onGroupToggle.mock.calls).toEqual([['c2::space']]);
   });
 
   it('shows the variable counts', () => {
@@ -351,21 +226,23 @@ const focusVariables: VariableData[] = [
 const FOCUS_GROUPS = new Set(['c3::badge/color/error', 'c3::button']);
 
 function renderFocusSidebar(props: Partial<React.ComponentProps<typeof SidebarFilter>> = {}) {
-  const onSelectionChange = vi.fn();
+  const onCollectionToggle = vi.fn();
+  const onGroupToggle = vi.fn();
   render(
     <SidebarFilter
       selectedModeId="m3"
       onModeChange={() => {}}
       selectedCollections={new Set(['c3'])}
+      onCollectionToggle={onCollectionToggle}
       selectedGroups={FOCUS_GROUPS}
-      onSelectionChange={onSelectionChange}
+      onGroupToggle={onGroupToggle}
       {...props}
     />
   );
-  return { onSelectionChange };
+  return { onCollectionToggle, onGroupToggle };
 }
 
-describe('SidebarFilter folder rows and focus', () => {
+describe('SidebarFilter focus labels', () => {
   beforeEach(() => {
     currentCollections = focusCollections;
     currentVariables = focusVariables;
@@ -375,60 +252,83 @@ describe('SidebarFilter folder rows and focus', () => {
     currentVariables = variables;
   });
 
-  it('a folder row selects its whole subtree, a leaf only itself', () => {
-    const { onSelectionChange } = renderFocusSidebar();
-    fireEvent.click(rowOf('badge'));
-    expect(lastCall(onSelectionChange)).toEqual({
-      collections: ['c3'],
-      groups: ['c3::badge/color/error'],
-    });
-    fireEvent.click(rowOf('button'));
-    expect(lastCall(onSelectionChange).groups).toEqual(['c3::button']);
-  });
-
   it.each([
     ['Components', ''],
     ['badge', 'badge'],
     ['color', 'badge/color'],
     ['error', 'badge/color/error'],
     ['button', 'button'],
-  ])('plain click on %s selects then focuses path "%s"', (text, path) => {
+  ])('click on %s focuses path "%s"', (text, path) => {
     const onFocusPath = vi.fn();
-    const { onSelectionChange } = renderFocusSidebar({ onFocusPath });
-    expect(rowOf(text).getAttribute('title')).toBe('Click to select and find in graph');
-    fireEvent.click(rowOf(text));
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    renderFocusSidebar({ onFocusPath });
+    const el = label(text);
+    expect(el.getAttribute('role')).toBe('button');
+    expect(el.getAttribute('tabindex')).toBe('0');
+    expect(el.getAttribute('title')).toBe('Click to find in graph');
+    fireEvent.click(el);
     expect(onFocusPath.mock.calls).toEqual([['c3', path]]);
-    // Selection is written before the camera is asked to move.
-    expect(onSelectionChange.mock.invocationCallOrder[0]).toBeLessThan(onFocusPath.mock.invocationCallOrder[0]);
   });
 
-  it('Enter and Space focus too; Cmd/Ctrl-click toggles without moving the camera', () => {
-    const onFocusPath = vi.fn();
-    const { onSelectionChange } = renderFocusSidebar({ onFocusPath, selectedGroups: new Set(['c3::button']) });
-    fireEvent.keyDown(rowOf('error'), { key: 'Enter' });
-    fireEvent.keyDown(rowOf('error'), { key: ' ' });
-    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge/color/error'], ['c3', 'badge/color/error']]);
+  it('names the view in the label title', () => {
+    renderFocusSidebar({ onFocusPath: vi.fn(), focusNoun: 'table' });
+    expect(label('badge').getAttribute('title')).toBe('Click to find in table');
+  });
 
-    onFocusPath.mockClear();
-    onSelectionChange.mockClear();
-    fireEvent.click(rowOf('error'), { metaKey: true });
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  it.each([
+    ['Enter', 'Components', ''],
+    [' ', 'Components', ''],
+    ['Enter', 'badge', 'badge'],
+    [' ', 'color', 'badge/color'],
+    ['Enter', 'error', 'badge/color/error'],
+  ])('key "%s" on %s focuses path "%s"', (key, text, path) => {
+    const onFocusPath = vi.fn();
+    renderFocusSidebar({ onFocusPath });
+    const el = label(text);
+    // fireEvent returns false when the handler called preventDefault (no scroll).
+    expect(fireEvent.keyDown(el, { key })).toBe(false);
+    expect(onFocusPath.mock.calls).toEqual([['c3', path]]);
+  });
+
+  it('ignores other keys', () => {
+    const onFocusPath = vi.fn();
+    renderFocusSidebar({ onFocusPath });
+    fireEvent.keyDown(label('badge'), { key: 'a' });
     expect(onFocusPath).not.toHaveBeenCalled();
   });
 
-  it('a row with nothing on the canvas is muted but still selects (and asks to focus)', () => {
+  it('clicking a label does not toggle its checkbox', () => {
     const onFocusPath = vi.fn();
-    const { onSelectionChange } = renderFocusSidebar({
+    const { onCollectionToggle, onGroupToggle } = renderFocusSidebar({ onFocusPath });
+    fireEvent.click(label('Components'));
+    fireEvent.keyDown(label('Components'), { key: ' ' });
+    fireEvent.click(label('badge'));
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
+    expect(onFocusPath).toHaveBeenCalledTimes(3);
+  });
+
+  it('a disabled row is muted and inert', () => {
+    const onFocusPath = vi.fn();
+    const { onCollectionToggle } = renderFocusSidebar({
       onFocusPath,
-      isPathFocusable: (collectionId, path) => !(collectionId === 'c3' && path === 'badge'),
+      isPathFocusable: (collectionId, path) => !(collectionId === 'c3' && (path === 'badge' || path === '')),
     });
-    expect(label('badge').className).toContain('text-text-secondary');
-    expect(rowOf('badge').getAttribute('title')).toBe('Not shown in graph');
-    expect(label('color').className).not.toContain('text-text-secondary');
-    fireEvent.click(rowOf('badge'));
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge']]);
+    for (const text of ['badge', 'Components']) {
+      const el = label(text);
+      expect(el.getAttribute('role')).toBe(null);
+      expect(el.getAttribute('aria-disabled')).toBe('true');
+      expect(el.getAttribute('tabindex')).toBe('-1');
+      expect(el.getAttribute('title')).toBe('Not shown in graph');
+      expect(el.className).toContain('text-text-secondary');
+      expect(el.className).not.toContain('hover:underline');
+      fireEvent.click(el);
+      fireEvent.keyDown(el, { key: 'Enter' });
+    }
+    expect(onFocusPath).not.toHaveBeenCalled();
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    // Other rows stay focusable.
+    fireEvent.click(label('color'));
+    expect(onFocusPath.mock.calls).toEqual([['c3', 'badge/color']]);
   });
 
   it('rings the row named by focusedRowKey', () => {
@@ -455,238 +355,54 @@ describe('SidebarFilter folder rows and focus', () => {
     expect(rowOf('error').className).not.toContain('ring-primary');
   });
 
-  it('drops the focus ring of a row whose variables are no longer selected', () => {
-    renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::button', selectedGroups: new Set(['c3::badge/color/error']) });
-    expect(rowOf('button').className).not.toContain('ring-primary');
-    document.body.innerHTML = '';
-    renderFocusSidebar({ onFocusPath: vi.fn(), focusedRowKey: 'c3::', selectedCollections: new Set() });
-    expect(rowOf('Components').className).not.toContain('ring-primary');
-  });
-
   it('still rings a group highlighted from the canvas', () => {
     renderFocusSidebar({ onFocusPath: vi.fn(), highlightedGroupKey: 'group:c3::badge/color/error' });
     expect(rowOf('error').className).toContain('ring-primary');
   });
 
-  it('without onFocusPath a click only selects and rows have no title', () => {
-    const { onSelectionChange } = renderFocusSidebar();
-    for (const text of ['Components', 'badge', 'color', 'error']) {
-      expect(rowOf(text).getAttribute('title')).toBe(null);
-    }
-    fireEvent.click(rowOf('Components'));
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-  });
-});
-
-// Rings follow the rows the user clicked, not the selection: folder `action`
-// holds only group `action/height` (same variables), and the selection lives
-// in a parent (as in TableView / GroupedGraph) so it can also change from
-// outside the sidebar (Hide unused, Show all, plugin undo).
-const ringCollections: CollectionData[] = [
-  { id: 'r1', name: 'Tokens', modes: [{ modeId: 'm1', name: 'Default' }] },
-  { id: 'r2', name: 'Sizes', modes: [{ modeId: 'm2', name: 'Default' }] },
-];
-const ringVariables = (ids = ['r1', 'r2']): VariableData[] => [
-  { id: 'h1', collectionId: ids[0], name: 'action/height/1', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
-  { id: 'h2', collectionId: ids[0], name: 'action/height/2', resolvedType: 'FLOAT', value: '2', valuesByMode: { m1: '2' } },
-  { id: 'h3', collectionId: ids[0], name: 'action/height/3', resolvedType: 'FLOAT', value: '3', valuesByMode: { m1: '3' } },
-  { id: 's1', collectionId: ids[0], name: 'size/sm', resolvedType: 'FLOAT', value: '4', valuesByMode: { m1: '4' } },
-  { id: 'g1', collectionId: ids[1], name: 'gap/1', resolvedType: 'FLOAT', value: '8', valuesByMode: { m2: '8' } },
-];
-const everythingOf = (ids = ['r1', 'r2']) => ({
-  collections: new Set(ids),
-  groups: new Set([`${ids[0]}::action/height`, `${ids[0]}::size`, `${ids[1]}::gap`]),
-});
-
-const RingHarness = () => <StatefulSidebar initial={everythingOf()} />;
-
-const ringed = () =>
-  screen
-    .getAllByRole('treeitem')
-    .filter(row => row.className.includes('ring-primary'))
-    .map(row => row.querySelector('span')?.textContent);
-
-describe('SidebarFilter rings exactly the clicked rows', () => {
-  beforeEach(() => {
-    currentCollections = ringCollections;
-    currentVariables = ringVariables();
-  });
-  afterEach(() => {
-    currentCollections = collections;
-    currentVariables = variables;
+  it('checkboxes and expand arrows behave as before', () => {
+    const onFocusPath = vi.fn();
+    const { onCollectionToggle, onGroupToggle } = renderFocusSidebar({ onFocusPath });
+    // Folder checkbox: badge -> its only real descendant group goes off.
+    expect(checkboxOf('badge').checked).toBe(true);
+    fireEvent.click(checkboxOf('badge'));
+    expect(onGroupToggle.mock.calls).toEqual([['c3::badge/color/error']]);
+    // Collection checkbox: fully on -> collection + every group off.
+    onGroupToggle.mockClear();
+    fireEvent.click(checkboxOf('Components'));
+    expect(onCollectionToggle.mock.calls).toEqual([['c3']]);
+    expect(onGroupToggle.mock.calls).toEqual([['c3::badge/color/error'], ['c3::button']]);
+    // Expand arrow on `badge` collapses its subtree.
+    fireEvent.click(screen.getByLabelText('Collapse badge'));
+    expect(screen.queryByText('color', { selector: 'span' })).toBe(null);
+    // Collection arrow collapses the whole tree.
+    fireEvent.click(screen.getByLabelText('Collapse Components'));
+    expect(screen.queryByText('badge', { selector: 'span' })).toBe(null);
+    expect(onFocusPath).not.toHaveBeenCalled();
   });
 
-  it('clicking a group rings only that group, not its single-child parent folder', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    expect(ringed()).toEqual(['height']);
-    expect(rowOf('action').getAttribute('aria-selected')).toBe('false');
-    expect(rowOf('action').className).not.toContain('bg-primary/10');
-    // Enter is the same as a click.
-    fireEvent.click(rowOf('All variables'));
-    fireEvent.keyDown(rowOf('height'), { key: 'Enter' });
-    expect(ringed()).toEqual(['height']);
-  });
-
-  it('clicking the parent folder rings only the parent; the child gets the fill', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('action'));
-    expect(ringed()).toEqual(['action']);
-    expect(rowOf('height').getAttribute('aria-selected')).toBe('true');
-    expect(rowOf('height').className).toContain('bg-primary/10');
-    expect(rowOf('size').getAttribute('aria-selected')).toBe('false');
-  });
-
-  it('Cmd/Ctrl-click rings each clicked row and un-rings it again', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    fireEvent.click(rowOf('size'), { metaKey: true });
-    fireEvent.click(rowOf('gap'), { ctrlKey: true });
-    expect(ringed()).toEqual(['height', 'size', 'gap']);
-    // The parent covering the same variables takes over the child's ring.
-    fireEvent.click(rowOf('action'), { metaKey: true });
-    expect(ringed()).toEqual(['action', 'size', 'gap']);
-    fireEvent.click(rowOf('size'), { metaKey: true });
-    expect(ringed()).toEqual(['action', 'gap']);
-    expect(rowOf('size').getAttribute('aria-selected')).toBe('false');
-    // Taking the folder out takes the group under it along.
-    fireEvent.click(rowOf('action'), { metaKey: true });
-    expect(ringed()).toEqual(['gap']);
-    expect(rowOf('height').getAttribute('aria-selected')).toBe('false');
-  });
-
-  it('Cmd/Ctrl-click on a child of a clicked folder takes it out; the ring moves to the children left', () => {
+  it('a folder is indeterminate while only part of its groups is ticked', () => {
     currentVariables = [
-      ...ringVariables(),
-      { id: 'b1', collectionId: 'r1', name: 'btn/primary/bg', resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } },
-      { id: 'b2', collectionId: 'r1', name: 'btn/ghost/bg', resolvedType: 'FLOAT', value: '2', valuesByMode: { m1: '2' } },
+      ...focusVariables,
+      { id: 'f4', collectionId: 'c3', name: 'badge/size/sm', resolvedType: 'FLOAT', value: '2', valuesByMode: { m3: '2' } },
     ];
-    const onSelectionChange = vi.fn();
-    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r1::size', 'r1::btn/primary', 'r1::btn/ghost', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
-    fireEvent.click(rowOf('btn'));
-    fireEvent.click(rowOf('primary'), { metaKey: true });
-    expect(lastCall(onSelectionChange)).toEqual({ collections: ['r1', 'r2'], groups: ['r1::btn/ghost', 'r2::gap'] });
-    expect(ringed()).toEqual(['ghost']);
-    expect(rowOf('primary').getAttribute('aria-selected')).toBe('false');
-    // Cmd/Ctrl-click again brings it back, ringed next to its sibling.
-    fireEvent.click(rowOf('primary'), { ctrlKey: true });
-    expect(lastCall(onSelectionChange)).toEqual({ collections: ['r1', 'r2'], groups: ['r1::btn/ghost', 'r1::btn/primary', 'r2::gap'] });
-    expect(ringed()).toEqual(['ghost', 'primary']);
+    renderFocusSidebar();
+    expect(checkboxOf('badge').checked).toBe(false);
+    expect(checkboxOf('badge').indeterminate).toBe(true);
+    expect(checkboxOf('error').checked).toBe(true);
+    expect(checkboxOf('size').checked).toBe(false);
   });
 
-  it('a ring hidden by Hide unused comes back after Show all, even after a Cmd/Ctrl-click meanwhile', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    const narrowed = { collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r2::gap']) };
-    act(() => setOutside({ collections: new Set(['r2']), groups: new Set(['r2::gap']) }));
-    fireEvent.click(rowOf('Sizes'), { metaKey: true });
-    expect(ringed()).toEqual(['Sizes']);
-    act(() => setOutside(narrowed));
-    expect(ringed()).toEqual(['height', 'Sizes']);
-  });
-
-  it('a Cmd/Ctrl-clicked group whose collection is fully shown again (Show all) loses its ring', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'), { metaKey: true });
-    expect(ringed()).toEqual(['height']);
-    act(() => setOutside(everythingOf()));
-    expect(ringed()).toEqual(['All variables']);
-  });
-
-  it('a ring hidden by Hide unused still counts: a Cmd/Ctrl-clicked group joins its collection', () => {
-    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
-    currentVariables = [v('x1', 'a/b/c/1'), v('x2', 'a/b/d/1'), v('x3', 'a/e/1'), v('x4', 'f/1'), ringVariables()[4]];
-    const onSelectionChange = vi.fn();
-    const all = ['r1::a/b/c', 'r1::a/b/d', 'r1::a/e', 'r1::f', 'r2::gap'];
-    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(all) }} onSelectionChange={onSelectionChange} />);
-    fireEvent.click(rowOf('a'));
-    // Hide unused unchecks a/b/c: the `a` ring hides.
-    act(() => setOutside({ collections: new Set(['r1', 'r2']), groups: new Set(['r1::a/b/d', 'r1::a/e', 'r2::gap']) }));
-    expect(ringed()).toEqual([]);
-    fireEvent.click(rowOf('f'), { metaKey: true });
-    expect(lastCall(onSelectionChange).groups).toEqual(['r1::a/b/d', 'r1::a/e', 'r1::f', 'r2::gap']);
-    expect(ringed()).toEqual(['f']);
-    // Show all re-checks a/b/c.
-    act(() => setOutside({ collections: new Set(['r1', 'r2']), groups: new Set(all) }));
-    expect(ringed()).toEqual(['a', 'f']);
-  });
-
-  it('a folder with variables of its own stays ringed for them when its subgroups leave', () => {
-    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
-    currentVariables = [v('y1', 'btn/x'), v('y2', 'btn/a/1'), v('y3', 'btn/b/1'), v('y4', 'z/1'), ringVariables()[4]];
-    const onSelectionChange = vi.fn();
-    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::btn', 'r1::btn/a', 'r1::btn/b', 'r1::z', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
-    fireEvent.click(rowOf('btn'));
-    fireEvent.click(rowOf('a'), { metaKey: true });
-    // The folder's ring for its own variables is dashed, not the solid ring.
-    expect(ringed()).toEqual(['b']);
-    expect(rowOf('btn').className).toContain('outline-dashed');
-    expect(rowOf('btn').className).toContain('outline-primary');
-    expect(rowOf('btn').getAttribute('aria-selected')).toBe('true');
-    // Only its own variables: no fill on the subgroup rows.
-    expect(rowOf('a').getAttribute('aria-selected')).toBe('false');
-    fireEvent.click(rowOf('b'), { metaKey: true });
-    expect(lastCall(onSelectionChange).groups).toEqual(['r1::btn', 'r2::gap']);
-    expect(rowOf('btn').className).toContain('outline-dashed');
-    expect(rowOf('b').getAttribute('aria-selected')).toBe('false');
-    // A plain click selects the whole folder again, solid ring.
-    fireEvent.click(rowOf('btn'));
-    expect(ringed()).toEqual(['btn']);
-    expect(rowOf('btn').className).not.toContain('outline-dashed');
-  });
-
-  it('Cmd/Ctrl-click on a folder ringed for its own variables takes them out', () => {
-    const v = (id: string, name: string): VariableData => ({ id, collectionId: 'r1', name, resolvedType: 'FLOAT', value: '1', valuesByMode: { m1: '1' } });
-    currentVariables = [v('y1', 'btn/x'), v('y2', 'btn/a/1'), v('y3', 'btn/b/1'), v('y4', 'z/1'), ringVariables()[4]];
-    const onSelectionChange = vi.fn();
-    render(<StatefulSidebar initial={{ collections: new Set(['r1', 'r2']), groups: new Set(['r1::btn', 'r1::btn/a', 'r1::btn/b', 'r1::z', 'r2::gap']) }} onSelectionChange={onSelectionChange} />);
-    fireEvent.click(rowOf('btn'));
-    fireEvent.click(rowOf('a'), { metaKey: true });
-    fireEvent.click(rowOf('btn'), { metaKey: true });
-    expect(lastCall(onSelectionChange).groups).toEqual(['r1::btn/b', 'r2::gap']);
-    expect(ringed()).toEqual(['b']);
-    expect(rowOf('btn').className).not.toContain('outline-dashed');
-    expect(rowOf('btn').getAttribute('aria-selected')).toBe('false');
-  });
-
-  it('ringing a folder drops the rings under it: rows under a ring only get the fill', () => {
-    // The graph still focuses the row plain-clicked before (focusedRowKey).
-    render(<StatefulSidebar initial={everythingOf()} onFocusPath={vi.fn()} focusedRowKey="r1::action/height" />);
-    fireEvent.click(rowOf('height'));
-    fireEvent.click(rowOf('action'), { metaKey: true });
-    expect(ringed()).toEqual(['action']);
-    expect(rowOf('height').className).toContain('bg-primary/10');
-  });
-
-  it('All variables clears every ring', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    fireEvent.click(rowOf('gap'), { metaKey: true });
-    fireEvent.click(rowOf('All variables'));
-    expect(ringed()).toEqual(['All variables']);
-  });
-
-  it('a row whose keys are unchecked from outside loses its ring, and gets it back when they return', () => {
-    render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    const narrowed = { collections: new Set(['r1', 'r2']), groups: new Set(['r1::action/height', 'r2::gap']) };
-    // Hide unused unchecks the clicked group.
-    act(() => setOutside({ collections: new Set(['r2']), groups: new Set(['r2::gap']) }));
-    expect(ringed()).toEqual([]);
-    // Show all re-checks it.
-    act(() => setOutside(narrowed));
-    expect(ringed()).toEqual(['height']);
-  });
-
-  it('drops the rings when a plugin undo recreates every id', () => {
-    const { rerender } = render(<RingHarness />);
-    fireEvent.click(rowOf('height'));
-    fireEvent.click(rowOf('Sizes'), { metaKey: true });
-    expect(ringed()).toEqual(['height', 'Sizes']);
-    currentCollections = ringCollections.map(c => ({ ...c, id: `${c.id}-new` }));
-    currentVariables = ringVariables(['r1-new', 'r2-new']);
-    act(() => setOutside(everythingOf(['r1-new', 'r2-new'])));
-    rerender(<RingHarness />);
-    expect(ringed()).toEqual(['All variables']);
+  it('without onFocusPath labels are plain text and a click toggles nothing', () => {
+    const { onCollectionToggle, onGroupToggle } = renderFocusSidebar();
+    expect(screen.queryAllByRole('button').filter(b => b.tagName === 'SPAN')).toEqual([]);
+    for (const text of ['Components', 'badge', 'color', 'error']) {
+      expect(label(text).getAttribute('tabindex')).toBe(null);
+      expect(label(text).getAttribute('title')).toBe(null);
+    }
+    fireEvent.click(label('Components'));
+    fireEvent.click(label('badge'));
+    expect(onCollectionToggle).not.toHaveBeenCalled();
+    expect(onGroupToggle).not.toHaveBeenCalled();
   });
 });

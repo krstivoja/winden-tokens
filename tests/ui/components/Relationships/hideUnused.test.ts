@@ -13,7 +13,6 @@ import {
   isEdgeOffPath,
   isTierLabelHidden,
   pruneOwnToExisting,
-  releaseCollectionsFromOwn,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import type { HidingLayout } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import { isCardHidden } from '../../../../src/ui/components/Relationships/GroupedGraph/utils';
@@ -467,21 +466,6 @@ describe('extendHidingLayout', () => {
       .collectionOrder).toBe(reordered);
     // No order anywhere → no key.
     expect('collectionOrder' in extendHidingLayout(null, { activation: 'a', positions: {}, tierLabels: [] }, null)).toBe(false);
-  });
-});
-
-describe('releaseCollectionsFromOwn', () => {
-  const keys = new Map([['c1', ['c1::a', 'c1::b']], ['c2', ['c2::x', 'c2::y']]]);
-  const own = { groups: new Set(['c1::a', 'c2::x', 'c2::y']), collections: new Set(['c2', 'c3']) };
-
-  it('drops only the collections the click turns on and every group key of theirs', () => {
-    const next = releaseCollectionsFromOwn(own, new Set(['c2']), keys);
-    expect(Array.from(next.groups)).toEqual(['c1::a']);
-    expect(Array.from(next.collections)).toEqual(['c3']);
-  });
-
-  it('keeps `own` as is when the click turns nothing on', () => {
-    expect(releaseCollectionsFromOwn(own, new Set(), keys)).toBe(own);
   });
 });
 

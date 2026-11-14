@@ -12,7 +12,8 @@
 //   `path:` (empty) is the collection root card or the collection's own frame.
 // - `chain:<sourceGroupName>` — a managed chain (source → shader → shades).
 //
-// Pure functions only; no y is ever stored for a column unit.
+// Pure functions only; no y is ever stored for a column unit — only an
+// optional whole-column `offsetY` (the column's frame dragged down).
 
 import { compareItems as compareNatural } from './columnLayout';
 import type { ColumnItem } from './columnLayout';
@@ -29,6 +30,11 @@ export interface ColumnOrderEntry {
   name: string;
   /** Item keys top to bottom (see getColumnItemKey). */
   items: string[];
+  /**
+   * How far the whole column sits below y = 0 (the user dragged its frame
+   * down). Present only when above 0; absent means 0.
+   */
+  offsetY?: number;
 }
 
 export interface ColumnOrderRecord {
@@ -61,14 +67,22 @@ export function parseColumnOrder(raw: unknown): ColumnOrderRecord | null {
   const columns: ColumnOrderEntry[] = [];
   for (const entry of candidate.columns) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
-    const { id, name, items } = entry as { id?: unknown; name?: unknown; items?: unknown };
+    const { id, name, items, offsetY } = entry as { id?: unknown; name?: unknown; items?: unknown; offsetY?: unknown };
     if (typeof id !== 'string' || typeof name !== 'string' || !Array.isArray(items)) return null;
     if (!items.every(key => typeof key === 'string')) return null;
     if (seenIds.has(id)) continue;
     seenIds.add(id);
-    columns.push({ id, name, items: Array.from(new Set(items as string[])) });
+    const parsed: ColumnOrderEntry = { id, name, items: Array.from(new Set(items as string[])) };
+    // A bad offset is dropped (offset 0), never a reason to reject the entry.
+    if (isValidOffset(offsetY)) parsed.offsetY = offsetY;
+    columns.push(parsed);
   }
   return { v: 1, columns };
+}
+
+/** A storable column offset: a finite number above 0. */
+function isValidOffset(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 /** `chain:<sourceGroupName>` for a managed chain, otherwise `path:<path>`. */
@@ -94,6 +108,23 @@ export function matchColumnOrders(
   if (!record) return out;
   matchColumnEntries(collections, record.columns).forEach((index, collectionId) => {
     out.set(collectionId, record.columns[index].items);
+  });
+  return out;
+}
+
+/**
+ * Stored column offset per live collection id, matched exactly like
+ * matchColumnOrders. Only offsets above 0 are present (absent = 0).
+ */
+export function matchColumnOffsets(
+  collections: { id: string; name: string }[],
+  record: ColumnOrderRecord | null
+): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!record) return out;
+  matchColumnEntries(collections, record.columns).forEach((index, collectionId) => {
+    const offsetY = record.columns[index].offsetY;
+    if (isValidOffset(offsetY)) out.set(collectionId, offsetY);
   });
   return out;
 }
@@ -271,8 +302,8 @@ export function moveItems(
  * and name. The column's entry is the one matchColumnOrders gives
  * `collection` among the `live` collections: by id, else a stale entry (its
  * id not live, e.g. after an undo) by name — never the entry of another live
- * collection that shares the name. It keeps its place, or is appended. Other
- * columns pass through verbatim. Never mutates `record`.
+ * collection that shares the name. It keeps its place and its `offsetY`, or
+ * is appended. Other columns pass through verbatim. Never mutates `record`.
  */
 export function writeColumnOrder(
   record: ColumnOrderRecord | null,
@@ -280,14 +311,43 @@ export function writeColumnOrder(
   order: string[],
   live: { id: string; name: string }[]
 ): ColumnOrderRecord {
+  return writeColumnEntry(record, collection, live, previous => previous?.offsetY, order);
+}
+
+/**
+ * The record with `collection`'s column offset set to `offsetY` (stored only
+ * when above 0; 0 or less writes the entry without one) and its items set to
+ * `items` (the caller's resolved live order for that column). Same matching,
+ * placement and pass-through as writeColumnOrder. Never mutates `record`.
+ */
+export function writeColumnOffset(
+  record: ColumnOrderRecord | null,
+  collection: { id: string; name: string },
+  offsetY: number,
+  items: string[],
+  live: { id: string; name: string }[]
+): ColumnOrderRecord {
+  return writeColumnEntry(record, collection, live, () => offsetY, items);
+}
+
+/** Shared body of writeColumnOrder / writeColumnOffset. */
+function writeColumnEntry(
+  record: ColumnOrderRecord | null,
+  collection: { id: string; name: string },
+  live: { id: string; name: string }[],
+  offsetOf: (previous: ColumnOrderEntry | undefined) => number | undefined,
+  items: string[]
+): ColumnOrderRecord {
   const columns = record ? record.columns.slice() : [];
+  const liveWithTarget = live.some(c => c.id === collection.id) ? live : [...live, collection];
+  const at = matchColumnEntries(liveWithTarget, columns).get(collection.id);
   const entry: ColumnOrderEntry = {
     id: collection.id,
     name: collection.name,
-    items: Array.from(new Set(order)),
+    items: Array.from(new Set(items)),
   };
-  const liveWithTarget = live.some(c => c.id === collection.id) ? live : [...live, collection];
-  const at = matchColumnEntries(liveWithTarget, columns).get(collection.id);
+  const offsetY = offsetOf(at === undefined ? undefined : columns[at]);
+  if (isValidOffset(offsetY)) entry.offsetY = offsetY;
   if (at === undefined) columns.push(entry);
   else columns[at] = entry;
   return { v: 1, columns };

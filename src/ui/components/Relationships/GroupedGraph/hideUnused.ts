@@ -284,27 +284,6 @@ export function applySidebarUncheck(
 }
 
 /**
- * `own` without the collections a sidebar click selects while they were off,
- * and without every group key of those collections. That click is the
- * user's whole choice for those collections, so hiding ending must not
- * re-check anything of them on top of it; what hide-unused unchecked in the
- * other collections stays held and comes back when hiding ends.
- */
-export function releaseCollectionsFromOwn(
-  own: SidebarSelection,
-  collectionIds: ReadonlySet<string>,
-  groupKeysByCollection: ReadonlyMap<string, readonly string[]>
-): SidebarSelection {
-  if (collectionIds.size === 0) return own;
-  const released = new Set<string>();
-  collectionIds.forEach(id => groupKeysByCollection.get(id)?.forEach(k => released.add(k)));
-  return {
-    groups: new Set(Array.from(own.groups).filter(k => !released.has(k))),
-    collections: new Set(Array.from(own.collections).filter(id => !collectionIds.has(id))),
-  };
-}
-
-/**
  * `own` cut down to collections and group keys that still exist. A plugin
  * undo deletes and recreates every collection and variable, so every id —
  * and with it every group key — changes; a held key from before it must not
@@ -322,16 +301,6 @@ export function pruneOwnToExisting(
   return groups.length === own.groups.size && collections.length === own.collections.size
     ? own
     : { groups: new Set(groups), collections: new Set(collections) };
-}
-
-/**
- * The group keys that count as selected for the loose-variable rule while
- * hiding: only what hide-unused itself unchecked (`own`), never the whole
- * plan, so keys the user had not selected stay unselected and their
- * narrowing survives. Undefined when not hiding.
- */
-export function getHideUnusedGroupKeys(hiding: boolean, own: SidebarSelection): Set<string> | undefined {
-  return hiding ? own.groups : undefined;
 }
 
 /**

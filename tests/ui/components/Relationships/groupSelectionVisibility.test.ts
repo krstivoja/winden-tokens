@@ -7,10 +7,8 @@ import type { CardVisibilityFilters } from '../../../../src/ui/components/Relati
 import {
   planSidebarUncheck,
   applySidebarUncheck,
-  getHideUnusedGroupKeys,
 } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
 import type { HighlightPath } from '../../../../src/ui/components/Relationships/GroupedGraph/hideUnused';
-import { getGroupKeysByCollection } from '../../../../src/ui/utils/groupFilters';
 import type { VariableData } from '../../../../src/ui/types';
 import type { GroupData, VariableNode } from '../../../../src/ui/components/Relationships/GroupedGraph/types';
 
@@ -41,7 +39,6 @@ const variables = [
   source('o', 'c2', 'spacing/small'),
 ];
 const byId = new Map(variables.map(v => [v.id, v]));
-const keys = getGroupKeysByCollection(variables);
 
 const bg = card('c1', 'color/background', ['a'], ['color/background/primary']);
 const checkbox = card('c1', 'checkbox/color', ['b'], ['checkbox/color/unchecked']);
@@ -58,38 +55,33 @@ const filters = (selectedGroups: string[], extra: Partial<CardVisibilityFilters>
   selectedTypes: new Set(['COLOR']),
   selectedGroups: new Set(selectedGroups),
   variablesById: byId,
-  groupKeysByCollection: keys,
   ...extra,
 });
 
-// What a click on c1's "color/background" row selects: that key, plus all of c2's.
+// Only c1's "color/background" group checked in c1; c2 fully checked.
 const clickedBackground = ['c1::color/background', 'c2::spacing'];
 
 describe('graph cards follow the sidebar group selection', () => {
-  it('keeps only the clicked group inside its collection', () => {
+  it('keeps only the checked group inside its collection', () => {
     const f = filters(clickedBackground);
     expect(isCardHidden(bg, f)).toBe(false);
     expect(isCardHidden(checkbox, f)).toBe(true);
   });
 
-  it('hides the collection root card with loose variables until every group is selected', () => {
-    expect(isCardHidden(rootC1, filters(clickedBackground))).toBe(true);
+  it('keeps the collection root card with loose variables whatever groups are checked', () => {
+    expect(isCardHidden(rootC1, filters(clickedBackground))).toBe(false);
+    expect(isCardHidden(rootC1, filters([]))).toBe(false);
     expect(isCardHidden(rootC1, filters(['c1::color/background', 'c1::checkbox/color', 'c2::spacing']))).toBe(false);
+  });
+
+  it('hides the collection root card when its collection is unchecked', () => {
+    expect(isCardHidden(rootC1, filters(clickedBackground, { selectedCollections: new Set(['c2']) }))).toBe(true);
   });
 
   it('leaves other collections fully visible', () => {
     const f = filters(clickedBackground);
     expect(isCardHidden(other, f)).toBe(false);
     expect(isCardHidden(rootC2, f)).toBe(false);
-  });
-
-  it('does not hide a root card for keys that Hide unused unchecked', () => {
-    const f = filters(['c1::color/background', 'c2::spacing'], {
-      hideUnusedGroupKeys: new Set(['c1::checkbox/color']),
-    });
-    expect(isCardHidden(rootC1, f)).toBe(false);
-    // The group card itself is still the filter's to hide.
-    expect(isCardHidden(checkbox, f)).toBe(true);
   });
 });
 
@@ -102,7 +94,6 @@ describe('Hide unused keeps the sidebar narrowing', () => {
     source('b2', 'B', 'btn/x'),
     source('b3', 'B', 'card'),
   ];
-  const aKeys = getGroupKeysByCollection(vars);
   const accent = card('A', 'accent', ['a1'], ['accent/x']);
   const neutral = card('A', 'neutral', ['a2'], ['neutral/x']);
   const brand = card('B', 'brand', ['b1'], ['brand/x']);
@@ -127,11 +118,15 @@ describe('Hide unused keeps the sidebar narrowing', () => {
       selectedTypes: new Set(['COLOR']),
       selectedGroups: next.groups,
       variablesById: new Map(vars.map(v => [v.id, v])),
-      groupKeysByCollection: aKeys,
-      hideUnusedGroupKeys: getHideUnusedGroupKeys(true, own),
     };
+    // A stays narrowed to accent: neutral is not checked back on.
+    expect(next.groups.has('A::neutral')).toBe(false);
+    expect(own.groups.has('A::neutral')).toBe(false);
+    expect(isCardHidden(neutral, f)).toBe(true);
+    // Nothing of A is on the path, so A itself is unchecked and its root goes
+    // with it. B's root card stays: loose rows ignore the group checkboxes.
+    expect(next.collections.has('A')).toBe(false);
     expect(isCardHidden(rootA, f)).toBe(true);
-    // What Hide unused itself unchecked in B still keeps B's root card.
     expect(isCardHidden(rootB, f)).toBe(false);
   });
 });
