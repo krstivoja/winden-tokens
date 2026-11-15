@@ -26,6 +26,8 @@ export interface VariableNode {
   resolvedType?: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
   isReference: boolean;
   referenceName: string | null;
+  // The shown mode aliases a deleted variable: no reference edge is drawn.
+  isBrokenReference?: boolean;
   isVirtual?: boolean;
   virtualType?: 'shader' | 'palette';
   connectionsDisabled?: boolean;

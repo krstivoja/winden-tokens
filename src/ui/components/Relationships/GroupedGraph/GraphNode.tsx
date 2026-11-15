@@ -402,14 +402,25 @@ const CardRowsList = React.memo(function CardRowsList({
               {node.shortName}
             </span>
 
-            {/* Value */}
-            <span
-              className="absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 text-text-secondary"
-              style={{ right: showDeleteAction ? 42 : 16 }}
-              title={node.displayName}
-            >
-              {node.displayName}
-            </span>
+            {/* Value — an alias to a deleted variable reads as broken */}
+            {node.isBrokenReference ? (
+              <span
+                className="absolute flex items-center gap-1 text-[11px] font-mono whitespace-nowrap max-w-25 text-danger"
+                style={{ right: showDeleteAction ? 42 : 16 }}
+                title={`Alias to a deleted variable: ${node.referenceName || node.displayName}`}
+              >
+                <Icon name="warning" size={12} className="shrink-0" />
+                <span className="overflow-hidden text-ellipsis line-through">{node.displayName}</span>
+              </span>
+            ) : (
+              <span
+                className="absolute text-[11px] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-25 text-text-secondary"
+                style={{ right: showDeleteAction ? 42 : 16 }}
+                title={node.displayName}
+              >
+                {node.displayName}
+              </span>
+            )}
 
             {/* Delete button */}
             {showDeleteAction && (

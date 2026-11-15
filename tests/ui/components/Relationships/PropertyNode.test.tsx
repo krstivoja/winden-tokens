@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { InspectorEntry, InspectorNodeData } from '../../../../src/ui/types';
@@ -91,5 +91,71 @@ describe('PropertyNodeComponent', () => {
     expect(screen.queryByText('Text fill · Color')).toBeNull();
     expect(container.querySelector('[data-handleid="prop:1:0::in"]')).toBeTruthy();
     expect(container.querySelector('[data-handleid="prop:1:0::out"]')).toBeNull();
+  });
+});
+
+describe('PropertyNodeComponent broken bindings', () => {
+  const broken: InspectorEntry = {
+    ...fill,
+    token: { id: 'dead', name: 'color/red', collectionName: 'Colors', missing: true },
+  };
+  const brokenStroke: InspectorEntry = {
+    ...broken, category: 'Stroke', bindingTarget: { kind: 'paint', prop: 'strokes', index: 0 },
+  };
+
+  function renderBroken(node: InspectorNodeData, relinkTargets?: Record<string, { variableId: string; name: string }>) {
+    const onRelink = vi.fn();
+    const props = {
+      id: `selection:${node.id}`,
+      data: { nodeName: node.name, nodeType: node.type, layers: flattenLayers(node), relinkTargets, onRelink },
+    } as unknown as React.ComponentProps<typeof PropertyNodeComponent>;
+    const utils = render(
+      <ReactFlowProvider>
+        <PropertyNodeComponent {...props} />
+      </ReactFlowProvider>
+    );
+    return { ...utils, onRelink };
+  }
+
+  it('reads as broken: warning title, struck-through token, danger dot', () => {
+    const { container } = renderBroken({ id: '3:1', name: 'Box', type: 'FRAME', entries: [broken] });
+    const value = screen.getByTitle('Bound to a deleted variable: color/red');
+    expect(value.className.includes('text-danger')).toBe(true);
+    expect(container.querySelector('.line-through')?.textContent).toBe('{color/red}');
+    expect(screen.getByTitle('Bound to a deleted variable').className.includes('bg-danger')).toBe(true);
+    // The row stays a drop target for a new binding.
+    expect(container.querySelector('[data-handleid="prop:0:0::in"]')).toBeTruthy();
+  });
+
+  it('offers no relink without a live namesake', () => {
+    renderBroken({ id: '3:1', name: 'Box', type: 'COMPONENT', entries: [broken] });
+    expect(screen.queryByText('Relink')).toBeNull();
+    expect(screen.queryByText('Relink all')).toBeNull();
+  });
+
+  it('Relink rebinds the row to the live namesake', () => {
+    const { onRelink } = renderBroken(
+      { id: '3:1', name: 'Box', type: 'COMPONENT', entries: [broken] },
+      { '0:0': { variableId: 'live', name: 'color/red' } }
+    );
+    fireEvent.click(screen.getByTitle('Relink to color/red'));
+    expect(onRelink).toHaveBeenCalledWith([
+      { nodeId: '3:1', target: { kind: 'paint', prop: 'fills', index: 0 }, variableId: 'live' },
+    ]);
+  });
+
+  it('Relink all rebinds every relinkable row, child layers included', () => {
+    const { onRelink } = renderBroken(
+      {
+        id: '3:1', name: 'Box', type: 'COMPONENT', entries: [broken],
+        children: [{ id: '3:2', name: 'Label', type: 'TEXT', entries: [brokenStroke] }],
+      },
+      { '0:0': { variableId: 'live', name: 'color/red' }, '1:0': { variableId: 'live', name: 'color/red' } }
+    );
+    fireEvent.click(screen.getByText('Relink all'));
+    expect(onRelink).toHaveBeenCalledWith([
+      { nodeId: '3:1', target: { kind: 'paint', prop: 'fills', index: 0 }, variableId: 'live' },
+      { nodeId: '3:2', target: { kind: 'paint', prop: 'strokes', index: 0 }, variableId: 'live' },
+    ]);
   });
 });

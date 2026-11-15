@@ -27,6 +27,8 @@ export interface VariableData {
   value: string; // First mode value (for backward compatibility)
   valuesByMode: Record<string, string>; // All mode values
   displayName?: string;
+  // Mode ids whose value aliases a variable that no longer exists.
+  brokenModes?: string[];
 }
 
 export type VariableType = 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
@@ -38,6 +40,9 @@ export interface InspectorTokenRef {
   name: string;
   collectionId?: string;
   collectionName?: string;
+  // Bound to a deleted variable: `id` is the dead id, `name` its last name
+  // ('' when Figma no longer knows it), no `collectionId`.
+  missing?: true;
 }
 
 export type InspectorBindingTarget =

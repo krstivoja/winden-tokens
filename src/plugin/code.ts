@@ -36,6 +36,9 @@ interface UIVariableData {
   resolvedType: string;
   value: string; // First mode value (for backward compatibility)
   valuesByMode: Record<string, string>; // All mode values
+  // Mode ids whose value is an alias to a variable that no longer exists
+  // (see isDeadVariable). Omitted when there is none.
+  brokenModes?: string[];
 }
 
 interface CollectionData {
@@ -2287,17 +2290,24 @@ async function buildUiState(): Promise<UIState> {
         const valuesByMode: Record<string, string> = {};
         for (const modeId of Object.keys(variable.valuesByMode)) {
           const modeValue = variable.valuesByMode[modeId];
-          valuesByMode[modeId] = await formatValue(modeValue, variable.resolvedType);
+          valuesByMode[modeId] = await formatValue(modeValue, variable.resolvedType, lookupVariable);
+          if (await isDeadAlias(modeValue, liveVariableIds, lookupVariable)) {
+            brokenModes.push(modeId);
+          }
         }
 
-        variableData.push({
+        const entry: UIVariableData = {
           id: variable.id,
           collectionId: variable.variableCollectionId,
           name: variable.name,
           resolvedType: variable.resolvedType,
-          value: await formatValue(firstModeValue, variable.resolvedType),
+          value: await formatValue(firstModeValue, variable.resolvedType, lookupVariable),
           valuesByMode
-        });
+        };
+        if (brokenModes.length > 0) {
+          entry.brokenModes = brokenModes;
+        }
+        variableData.push(entry);
       }
     }
   }
@@ -2342,7 +2352,43 @@ async function fetchData() {
   });
 }
 
-async function formatValue(value: any, type: string): Promise<string> {
+// A memoized `getVariableByIdAsync` for one pass over the file. Caches the
+// promise, so a failed lookup fails the same way for every caller.
+function createVariableLookup(): VariableLookup {
+  const cache = new Map<string, Promise<Variable | null>>();
+  return id => {
+    let pending = cache.get(id);
+    if (!pending) {
+      pending = Promise.resolve().then(() => figma.variables.getVariableByIdAsync(id));
+      cache.set(id, pending);
+    }
+    return pending;
+  };
+}
+
+async function isDeadAlias(
+  value: any,
+  liveVariableIds: Set<string>,
+  lookupVariable: VariableLookup = lookupVariableUncached
+): Promise<boolean> {
+  if (!value || typeof value !== 'object' || value.type !== 'VARIABLE_ALIAS') {
+    return false;
+  }
+  if (liveVariableIds.has(value.id)) {
+    return false;
+  }
+  try {
+    return isDeadVariable(await lookupVariable(value.id), liveVariableIds);
+  } catch (e) {
+    return true;
+  }
+}
+
+async function formatValue(
+  value: any,
+  type: string,
+  lookupVariable: VariableLookup = lookupVariableUncached
+): Promise<string> {
   if (value === null || value === undefined) {
     return 'undefined';
   }
@@ -2350,7 +2396,7 @@ async function formatValue(value: any, type: string): Promise<string> {
   if (typeof value === 'object' && 'type' in value && value.type === 'VARIABLE_ALIAS') {
     // Look up the referenced variable and return its name in {name} format
     try {
-      const refVariable = await figma.variables.getVariableByIdAsync(value.id);
+      const refVariable = await lookupVariable(value.id);
       if (refVariable) {
         return `{${refVariable.name}}`;
       }
@@ -2503,28 +2549,35 @@ function formatInspectorColor(c: { r: number; g: number; b: number; a?: number }
   return a < 1 ? hex + toHex(a) : hex;
 }
 
-async function resolveVariableAlias(alias: any): Promise<InspectorTokenRef | null> {
+async function buildInspectorContext(): Promise<InspectorContext> {
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  return {
+    liveVariableIds: getLiveVariableIds(collections),
+    collectionNames: new Map(collections.map(collection => [collection.id, collection.name])),
+  };
+}
+
+async function lookupCollectionName(collectionId: string, context: InspectorContext): Promise<string | undefined> {
+  const known = context.collectionNames.get(collectionId);
+  if (known !== undefined) {
+    return known;
+  }
+  try {
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    return collection ? collection.name : undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+// A bound property's token. Null only when the property is not bound; a
+// binding to a variable that no longer exists comes back `missing`.
+async function resolveVariableAlias(alias: any, context: InspectorContext): Promise<InspectorTokenRef | null> {
   if (!alias || alias.type !== 'VARIABLE_ALIAS') {
     return null;
   }
   try {
-    const variable = await figma.variables.getVariableByIdAsync(alias.id);
-    if (!variable) {
-      return null;
-    }
-    let collectionName: string | undefined;
-    try {
-      const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
-      collectionName = collection ? collection.name : undefined;
-    } catch (e) {
-      // ignore
-    }
-    return {
-      id: variable.id,
-      name: variable.name,
-      collectionId: variable.variableCollectionId,
-      collectionName,
-    };
+    variable = await figma.variables.getVariableByIdAsync(alias.id);
   } catch (e) {
     return null;
   }
@@ -2538,11 +2591,11 @@ async function resolveStyleName(styleId: any): Promise<string | null> {
     const style = await figma.getStyleByIdAsync(styleId);
     return style ? style.name : null;
   } catch (e) {
-    return null;
+    variable = null;
   }
 }
 
-async function buildPaintEntries(node: any, propName: 'fills' | 'strokes', category: string): Promise<InspectorEntry[]> {
+async function buildPaintEntries(node: any, propName: 'fills' | 'strokes', category: string, context: InspectorContext): Promise<InspectorEntry[]> {
   const entries: InspectorEntry[] = [];
   const paints = node[propName];
   if (!Array.isArray(paints)) {
@@ -2557,7 +2610,7 @@ async function buildPaintEntries(node: any, propName: 'fills' | 'strokes', categ
     const label = paints.length > 1 ? `${category} ${i + 1}` : category;
 
     if (paint.type === 'SOLID') {
-      const token = await resolveVariableAlias(paint.boundVariables && paint.boundVariables.color);
+      const token = await resolveVariableAlias(paint.boundVariables && paint.boundVariables.color, context);
       entries.push({
         category,
         property: label,
@@ -2638,7 +2691,11 @@ function isInspectorScalarDefault(node: any, key: string, value: any): boolean {
   return numeric === 0;
 }
 
-async function buildScalarEntries(node: any, props: Array<{ key: string; category: string; label: string }>): Promise<InspectorEntry[]> {
+async function buildScalarEntries(
+  node: any,
+  props: Array<{ key: string; category: string; label: string }>,
+  context: InspectorContext
+): Promise<InspectorEntry[]> {
   const entries: InspectorEntry[] = [];
   for (const { key, category, label } of props) {
     if (!(key in node)) {
@@ -2648,7 +2705,7 @@ async function buildScalarEntries(node: any, props: Array<{ key: string; categor
     if (value === undefined || value === figma.mixed) {
       continue;
     }
-    const token = await resolveVariableAlias(node.boundVariables && node.boundVariables[key]);
+    const token = await resolveVariableAlias(node.boundVariables && node.boundVariables[key], context);
     const entry: InspectorEntry = {
       category,
       property: label,
@@ -2665,7 +2722,7 @@ async function buildScalarEntries(node: any, props: Array<{ key: string; categor
   return entries;
 }
 
-async function buildEffectEntries(node: any): Promise<InspectorEntry[]> {
+async function buildEffectEntries(node: any, context: InspectorContext): Promise<InspectorEntry[]> {
   const entries: InspectorEntry[] = [];
   const effects = node.effects;
   if (!Array.isArray(effects)) {
@@ -2678,7 +2735,7 @@ async function buildEffectEntries(node: any): Promise<InspectorEntry[]> {
       continue;
     }
     const label = effects.length > 1 ? `Effect ${i + 1}` : 'Effect';
-    const token = await resolveVariableAlias(effect.boundVariables && effect.boundVariables.color);
+    const token = await resolveVariableAlias(effect.boundVariables && effect.boundVariables.color, context);
     const parts: string[] = [effect.type];
     if (effect.color) {
       parts.push(formatInspectorColor(effect.color));
@@ -2710,26 +2767,26 @@ async function addStyleEntry(node: any, key: string, category: string, label: st
   }
 }
 
-async function buildInspectorEntries(node: SceneNode): Promise<InspectorEntry[]> {
+async function buildInspectorEntries(node: SceneNode, context: InspectorContext): Promise<InspectorEntry[]> {
   const anyNode = node as any;
   const entries: InspectorEntry[] = [];
 
   if ('fills' in anyNode) {
-    entries.push(...await buildPaintEntries(anyNode, 'fills', 'Fill'));
+    entries.push(...await buildPaintEntries(anyNode, 'fills', 'Fill', context));
   }
   if ('strokes' in anyNode) {
-    entries.push(...await buildPaintEntries(anyNode, 'strokes', 'Stroke'));
+    entries.push(...await buildPaintEntries(anyNode, 'strokes', 'Stroke', context));
   }
 
-  entries.push(...await buildScalarEntries(anyNode, INSPECTOR_SCALAR_PROPS));
+  entries.push(...await buildScalarEntries(anyNode, INSPECTOR_SCALAR_PROPS, context));
 
   if (node.type === 'TEXT') {
-    entries.push(...await buildScalarEntries(anyNode, INSPECTOR_TEXT_SCALAR_PROPS));
+    entries.push(...await buildScalarEntries(anyNode, INSPECTOR_TEXT_SCALAR_PROPS, context));
 
     if (anyNode.fontName !== figma.mixed) {
       const fontName = anyNode.fontName as FontName;
-      const familyToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontFamily);
-      const styleToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontStyle);
+      const familyToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontFamily, context);
+      const styleToken = await resolveVariableAlias(anyNode.boundVariables && anyNode.boundVariables.fontStyle, context);
       entries.push({
         category: 'Typography',
         property: 'Font Family',
@@ -2750,7 +2807,7 @@ async function buildInspectorEntries(node: SceneNode): Promise<InspectorEntry[]>
   }
 
   if ('effects' in anyNode) {
-    entries.push(...await buildEffectEntries(anyNode));
+    entries.push(...await buildEffectEntries(anyNode, context));
   }
 
   if ('fillStyleId' in anyNode) await addStyleEntry(anyNode, 'fillStyleId', 'Fill', 'Fill Style', entries);
@@ -2767,7 +2824,8 @@ async function buildInspectorEntries(node: SceneNode): Promise<InspectorEntry[]>
 // selection as a whole, not per-branch.
 async function collectInspectorChildren(
   nodes: readonly SceneNode[] | undefined,
-  state: { count: number; truncated: boolean }
+  state: { count: number; truncated: boolean },
+  context: InspectorContext
 ): Promise<InspectorNodeData[]> {
   const result: InspectorNodeData[] = [];
   if (!nodes) {
@@ -2784,14 +2842,14 @@ async function collectInspectorChildren(
     }
     state.count++;
 
-    const entries = await buildInspectorEntries(child);
+    const entries = await buildInspectorEntries(child, context);
     const childData: InspectorNodeData = {
       id: child.id,
       name: child.name,
       type: child.type,
       entries,
     };
-    const grandchildren = await collectInspectorChildren((child as any).children, state);
+    const grandchildren = await collectInspectorChildren((child as any).children, state, context);
     if (grandchildren.length > 0) {
       childData.children = grandchildren;
     }
@@ -2806,7 +2864,8 @@ async function collectInspectorChildren(
 }
 
 async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData> {
-  const entries = await buildInspectorEntries(node);
+  const context = await buildInspectorContext();
+  const entries = await buildInspectorEntries(node, context);
   const data: InspectorNodeData = {
     id: node.id,
     name: node.name,
@@ -2816,7 +2875,12 @@ async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData>
 
   if (INSPECTOR_COMPONENT_TYPES.has(node.type)) {
     const state = { count: 1, truncated: false }; // root counts toward the cap too
-    const children = await collectInspectorChildren((node as any).children, state);
+    const children = await collectInspectorChildren((node as any).children, state, context);
+  const liveVariableIds = getLiveVariableIds(collections);
+  // One lookup per alias target for the whole build, shared by formatValue
+  // and isDeadAlias (every mode of every aliasing variable asks again).
+  const lookupVariable = createVariableLookup();
+
     if (children.length > 0) {
       data.children = children;
     }
@@ -2828,6 +2892,7 @@ async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData>
   return data;
 }
 
+        const brokenModes: string[] = [];
 async function bindNodeProperty(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
@@ -2859,8 +2924,6 @@ async function bindNodeProperty(nodeId: string, target: InspectorBindingTarget, 
     newEffects[target.index] = figma.variables.setBoundVariableForEffect(newEffects[target.index], 'color', variable);
     anyNode.effects = newEffects;
   }
-
-  await sendSelection();
 }
 
 async function sendSelection() {
@@ -2883,6 +2946,33 @@ function getDefaultValue(type: string): any {
       return { r: 0, g: 0, b: 0, a: 1 };
     case 'FLOAT':
       return 0;
+  // A component card shows its rows' resolved values (#F9B8B8), read when it
+  // was sent. Editing a variable changes them without touching the layer, so
+  // no selection or node event fires: resend the card with every data load.
+  await sendSelection();
+}
+
+// Ids of every live local variable. Figma keeps a deleted variable around
+// (soft-deleted, name and all, so its own undo can bring it back), and
+// getVariableByIdAsync still returns it; only the collections' lists drop it.
+function getLiveVariableIds(collections: VariableCollection[]): Set<string> {
+  const ids = new Set<string>();
+  collections.forEach(collection => collection.variableIds.forEach(id => ids.add(id)));
+  return ids;
+}
+
+// Whether a looked-up variable is gone: not found, or a local variable no
+// local collection lists. Remote (library) variables are trusted as is.
+function isDeadVariable(variable: Variable | null, liveVariableIds: Set<string>): boolean {
+  return !variable || (!variable.remote && !liveVariableIds.has(variable.id));
+}
+
+// A mode value that aliases a variable that no longer exists. Live local
+// targets cost no lookup.
+type VariableLookup = (id: string) => Promise<Variable | null>;
+
+function lookupVariableUncached(id: string): Promise<Variable | null> {
+  return figma.variables.getVariableByIdAsync(id);
     case 'STRING':
       return '';
     case 'BOOLEAN':
@@ -3000,6 +3090,17 @@ function buildDuplicateGroupName(
   return candidate;
 }
 
+  // Bound to a variable that no longer exists (see isDeadVariable). `name` is
+  // the soft-deleted variable's name when Figma still returns it, else ''.
+  // Set only when true, to keep the payload lean.
+  missing?: true;
+}
+
+// Live local variables and collection names, read once per selection send so
+// the row builders never fetch per row.
+interface InspectorContext {
+  liveVariableIds: Set<string>;
+  collectionNames: Map<string, string>;
 async function renameGroup(variableIds: string[], currentGroupName: string, nextGroupName: string) {
   try {
     const normalizedGroupName = nextGroupName.trim();
@@ -3050,6 +3151,7 @@ async function duplicateGroup(variableIds: string[], groupName: string) {
     for (const variableId of variableIds) {
       const variable = await figma.variables.getVariableByIdAsync(variableId);
       if (variable) {
+  let variable: Variable | null = null;
         sourceVariables.push(variable);
       }
     }
@@ -3071,6 +3173,23 @@ async function duplicateGroup(variableIds: string[], groupName: string) {
     sourceVariables
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
+  if (!variable) {
+    return { id: alias.id, name: '', missing: true };
+  }
+  const collectionName = await lookupCollectionName(variable.variableCollectionId, context);
+  if (isDeadVariable(variable, context.liveVariableIds)) {
+    const token: InspectorTokenRef = { id: variable.id, name: variable.name, missing: true };
+    if (collectionName !== undefined) {
+      token.collectionName = collectionName;
+    }
+    return token;
+  }
+  return {
+    id: variable.id,
+    name: variable.name,
+    collectionId: variable.variableCollectionId,
+    collectionName,
+  };
       .forEach(variable => {
         const duplicatedVariable = figma.variables.createVariable(
           buildGroupVariableName(variable.name, groupName, nextGroupName),
@@ -3372,6 +3491,60 @@ async function deleteAllVariables() {
 }
 
 // Helper: Convert hex color to Figma RGB
+  await applyNodeBinding(nodeId, target, variableId);
+  await sendSelection();
+}
+
+type NodeBindingRequest = { nodeId: string; target: InspectorBindingTarget; variableId: string };
+
+// A `bind-node-properties` item as the UI sends it; anything else is
+// reported instead of applied.
+function isNodeBindingRequest(value: any): value is NodeBindingRequest {
+  if (!value || typeof value !== 'object') return false;
+  if (typeof value.nodeId !== 'string' || !value.nodeId) return false;
+  if (typeof value.variableId !== 'string' || !value.variableId) return false;
+  const target = value.target;
+  if (!target || typeof target !== 'object') return false;
+  const isIndex = (index: any) => typeof index === 'number' && Number.isInteger(index) && index >= 0;
+  switch (target.kind) {
+    case 'node-field':
+      return typeof target.field === 'string' && target.field.length > 0;
+    case 'paint':
+      return (target.prop === 'fills' || target.prop === 'strokes') && isIndex(target.index);
+    case 'effect':
+      return isIndex(target.index);
+    default:
+      return false;
+  }
+}
+
+// Relink all: each binding on its own, so one failure does not stop the
+// rest, then one selection resend. Throws one error naming every failure.
+async function bindNodeProperties(bindings: unknown[]) {
+  const failures: string[] = [];
+  try {
+    for (let index = 0; index < bindings.length; index++) {
+      const binding = bindings[index];
+      if (!isNodeBindingRequest(binding)) {
+        failures.push(`binding ${index + 1}: invalid request`);
+        continue;
+      }
+      try {
+        await applyNodeBinding(binding.nodeId, binding.target, binding.variableId);
+      } catch (error: any) {
+        failures.push(`binding ${index + 1}: ${error && error.message ? error.message : String(error)}`);
+      }
+    }
+  } finally {
+    await sendSelection();
+  }
+  if (failures.length > 0) {
+    const applied = bindings.length - failures.length;
+    throw new Error(`${failures.length} of ${bindings.length} bindings failed (${applied} applied): ${failures.join('; ')}`);
+  }
+}
+
+async function applyNodeBinding(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
 function hexToRgb(hex: string): { r: number; g: number; b: number; a: number } {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return { r: 0, g: 0, b: 0, a: 1 };
@@ -4607,7 +4780,6 @@ setInterval(checkForChanges, 5000);
 void (async () => {
   if (!IS_BRIDGE_WINDOW) await fetchData();
   await resetHistory();
-  if (!IS_BRIDGE_WINDOW) await sendSelection();
 })();
 
 // Replies to `save-version`, the one command whose outcome is not
@@ -4752,7 +4924,6 @@ figma.ui.onmessage = async (msg: any) => {
       // message, in which case that postMessage is dropped silently. Resend
       // current data once the UI confirms its listener is attached.
       await fetchData();
-      await sendSelection();
       break;
 
     case 'save-version': {
@@ -4840,3 +5011,52 @@ figma.ui.onmessage = async (msg: any) => {
       break;
   }
 };
+// Editing the selected layer (adding a stroke, changing padding) does not
+// change the selection, so without this the card keeps showing stale rows.
+// A page's `nodechange` needs no loadAllPagesAsync under dynamic-page access;
+// the listener moves with the current page. Bursts (a drag, a slider) are
+// coalesced into one resend.
+const SELECTION_REFRESH_DELAY_MS = 150;
+let selectionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isInsideSelectedNode(node: BaseNode | null, selectedId: string): boolean {
+  for (let current = node; current; current = current.parent) {
+    if (current.id === selectedId) return true;
+  }
+  return false;
+}
+
+function onPageNodeChange(event: NodeChangeEvent) {
+  const selection = figma.currentPage.selection;
+  if (selection.length !== 1) return;
+  const selectedId = selection[0].id;
+  const touchesSelection = event.nodeChanges.some(change =>
+    // A removed node has no parent left to walk; a delete under the selection
+    // is rare enough to just refresh.
+    change.type === 'DELETE' || isInsideSelectedNode(change.node as BaseNode, selectedId)
+  );
+  if (!touchesSelection) return;
+  if (selectionRefreshTimer) clearTimeout(selectionRefreshTimer);
+  selectionRefreshTimer = setTimeout(() => {
+    selectionRefreshTimer = null;
+    void sendSelection();
+  }, SELECTION_REFRESH_DELAY_MS);
+}
+
+let watchedPage: PageNode = figma.currentPage;
+watchedPage.on('nodechange', onPageNodeChange);
+figma.on('currentpagechange', () => {
+  watchedPage.off('nodechange', onPageNodeChange);
+  watchedPage = figma.currentPage;
+  watchedPage.on('nodechange', onPageNodeChange);
+});
+
+    case 'bind-node-properties':
+      try {
+        await bindNodeProperties(Array.isArray(msg.bindings) ? msg.bindings : []);
+        figma.ui.postMessage({ type: 'update-success' });
+      } catch (error: any) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+      }
+      break;
+

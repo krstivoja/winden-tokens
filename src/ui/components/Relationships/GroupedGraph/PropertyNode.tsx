@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Position, useUpdateNodeInternals } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { InspectorEntry } from '../../../types';
+import { InspectorBindingTarget, InspectorEntry } from '../../../types';
 import { ColorSwatch } from '../../common/ColorSwatch/ColorSwatch';
 import { Dropdown } from '../../common/Dropdown/Dropdown';
 import { IconTextButton } from '../../common/Button';
@@ -40,6 +40,12 @@ export {
   getPropertyCardHeight,
 } from './propertyLayers';
 
+// The live variable a row bound to a deleted variable can be relinked to.
+export type RelinkTarget = { variableId: string; name: string };
+export type RelinkBinding = { nodeId: string; target: InspectorBindingTarget; variableId: string };
+
+export const getRelinkKey = (layerIndex: number, entryIndex: number) => `${layerIndex}:${entryIndex}`;
+
 export type PropertyNodeData = {
   nodeName: string;
   nodeType: string;
@@ -47,6 +53,9 @@ export type PropertyNodeData = {
   layers: PropertyLayer[];
   // Plugin stopped collecting descendants at its layer cap.
   truncated?: boolean;
+  // Broken rows a live namesake can take over, keyed by getRelinkKey.
+  relinkTargets?: Record<string, RelinkTarget>;
+  onRelink?: (bindings: RelinkBinding[]) => void;
 };
 
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6,8}$/;
@@ -75,22 +84,33 @@ export const getPropertyHandleId = (layerIndex: number, entryIndex: number, side
 const entryLabel = (entry: InspectorEntry) =>
   entry.category !== entry.property ? `${entry.category} · ${entry.property}` : entry.property;
 
-function PropertyRow({ layerIndex, entryIndex, entry, depth }: {
+export const isBrokenEntry = (entry: InspectorEntry) => entry.kind === 'variable' && !!entry.token?.missing;
+
+function PropertyRow({ layerIndex, entryIndex, entry, depth, nodeId, relinkTarget, onRelink }: {
   layerIndex: number;
   entryIndex: number;
   entry: InspectorEntry;
   depth: number;
+  nodeId: string;
+  relinkTarget?: RelinkTarget;
+  onRelink?: (bindings: RelinkBinding[]) => void;
 }) {
   const bindable = !!entry.bindingTarget;
-  const isConnected = entry.kind === 'variable';
+  // A broken row is bound in Figma, but to nothing alive: no edge reaches it.
+  const isBroken = isBrokenEntry(entry);
+  const isConnected = entry.kind === 'variable' && !isBroken;
+  const tokenName = entry.token?.name || 'deleted variable';
   // Always show the real value; when bound, the token name follows it
   // (the color/kind dot plus the connector line already say "bound").
-  const valueText = entry.kind === 'variable' && entry.token
+  const valueText = entry.kind === 'variable' && entry.token && !isBroken
     ? `${entry.rawValue} · {${entry.token.name}}`
     : entry.rawValue;
-  const valueTitle = entry.kind === 'variable' && entry.token
-    ? `${entry.token.name}${entry.token.collectionName ? ` (${entry.token.collectionName})` : ''}`
-    : entry.rawValue;
+  const valueTitle = isBroken
+    ? `Bound to a deleted variable: ${tokenName}`
+    : entry.kind === 'variable' && entry.token
+      ? `${entry.token.name}${entry.token.collectionName ? ` (${entry.token.collectionName})` : ''}`
+      : entry.rawValue;
+  const canRelink = isBroken && !!relinkTarget && !!onRelink && !!entry.bindingTarget;
   const label = entryLabel(entry);
   const isColor = HEX_COLOR_RE.test(entry.rawValue);
   const indent = depth * PROPERTY_LAYER_INDENT;
@@ -118,18 +138,47 @@ function PropertyRow({ layerIndex, entryIndex, entry, depth }: {
           {label}
         </span>
 
-        <span
-          className={`shrink-0 max-w-[55%] text-[11px] font-mono whitespace-nowrap overflow-hidden text-ellipsis ${KIND_TEXT_CLASS[entry.kind]}`}
-          title={valueTitle}
-        >
-          {valueText}
-        </span>
+        {/* Shown on hover; the wrapper owns `display`, the button's own inline-flex would win over `hidden`. */}
+        {canRelink && (
+          <span className="hidden group-hover:inline-flex shrink-0">
+            <IconTextButton
+              icon={<Icon name="refresh" size={12} />}
+              className="nodrag"
+              title={`Relink to ${relinkTarget!.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRelink!([{ nodeId, target: entry.bindingTarget!, variableId: relinkTarget!.variableId }]);
+              }}
+            >
+              Relink
+            </IconTextButton>
+          </span>
+        )}
+
+        {isBroken ? (
+          <span
+            className="shrink-0 max-w-[55%] flex items-center gap-1 text-[11px] font-mono whitespace-nowrap overflow-hidden text-danger"
+            title={valueTitle}
+          >
+            <Icon name="warning" size={12} className="shrink-0" />
+            <span className="overflow-hidden text-ellipsis">
+              {entry.rawValue} · <span className="line-through">{`{${tokenName}}`}</span>
+            </span>
+          </span>
+        ) : (
+          <span
+            className={`shrink-0 max-w-[55%] text-[11px] font-mono whitespace-nowrap overflow-hidden text-ellipsis ${KIND_TEXT_CLASS[entry.kind]}`}
+            title={valueTitle}
+          >
+            {valueText}
+          </span>
+        )}
       </div>
 
       <span
-        className={`absolute w-1.5 h-1.5 rounded-full ${KIND_DOT_CLASS[entry.kind]}`}
+        className={`absolute w-1.5 h-1.5 rounded-full ${isBroken ? 'bg-danger' : KIND_DOT_CLASS[entry.kind]}`}
         style={{ right: 6 }}
-        title={KIND_TITLE[entry.kind]}
+        title={isBroken ? 'Bound to a deleted variable' : KIND_TITLE[entry.kind]}
       />
 
       {bindable && (
@@ -196,7 +245,7 @@ function AnchoredHandles({ sections, anchorLayerIndex }: {
         .flatMap(section => section.visibleEntryIndexes
           .filter(index => {
             const entry = section.layer.entries[index];
-            return entry.kind === 'variable' && !!entry.bindingTarget;
+            return entry.kind === 'variable' && !isBrokenEntry(entry) && !!entry.bindingTarget;
           })
           .map(index => (
             <GraphHandle
@@ -216,7 +265,7 @@ function AnchoredHandles({ sections, anchorLayerIndex }: {
 }
 
 function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeData>>) {
-  const { nodeName, nodeType, layers, truncated } = data;
+  const { nodeName, nodeType, layers, truncated, relinkTargets, onRelink } = data;
   const isComponent = isComponentType(nodeType);
   const updateNodeInternals = useUpdateNodeInternals();
 
@@ -252,6 +301,20 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
 
   const height = getPropertyCardHeight(sections) + (truncated ? PROPERTY_ROW_HEIGHT : 0);
 
+  // Every relinkable broken row on the card, shown or not: Relink all fixes
+  // the component, not just what is on screen.
+  const relinkAll = useMemo(() => {
+    const bindings: RelinkBinding[] = [];
+    if (!relinkTargets) return bindings;
+    layers.forEach(layer => layer.entries.forEach((entry, index) => {
+      const target = relinkTargets[getRelinkKey(layer.layerIndex, index)];
+      if (target && entry.bindingTarget && isBrokenEntry(entry)) {
+        bindings.push({ nodeId: layer.id, target: entry.bindingTarget, variableId: target.variableId });
+      }
+    }));
+    return bindings;
+  }, [layers, relinkTargets]);
+
   const revealEntry = (key: string) => {
     setRevealedKeys(prev => new Set(prev).add(key));
   };
@@ -273,9 +336,23 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
       <div
         className={`group-header flex items-center justify-between px-3 cursor-move select-none h-9 ${isComponent ? 'bg-component' : 'bg-base-3'}`}
       >
-        <span className={`text-[13px] font-semibold overflow-hidden text-ellipsis whitespace-nowrap ${isComponent ? 'text-white' : 'text-text'}`} title={nodeName}>
+        <span className={`min-w-0 text-[13px] font-semibold overflow-hidden text-ellipsis whitespace-nowrap ${isComponent ? 'text-white' : 'text-text'}`} title={nodeName}>
           {nodeName}
         </span>
+        {relinkAll.length > 0 && onRelink && (
+          <IconTextButton
+            icon={<Icon name="refresh" size={12} />}
+            variant="secondary"
+            className="nodrag shrink-0 ml-auto"
+            title={`Relink ${relinkAll.length} broken ${relinkAll.length === 1 ? 'binding' : 'bindings'}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRelink(relinkAll);
+            }}
+          >
+            Relink all
+          </IconTextButton>
+        )}
         <span className={`text-[10px] shrink-0 ml-2 ${isComponent ? 'text-white/70' : 'text-text/50'}`}>{nodeType}</span>
       </div>
 
@@ -292,7 +369,7 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
             <React.Fragment key={`${layer.layerIndex}:${layer.id}`}>
               {!isRoot && (
                 <div
-                  className="relative flex items-center gap-1 h-8 pr-3 bg-base-2 border-b border-border select-none"
+                  className="relative flex items-center gap-1 h-8 pr-3 bg-component border-b border-border select-none"
                   style={{ paddingLeft: 4 + (layer.depth - 1) * PROPERTY_LAYER_INDENT }}
                 >
                   {section.collapsed && (
@@ -300,7 +377,7 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
                   )}
                   <button
                     type="button"
-                    className="nodrag w-5 h-5 shrink-0 flex items-center justify-center rounded text-text/60 hover:text-text hover:bg-base-3 cursor-pointer"
+                    className="nodrag w-5 h-5 shrink-0 flex items-center justify-center rounded text-white/70 hover:text-white hover:bg-white/15 cursor-pointer"
                     aria-expanded={!section.collapsed}
                     aria-label={`${section.collapsed ? 'Expand' : 'Collapse'} ${layer.name}`}
                     onClick={() => toggleCollapsed(layer.id)}
@@ -311,10 +388,10 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
                       className={`transition-transform duration-150 ${section.collapsed ? '-rotate-90' : ''}`}
                     />
                   </button>
-                  <span className="text-xs font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap" title={layer.name}>
+                  <span className="text-xs font-medium text-white overflow-hidden text-ellipsis whitespace-nowrap" title={layer.name}>
                     {layer.name}
                   </span>
-                  <span className="text-[10px] text-text/50 shrink-0 ml-auto pl-2">{layer.type}</span>
+                  <span className="text-[10px] text-white/70 shrink-0 ml-auto pl-2">{layer.type}</span>
                 </div>
               )}
 
@@ -325,6 +402,9 @@ function PropertyNodeComponentInner({ id, data }: NodeProps<Node<PropertyNodeDat
                   entryIndex={index}
                   entry={layer.entries[index]}
                   depth={layer.depth}
+                  nodeId={layer.id}
+                  relinkTarget={relinkTargets?.[getRelinkKey(layer.layerIndex, index)]}
+                  onRelink={onRelink}
                 />
               ))}
 

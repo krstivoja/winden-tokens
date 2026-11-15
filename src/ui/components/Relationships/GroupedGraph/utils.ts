@@ -1,9 +1,9 @@
 // Utility functions for GroupedGraph component
 
-import { VariableData, CollectionData, ShadeGroupData } from '../../../types';
+import { VariableData, CollectionData, ShadeGroupData, InspectorEntry, InspectorTokenRef, InspectorBindingTarget } from '../../../types';
 import { parseColorToRgb, rgbObjToHex } from '../../../utils/color';
 import { getCollectionGroupKey, isVariableVisibleForGroupFilters } from '../../../utils/groupFilters';
-import { getVariableValueForMode } from '../../../utils/modes';
+import { getVariableValueForMode, resolveModeIdForCollection } from '../../../utils/modes';
 import {
   GroupData,
   VariableNode,
@@ -158,13 +158,16 @@ function formatVariableNode(
   const refPattern = /^\{(.+)\}$/;
 
   const modeValue = getVariableValueForMode(collections, variable, selectedModeId);
+  const shownModeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
+  const isBrokenReference = !!variable.brokenModes && !!shownModeId && variable.brokenModes.includes(shownModeId);
 
   const refMatch = modeValue.match(refPattern);
   const isReference = !!refMatch;
   const referenceName = refMatch ? refMatch[1] : null;
 
   let resolvedValue = modeValue;
-  if (isReference && referenceName) {
+  // A broken alias resolves to nothing: a live namesake is not its target.
+  if (isReference && referenceName && !isBrokenReference) {
     const refVar = varsByName.get(referenceName);
     if (refVar) {
       const refVarModeValue = getVariableValueForMode(collections, refVar, selectedModeId);
@@ -215,7 +218,81 @@ function formatVariableNode(
     resolvedType: variable.resolvedType as 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN',
     isReference,
     referenceName,
+    ...(isBrokenReference ? { isBrokenReference: true } : {}),
   };
+}
+
+// ── Selection tokens ───────────────────────────────────────────────
+
+interface VariableCardInfo {
+  group: string;
+  index: number;
+  node: VariableNode;
+}
+
+type EntryTokenMatch =
+  | { kind: 'local'; info: VariableCardInfo }
+  | { kind: 'external'; token: InspectorTokenRef }
+  | { kind: 'missing'; token: InspectorTokenRef };
+
+/**
+ * Where a selection row's bound token lives on the graph, matched by variable
+ * id (names collide across collections, and a deleted variable's namesake is
+ * not its target). Null for an unbound row. 'external' is a token with no
+ * local card (a library variable, or a local one the graph does not show):
+ * it gets the name-keyed synthetic card. 'missing' links to nothing.
+ * Every selection lookup goes through here so they cannot drift.
+ */
+function resolveEntryToken(
+  entry: InspectorEntry,
+  variableCardsById: Map<string, VariableCardInfo>
+): EntryTokenMatch | null {
+  if (entry.kind !== 'variable' || !entry.token) return null;
+  if (entry.token.missing) return { kind: 'missing', token: entry.token };
+  const info = variableCardsById.get(entry.token.id);
+  if (info) return { kind: 'local', info };
+  return { kind: 'external', token: entry.token };
+}
+
+// Node fields Figma binds to a STRING / BOOLEAN variable; every other field
+// the inspector offers (sizes, spacing, radii, opacity, font size, line
+// height, ...) takes a FLOAT. Paints and effect colours take a COLOR.
+const STRING_NODE_FIELDS = new Set(['fontFamily', 'fontStyle', 'characters']);
+const BOOLEAN_NODE_FIELDS = new Set(['visible']);
+
+/** The variable type a binding target accepts. */
+function getBindingResolvedType(target: InspectorBindingTarget): VariableData['resolvedType'] {
+  if (target.kind === 'paint' || target.kind === 'effect') return 'COLOR';
+  if (STRING_NODE_FIELDS.has(target.field)) return 'STRING';
+  if (BOOLEAN_NODE_FIELDS.has(target.field)) return 'BOOLEAN';
+  return 'FLOAT';
+}
+
+/**
+ * The live local variable a broken binding should be relinked to: one whose
+ * type the binding accepts, with the dead variable's name, in a collection of
+ * its collection's name, else the only such one. Null when none or ambiguous.
+ */
+function findRelinkVariable(
+  token: InspectorTokenRef,
+  target: InspectorBindingTarget,
+  variables: VariableData[],
+  collections: CollectionData[]
+): VariableData | null {
+  if (!token.missing || !token.name) return null;
+  const resolvedType = getBindingResolvedType(target);
+  const namesakes = variables.filter(variable =>
+    variable.name === token.name && variable.id !== token.id && variable.resolvedType === resolvedType
+  );
+  if (token.collectionName !== undefined) {
+    const collectionIds = new Set(collections
+      .filter(collection => collection.name === token.collectionName)
+      .map(collection => collection.id));
+    const sameCollection = namesakes.filter(variable => collectionIds.has(variable.collectionId));
+    if (sameCollection.length === 1) return sameCollection[0];
+    if (sameCollection.length > 1) return null;
+  }
+  return namesakes.length === 1 ? namesakes[0] : null;
 }
 
 function createShaderNode(shadeGroup: ShadeGroupData, color: string): VariableNode {
@@ -1442,7 +1519,7 @@ function reconcileEdges<T extends { id: string }>(prev: T[], next: T[]): T[] {
   return allReused ? prev : out;
 }
 
-export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult, UnmanagedGroupBucket };
+export type { CardVisibilityFilters, ArrangeGridOptions, ArrangeGridResult, UnmanagedGroupBucket, VariableCardInfo, EntryTokenMatch };
 
 export {
   buildCollectionCards,
@@ -1478,6 +1555,9 @@ export {
   getStandaloneLane,
   extractShadeNumber,
   formatVariableNode,
+  resolveEntryToken,
+  findRelinkVariable,
+  getBindingResolvedType,
   createShaderNode,
   createStepsNode,
   createPaletteNode,

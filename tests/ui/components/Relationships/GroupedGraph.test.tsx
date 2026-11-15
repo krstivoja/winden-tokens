@@ -507,13 +507,16 @@ describe('Rebuilds keep unchanged cards', () => {
 });
 
 describe('Rebuilds keep node measurements', () => {
-  const originalResizeObserver = window.ResizeObserver;
+  // Read in beforeEach, not at collection time: the file's stub is only
+  // installed by beforeAll, and restoring `undefined` broke later suites.
+  let originalResizeObserver: unknown;
   const sizeDescriptors = {
     width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
     height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
   };
 
   beforeEach(() => {
+    originalResizeObserver = window.ResizeObserver;
     // A ResizeObserver that reports every observed node on the next
     // microtask, and a layout with real sizes, so xyflow measures nodes.
     (window as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
@@ -548,5 +551,59 @@ describe('Rebuilds keep node measurements', () => {
     fireEvent.click(rowName('b/one'));
     expect(cardRoot('group:c1::b')?.className).not.toContain('ring-highlight-path');
     expect(hiddenNodes()).toEqual([]);
+  });
+});
+
+describe('Selection bound to a deleted variable', () => {
+  // `a/one` was deleted and recreated as v1: the layer still holds the dead id.
+  const selection = (token: Record<string, unknown>) => ({
+    id: '9:1', name: 'Button', type: 'COMPONENT',
+    entries: [{
+      category: 'Spacing', property: 'Item Spacing', kind: 'variable', rawValue: '1',
+      token, bindingTarget: { kind: 'node-field', field: 'itemSpacing' },
+    }],
+  });
+
+  function mountWithSelection(selectedNode: unknown, vars: VariableData[] = variables) {
+    setContext(allGroups);
+    ctx.value = { ...ctx.value, selectedNode, variables: vars };
+    const view = render(<GroupedGraph />);
+    storage('graph-grouped-paths', ['c1::', 'c2::']);
+    storage('graph-positions', {});
+    storage('graph-positions-collection', {});
+    storage('graph-order-collection', null);
+    storage('graph-tier-labels', []);
+    storage('graph-layout-labels', null);
+    storage('graph-layout-settings', null);
+    return view;
+  }
+
+  it('gets no external card and relinks to the live namesake', async () => {
+    mountWithSelection(selection({ id: 'dead', name: 'a/one', collectionName: 'One', missing: true }));
+    const relink = await screen.findByTitle('Relink to a/one');
+    expect(document.querySelector('.react-flow__node[data-id^="ext-group:"]')).toBeNull();
+
+    fireEvent.click(relink);
+    expect(posted.filter(m => m.type === 'bind-node-property')).toEqual([{
+      type: 'bind-node-property', nodeId: '9:1',
+      target: { kind: 'node-field', field: 'itemSpacing' }, variableId: 'v1',
+    }]);
+  });
+
+  it('a live token links by id, not by name', async () => {
+    // v5 is renamed to v1's name in another collection: still its own card.
+    const vars = variables.map(v => (v.id === 'v5' ? { ...v, name: 'a/one' } : v));
+    mountWithSelection(selection({ id: 'v5', name: 'a/one', collectionId: 'c2' }), vars);
+    await screen.findByText('Spacing · Item Spacing');
+    expect(document.querySelector('.react-flow__node[data-id^="ext-group:"]')).toBeNull();
+    expect(screen.queryByText('Relink')).toBeNull();
+  });
+
+  it('a variable aliasing a deleted variable reads as broken', async () => {
+    const vars = variables.map(v => (v.id === 'v2'
+      ? { ...v, value: '{gone/one}', valuesByMode: { m1: '{gone/one}' }, brokenModes: ['m1'] }
+      : v));
+    mountWithSelection(null, vars);
+    expect(await screen.findByTitle('Alias to a deleted variable: gone/one')).toBeTruthy();
   });
 });

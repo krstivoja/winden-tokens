@@ -73,7 +73,8 @@ import {
 import { GroupNodeComponent } from './GroupedGraph/GraphNode';
 import { GroupWrapperComponent } from './GroupedGraph/GraphWrapperNode';
 import { TierLabelNode } from './GroupedGraph/TierLabelNode';
-import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId } from './GroupedGraph/PropertyNode';
+import { PropertyNodeComponent, PropertyNodeData, getPropertyHandleId, getRelinkKey } from './GroupedGraph/PropertyNode';
+import type { RelinkBinding, RelinkTarget } from './GroupedGraph/PropertyNode';
 import { flattenLayers } from './GroupedGraph/propertyLayers';
 import { buildWrapperLayout } from './GroupedGraph/wrapperLayout';
 import { useZoomKeySync } from './GroupedGraph/useZoomKeySync';
@@ -119,6 +120,8 @@ import {
   createStepsNode,
   createPaletteNode,
   detectManagedNumberStepGroups,
+  resolveEntryToken,
+  findRelinkVariable,
   arrangeGroupsByConnectedBlocks,
   buildCollectionCards,
   isCardHidden,
@@ -140,7 +143,7 @@ import {
   reconcileNodes,
   reconcileEdges,
 } from './GroupedGraph/utils';
-import type { CardVisibilityFilters, WrapperFrameGeometry } from './GroupedGraph/utils';
+import type { CardVisibilityFilters, VariableCardInfo, WrapperFrameGeometry } from './GroupedGraph/utils';
 import {
   computeHighlightPathForKeys,
   isSingleTarget,
@@ -1220,6 +1223,28 @@ function GroupedGraphInner() {
         post({
           type: 'create-variable',
           collectionId: firstCollectionId,
+  // Selection rows bound to a deleted variable that a live namesake can take
+  // over (see findRelinkVariable), keyed by getRelinkKey.
+  const relinkTargets = useMemo(() => {
+    const targets: Record<string, RelinkTarget> = {};
+    selectedLayers.forEach(layer => layer.entries.forEach((entry, index) => {
+      if (!entry.token?.missing || !entry.bindingTarget) return;
+      const variable = findRelinkVariable(entry.token, entry.bindingTarget, variables, collections);
+      if (variable) targets[getRelinkKey(layer.layerIndex, index)] = { variableId: variable.id, name: variable.name };
+    }));
+    return targets;
+  }, [selectedLayers, variables, collections]);
+
+  // One row goes through the same message an edge drag uses; Relink all
+  // sends them together so the card is resent once.
+  const handleRelinkProperties = useCallback((bindings: RelinkBinding[]) => {
+    if (bindings.length === 1) {
+      post({ type: 'bind-node-property', ...bindings[0] });
+    } else if (bindings.length > 1) {
+      post({ type: 'bind-node-properties', bindings });
+    }
+  }, []);
+
           name: `${groupName}/${DEFAULT_GROUP_CHILD_NAME}`,
           varType: variableType,
           value: getDefaultVariableValue(variableType),
@@ -1229,7 +1254,7 @@ function GroupedGraphInner() {
   }, [isColorType, openInputModal, localSelectedCollections, variableType, variables]);
 
   // Compute groups and connections from ALL variables (filtering applied at render time)
-  const { groupsData, connectionData, variableMap } = useMemo(() => {
+  const { groupsData, connectionData, variableMap, variableCardsById } = useMemo(() => {
     // Use ALL variables - no filtering here
     const typeVars = variables;
     const varsByName = new Map<string, VariableData>();
@@ -1475,7 +1500,8 @@ function GroupedGraphInner() {
 
     groupsArray.forEach(group => {
       group.variables.forEach(vNode => {
-        if (vNode.isReference && vNode.referenceName) {
+        // A broken alias has no provider, even when a live namesake exists.
+        if (vNode.isReference && vNode.referenceName && !vNode.isBrokenReference) {
           const provider = varMap.get(vNode.referenceName);
           const receiver = varMap.get(vNode.name);
           if (provider && receiver) {
@@ -1528,7 +1554,7 @@ function GroupedGraphInner() {
       });
     }
 
-    return { groupsData: groupsArray, connectionData: conns, variableMap: varMap };
+    return { groupsData: groupsArray, connectionData: conns, variableMap: varMap, variableCardsById: cardsById };
   }, [collections, variables, variableType, shadeGroups, isColorType, selectedModeId]);
 
   // Cards that provide a bound token to the current Figma selection. They are
@@ -1539,12 +1565,11 @@ function GroupedGraphInner() {
   const selectionProviderGroupKeys = useMemo(() => {
     const keys = new Set<string>();
     selectedLayers.forEach(layer => layer.entries.forEach(entry => {
-      if (entry.kind !== 'variable' || !entry.token) return;
-      const info = variableMap.get(entry.token.name);
-      if (info) keys.add(info.group);
+      const match = resolveEntryToken(entry, variableCardsById);
+      if (match?.kind === 'local') keys.add(match.info.group);
     }));
     return keys;
-  }, [selectedLayers, variableMap]);
+  }, [selectedLayers, variableCardsById]);
 
   // Compute connected vars flags
   const connectedVars = useMemo(() => {
@@ -1621,6 +1646,17 @@ function GroupedGraphInner() {
       groups: stillUnchecked(own.groups, selectedGroups),
       collections: stillUnchecked(own.collections, localSelectedCollections),
     };
+    // Selection tokens match cards by variable id (see resolveEntryToken).
+    // First card wins, like the name map's last-wins never mattered for ids:
+    // a variable sits on one card.
+    const cardsById = new Map<string, VariableCardInfo>();
+    groupsArray.forEach(group => {
+      group.variables.forEach((vNode, variableIndex) => {
+        if (vNode.isVirtual || cardsById.has(vNode.id)) return;
+        cardsById.set(vNode.id, { group: group.key, index: variableIndex, node: vNode });
+      });
+    });
+
   }, [selectedGroups, localSelectedCollections]);
   // One write per activation — toggled on with a highlight, card menu "Hide
   // unused", or the highlight moving while on — never a running override, so
@@ -2011,10 +2047,11 @@ function GroupedGraphInner() {
     const externalTokensByCard = new Map<string, { title: string; collectionId: string; nodes: VariableNode[] }>();
     selectedLayers.forEach(layer => {
       layer.entries.forEach(entry => {
-        if (entry.kind !== 'variable' || !entry.token) return;
         // A token with a local card is already counted in
-        // selectionProviderGroupKeys (hoisted above the effect).
-        if (variableMap.get(entry.token.name)) return;
+        // selectionProviderGroupKeys (hoisted above the effect); a missing
+        // one links to nothing.
+        const match = resolveEntryToken(entry, variableCardsById);
+        if (!match || match.kind !== 'external' || !entry.token) return;
         // No local match — bucket into a synthetic card by path prefix.
         // The slash-less fallback below has the same collision local cards
         // just lost (external token `test` and the parent path of
@@ -2385,11 +2422,14 @@ function GroupedGraphInner() {
     if (selectedNode) {
       const selectionNodeId = getSelectionNodeId(selectedNode.id);
       selectedLayers.forEach(layer => layer.entries.forEach((entry, index) => {
-        if (entry.kind !== 'variable' || !entry.token || !entry.bindingTarget) return;
+        if (!entry.bindingTarget) return;
         // Prefer the real token card; fall back to the synthetic external card
-        // when the token has no local match (library variable, etc.).
-        const tokenInfo = variableMap.get(entry.token.name);
-        const sourceGroupKey = tokenInfo ? tokenInfo.group : externalTokenCardKey.get(entry.token.name);
+        // when the token has no local match (library variable, etc.). A
+        // missing token gets no edge: the row itself shows it is broken.
+        const match = resolveEntryToken(entry, variableCardsById);
+        if (!match || match.kind === 'missing') return;
+        const sourceVarName = match.kind === 'local' ? match.info.node.name : match.token.name;
+        const sourceGroupKey = match.kind === 'local' ? match.info.group : externalTokenCardKey.get(match.token.name);
         if (!sourceGroupKey) return;
         const sourceVisible = groupVisibility.get(sourceGroupKey) ?? false;
         const bindingTarget = entry.bindingTarget;
@@ -2399,7 +2439,7 @@ function GroupedGraphInner() {
           id: `prop-edge:${layer.layerIndex}:${index}`,
           source: edgeNodeId(sourceGroupKey),
           target: selectionNodeId,
-          sourceHandle: `${entry.token.name}::out`,
+          sourceHandle: `${sourceVarName}::out`,
           targetHandle: getPropertyHandleId(layer.layerIndex, index, 'in'),
           type: 'customEdge',
           hidden: !sourceVisible,
@@ -2460,7 +2500,8 @@ function GroupedGraphInner() {
     setNodes(prev => reconcileNodes(prev, newNodes));
     setEdges(prev => reconcileEdges(prev, newEdges));
     setFocusableRowSignature(collectFocusableRowKeys(newNodes).join('\n'));
-  }, [groupsData, connectionData, connectedVars, variableMap, positionsHydrated, collectionPositionsHydrated,
+  }, [groupsData, connectionData, connectedVars, variableMap, variableCardsById, relinkTargets, handleRelinkProperties,
+      positionsHydrated, collectionPositionsHydrated,
       collectionOrderHydrated, settingsHydrated, savedPositionsRevision, groupedPaths,
       tierLabels, collectionColumns, hidingActivation,
       cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
@@ -2470,6 +2511,8 @@ function GroupedGraphInner() {
       handleHideUnusedFromCard, handleHighlightVariable, hasHighlight, highlightedVarName, highlightPath, hidingPath,
       sidebarUncheck, isCardHiddenNow, layoutGapY, setNodes, setEdges]);
 
+          relinkTargets,
+          onRelink: handleRelinkProperties,
   // Everything that can add, remove or move a handle *under an existing node
   // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
   // output handle is suppressed for connection-disabled rows), and the
@@ -2495,7 +2538,7 @@ function GroupedGraphInner() {
     const selection = selectedNode
       ? `${getSelectionNodeId(selectedNode.id)}[${selectedLayers
         .map(layer => `${layer.layerIndex}:${layer.entries
-          .map(e => `${e.kind}|${e.bindingTarget ? 1 : 0}|${e.token?.name || ''}`)
+          .map(e => `${e.kind}|${e.bindingTarget ? 1 : 0}|${e.token?.name || ''}|${e.token?.missing ? 1 : 0}`)
           .join(',')}`)
         .join(';')}]`
       : '';
@@ -3107,16 +3150,16 @@ function GroupedGraphInner() {
     if (!selectedNode) return;
     const wanted = new Set<string>([getSelectionNodeId(selectedNode.id)]);
     selectedLayers.forEach(layer => layer.entries.forEach(entry => {
-      if (entry.kind !== 'variable' || !entry.token) return;
-      const info = variableMap.get(entry.token.name);
-      if (info) {
+      const match = resolveEntryToken(entry, variableCardsById);
+      if (!match || match.kind === 'missing') return;
+      if (match.kind === 'local') {
         // The card may be drawn by the container that absorbed it.
-        wanted.add(nodeIdForCard(info.group));
+        wanted.add(nodeIdForCard(match.info.group));
       } else {
         // Mirror the synthetic external-card key built during node layout —
         // bare path, deliberately not collection-scoped like `group:` is.
-        const parts = entry.token.name.split('/');
-        const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : entry.token.name;
+        const parts = match.token.name.split('/');
+        const groupName = parts.length > 1 ? parts.slice(0, -1).join('/') : match.token.name;
         wanted.add(`ext-group:${groupName}`);
       }
     }));
@@ -3143,7 +3186,7 @@ function GroupedGraphInner() {
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
       { padding: 0.2, duration: 400 }
     );
-  }, [selectedNode, selectedLayers, variableMap, reactFlowInstance, nodeIdForCard]);
+  }, [selectedNode, selectedLayers, variableCardsById, reactFlowInstance, nodeIdForCard]);
 
   // Auto-frame the selection (and its providers) whenever a NEW node is
   // selected in Figma — the selection card is laid out past every token card,
