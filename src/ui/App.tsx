@@ -78,6 +78,10 @@ export function App() {
       });
     },
     'history-applied': (msg: any) => {
+      if (msg.notice) {
+        showStatus(msg.notice, 'warning');
+        return;
+      }
       showStatus(msg.direction === 'redo' ? 'Redid' : 'Undid', 'success');
     },
     'history-error': (msg: any) => {

@@ -136,6 +136,9 @@ interface HistoryCollectionSnapshot {
   id: string;
   name: string;
   hiddenFromPublishing: boolean;
+  // Extended collections are captured for the hash only: a restore never
+  // creates, renames or removes them (the parent link cannot be rebuilt).
+  isExtension: boolean;
   modes: Array<{ id: string; name: string }>;
 }
 
@@ -144,7 +147,16 @@ interface HistoryVariableSnapshot {
   collectionId: string;
   name: string;
   resolvedType: string;
+  // Formatted strings (aliases as `{name}`): feed the id-free hash.
   valuesByMode: Record<string, string>;
+  // Values as Figma returns them (aliases as `{ type: 'VARIABLE_ALIAS', id }`):
+  // what a restore writes back, so an alias keeps its exact target, local or
+  // library.
+  rawValuesByMode: Record<string, VariableValue>;
+  description: string;
+  scopes: VariableScope[];
+  codeSyntax: { [platform in CodeSyntaxPlatform]?: string };
+  hiddenFromPublishing: boolean;
   shadeConfig: StoredShadeGeneratorConfig | null;
   stepConfig: StoredStepGeneratorConfig | null;
 }
@@ -234,6 +246,12 @@ const HISTORY_LIMIT = 20;
 let undoHistory: HistorySnapshot[] = [];
 let redoHistory: HistorySnapshot[] = [];
 let currentHistoryHash = '';
+// Original -> copy pairs made by a move to another collection
+// (`safeMoveVariablesToCollection`). The restore uses them to rebind layers
+// across collections when undo / redo of a move removes one side and
+// recreates the other; every other rebind stays inside one collection.
+// Remapped with the stacks, cleared with them.
+let historyMoveLinks: Array<{ original: string; copy: string }> = [];
 
 function setSidebarRelaunchData(): void {
   const relaunchData = { [RELAUNCH_COMMAND]: RELAUNCH_DESCRIPTION };
@@ -472,9 +490,24 @@ function buildHistoryHashes(snapshot: HistorySnapshotData): { hash: string; cont
         value: variable.valuesByMode[mode.id],
       }));
 
+    // Alias targets by identity, not only by name: two collections can hold
+    // a variable of the same name, and a library variable has no local key.
+    const rawValues = variable.rawValuesByMode || {};
+    const aliasTargets = orderedModes
+      .map(mode => {
+        const raw = rawValues[mode.id];
+        if (!isVariableAliasValue(raw)) return null;
+        return variableKeyById.get(raw.id) || `id:${raw.id}`;
+      });
+
     return {
       key: getHistoryVariableKey(collectionIndexById, variable),
       valuesByMode,
+      aliasTargets,
+      description: variable.description,
+      scopes: (variable.scopes || []).slice().sort(),
+      codeSyntax: CODE_SYNTAX_PLATFORMS.map(platform => (variable.codeSyntax || {})[platform] || null),
+      hiddenFromPublishing: variable.hiddenFromPublishing,
       shadeConfig: normalizeShadeConfigForHash(variable.shadeConfig),
       stepConfig: normalizeStepConfigForHash(variable.collectionId, variable.stepConfig),
     };
@@ -484,6 +517,7 @@ function buildHistoryHashes(snapshot: HistorySnapshotData): { hash: string; cont
     collections: snapshot.collections.map(collection => ({
       name: collection.name,
       hiddenFromPublishing: collection.hiddenFromPublishing,
+      isExtension: collection.isExtension === true,
       modes: collection.modes.map(mode => mode.name),
     })),
     variables: normalizedVariables,
@@ -510,6 +544,23 @@ function buildHistoryHashes(snapshot: HistorySnapshotData): { hash: string; cont
   };
 }
 
+const CODE_SYNTAX_PLATFORMS: CodeSyntaxPlatform[] = ['WEB', 'ANDROID', 'iOS'];
+
+function readVariableCodeSyntax(variable: Variable): { [platform in CodeSyntaxPlatform]?: string } {
+  const result: { [platform in CodeSyntaxPlatform]?: string } = {};
+  const source = variable.codeSyntax || {};
+  for (const platform of CODE_SYNTAX_PLATFORMS) {
+    const value = source[platform];
+    if (typeof value === 'string' && value) result[platform] = value;
+  }
+  return result;
+}
+
+function cloneVariableValue(value: VariableValue): VariableValue {
+  if (value === null || typeof value !== 'object') return value;
+  return JSON.parse(JSON.stringify(value)) as VariableValue;
+}
+
 function cloneStoredShadeConfig(config: StoredShadeGeneratorConfig | null): StoredShadeGeneratorConfig | null {
   if (!config) return null;
   return JSON.parse(JSON.stringify(config)) as StoredShadeGeneratorConfig;
@@ -529,6 +580,7 @@ async function captureHistorySnapshot(): Promise<HistorySnapshot> {
     id: collection.id,
     name: collection.name,
     hiddenFromPublishing: collection.hiddenFromPublishing,
+    isExtension: collection.isExtension === true,
     modes: collection.modes.map(mode => ({
       id: mode.modeId,
       name: mode.name,
@@ -536,14 +588,20 @@ async function captureHistorySnapshot(): Promise<HistorySnapshot> {
   }));
 
   const variableSnapshots: HistoryVariableSnapshot[] = [];
+  const lookupVariable = createVariableLookup();
   for (const collection of collections) {
+    // An extended collection lists its parent's variables too; they are
+    // captured once, under the collection that owns them.
+    if (collection.isExtension === true) continue;
     for (const variableId of collection.variableIds) {
       const variable = variablesById.get(variableId);
-      if (!variable) continue;
+      if (!variable || variable.variableCollectionId !== collection.id) continue;
 
       const valuesByMode: Record<string, string> = {};
+      const rawValuesByMode: Record<string, VariableValue> = {};
       for (const modeId of Object.keys(variable.valuesByMode)) {
-        valuesByMode[modeId] = await formatValue(variable.valuesByMode[modeId], variable.resolvedType);
+        valuesByMode[modeId] = await formatValue(variable.valuesByMode[modeId], variable.resolvedType, lookupVariable);
+        rawValuesByMode[modeId] = cloneVariableValue(variable.valuesByMode[modeId]);
       }
 
       variableSnapshots.push({
@@ -552,6 +610,11 @@ async function captureHistorySnapshot(): Promise<HistorySnapshot> {
         name: variable.name,
         resolvedType: variable.resolvedType,
         valuesByMode,
+        rawValuesByMode,
+        description: variable.description || '',
+        scopes: Array.isArray(variable.scopes) ? variable.scopes.slice() : [],
+        codeSyntax: readVariableCodeSyntax(variable),
+        hiddenFromPublishing: variable.hiddenFromPublishing === true,
         shadeConfig: cloneStoredShadeConfig(readShadeGeneratorConfig(variable)),
         stepConfig: cloneStoredStepConfig(readStepGeneratorConfig(variable)),
       });
@@ -666,99 +729,535 @@ function remapStepConfigForRestore(
   return remapped;
 }
 
-async function restoreHistorySnapshot(snapshot: HistorySnapshot): Promise<void> {
-  const existingCollections = await figma.variables.getLocalVariableCollectionsAsync();
-  for (const collection of existingCollections) {
+// Old snapshot id -> live id, filled by a restore. Only ids that changed are
+// worth remapping, but identity entries are harmless.
+interface HistoryIdMaps {
+  collections: Map<string, string>;
+  modes: Map<string, string>;
+  variables: Map<string, string>;
+  // Variables that kept their current value in some mode, because the alias
+  // the snapshot holds there points at a variable that no longer exists.
+  keptCurrentValues: string[];
+}
+
+function createHistoryIdMaps(): HistoryIdMaps {
+  return { collections: new Map(), modes: new Map(), variables: new Map(), keptCurrentValues: [] };
+}
+
+function areVariableValuesEqual(a: VariableValue | undefined, b: VariableValue | undefined): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined || a === null || b === null) return false;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  if (isVariableAliasValue(a) || isVariableAliasValue(b)) {
+    return isVariableAliasValue(a) && isVariableAliasValue(b) && a.id === b.id;
+  }
+  const left = a as unknown as Record<string, number>;
+  const right = b as unknown as Record<string, number>;
+  const keys = ['r', 'g', 'b', 'a'];
+  for (const key of keys) {
+    const l = typeof left[key] === 'number' ? left[key] : key === 'a' ? 1 : NaN;
+    const r = typeof right[key] === 'number' ? right[key] : key === 'a' ? 1 : NaN;
+    if (!(Math.abs(l - r) < 1e-6)) return false;
+  }
+  return true;
+}
+
+function areStringListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = a.slice().sort();
+  const right = b.slice().sort();
+  return left.every((value, index) => value === right[index]);
+}
+
+// Writes a generator config back. Kept ids: the stored config as is. Changed
+// ids: through the remap function, which also bumps `updatedAt`.
+function restoreGeneratorPluginData(
+  variable: Variable,
+  key: string,
+  stored: object | null,
+  remap: () => { updatedAt: string },
+  storedUpdatedAt: string
+): void {
+  const currentRaw = variable.getPluginData(key);
+  if (!stored) {
+    if (currentRaw) variable.setPluginData(key, '');
+    return;
+  }
+
+  const remapped = remap();
+  remapped.updatedAt = storedUpdatedAt;
+  const storedJson = JSON.stringify(stored);
+  let nextJson = storedJson;
+  if (JSON.stringify(remapped) !== storedJson) {
+    remapped.updatedAt = new Date().toISOString();
+    nextJson = JSON.stringify(remapped);
+  }
+  if (nextJson !== currentRaw) {
+    variable.setPluginData(key, nextJson);
+  }
+}
+
+// Brings the file to `snapshot` in place: everything that survives keeps its
+// id. Only what the snapshot has and the file lacks is created (new id), and
+// layers bound to the old id are rebound to it. Matching is by id, then by
+// name for an id that was churned anyway. A pre-flight finds aliases whose
+// target cannot exist after the restore; those modes keep their current
+// value. A write that still fails is rolled back by the caller.
+async function restoreHistorySnapshotInPlace(snapshot: HistorySnapshot): Promise<HistoryIdMaps> {
+  const maps = createHistoryIdMaps();
+  const liveCollections = await figma.variables.getLocalVariableCollectionsAsync();
+  const liveVariables = await figma.variables.getLocalVariablesAsync();
+  const liveCollectionById = new Map(liveCollections.map(collection => [collection.id, collection]));
+  const liveVariableById = new Map(liveVariables.map(variable => [variable.id, variable]));
+
+  // ---- Plan: match collections, modes and variables (no writes) ----
+
+  const matchedCollection = new Map<string, VariableCollection>();
+  const collectionsToCreate: HistoryCollectionSnapshot[] = [];
+  const usedCollectionIds = new Set<string>();
+  const pickLiveCollection = (target: HistoryCollectionSnapshot): VariableCollection | null => {
+    const isExtension = target.isExtension === true;
+    const byId = liveCollectionById.get(target.id);
+    if (byId && !usedCollectionIds.has(byId.id) && (byId.isExtension === true) === isExtension) return byId;
+    return liveCollections.find(candidate =>
+      !usedCollectionIds.has(candidate.id) &&
+      (candidate.isExtension === true) === isExtension &&
+      !snapshot.collections.some(other => other.id === candidate.id) &&
+      candidate.name === target.name
+    ) || null;
+  };
+  for (const target of snapshot.collections) {
+    const live = pickLiveCollection(target);
+    if (live) {
+      usedCollectionIds.add(live.id);
+      matchedCollection.set(target.id, live);
+      maps.collections.set(target.id, live.id);
+    } else if (target.isExtension !== true) {
+      collectionsToCreate.push(target);
+    }
+  }
+  const collectionsToRemove = liveCollections.filter(collection =>
+    !usedCollectionIds.has(collection.id) && collection.isExtension !== true
+  );
+
+  // Modes of matched collections: by id, then by name.
+  const modesToAdd = new Map<string, Array<{ id: string; name: string }>>();
+  const modesToRename: Array<{ collection: VariableCollection; modeId: string; name: string }> = [];
+  const modesToRemove: Array<{ collection: VariableCollection; modeId: string }> = [];
+  for (const target of snapshot.collections) {
+    const live = matchedCollection.get(target.id);
+    if (!live) continue;
+    const usedModeIds = new Set<string>();
+    const missing: Array<{ id: string; name: string }> = [];
+    for (const mode of target.modes) {
+      const byId = live.modes.find(candidate => candidate.modeId === mode.id && !usedModeIds.has(candidate.modeId));
+      const liveMode = byId || live.modes.find(candidate =>
+        !usedModeIds.has(candidate.modeId) &&
+        !target.modes.some(other => other.id === candidate.modeId) &&
+        candidate.name === mode.name
+      );
+      if (liveMode) {
+        usedModeIds.add(liveMode.modeId);
+        maps.modes.set(mode.id, liveMode.modeId);
+        if (liveMode.name !== mode.name) {
+          modesToRename.push({ collection: live, modeId: liveMode.modeId, name: mode.name });
+        }
+      } else {
+        missing.push(mode);
+      }
+    }
+    if (target.isExtension === true) continue; // read only
+    if (missing.length > 0) modesToAdd.set(target.id, missing);
+    for (const liveMode of live.modes) {
+      if (!usedModeIds.has(liveMode.modeId) && liveMode.modeId !== live.defaultModeId) {
+        modesToRemove.push({ collection: live, modeId: liveMode.modeId });
+      }
+    }
+  }
+
+  // Variables: by id when collection and type still match, then by name.
+  const restorableCollectionIds = new Set(
+    snapshot.collections.filter(collection => collection.isExtension !== true).map(collection => collection.id)
+  );
+  const targetVariables = snapshot.variables.filter(variable => restorableCollectionIds.has(variable.collectionId));
+  const targetVariableIds = new Set(targetVariables.map(variable => variable.id));
+  const matchedVariable = new Map<string, Variable>();
+  const variablesToCreate: HistoryVariableSnapshot[] = [];
+  const usedVariableIds = new Set<string>();
+  for (const target of targetVariables) {
+    const liveCollection = matchedCollection.get(target.collectionId);
+    if (!liveCollection) {
+      variablesToCreate.push(target);
+      continue;
+    }
+    const fits = (candidate: Variable | undefined) => !!candidate &&
+      !usedVariableIds.has(candidate.id) &&
+      candidate.variableCollectionId === liveCollection.id &&
+      candidate.resolvedType === target.resolvedType;
+    const byId = liveVariableById.get(target.id);
+    const live = fits(byId) ? byId! : liveVariables.find(candidate =>
+      fits(candidate) && !targetVariableIds.has(candidate.id) && candidate.name === target.name
+    );
+    if (live) {
+      usedVariableIds.add(live.id);
+      matchedVariable.set(target.id, live);
+    } else {
+      variablesToCreate.push(target);
+    }
+  }
+  const removedCollectionIds = new Set(collectionsToRemove.map(collection => collection.id));
+  const variablesToRemove = liveVariables.filter(variable =>
+    !usedVariableIds.has(variable.id) &&
+    !removedCollectionIds.has(variable.variableCollectionId) &&
+    liveCollectionById.has(variable.variableCollectionId) &&
+    liveCollectionById.get(variable.variableCollectionId)!.isExtension !== true
+  );
+  const variablesGoneWithCollections = liveVariables.filter(variable =>
+    removedCollectionIds.has(variable.variableCollectionId)
+  );
+
+  // ---- Pre-flight: aliases whose target cannot exist after this restore ----
+  // An alias resolves when its target is in the snapshot itself (kept,
+  // renamed or recreated by this restore), stays live, or is a library
+  // variable. A target that is gone for good (deleted and not part of this
+  // snapshot, or a library variable that no longer resolves) cannot be
+  // written: Figma rejects an alias to it. That mode keeps the variable's
+  // current value and the rest of the step still applies, so one dead
+  // reference never blocks undo / redo past it (the earlier undo that
+  // recreates the target restores the real alias).
+
+  const deadAliasModes = new Set<string>();
+  const deadAliasNames = new Set<string>();
+  const aliasTargetOk = new Map<string, boolean>();
+  const removedVariableIds = new Set(variablesToRemove.map(variable => variable.id));
+  for (const target of targetVariables) {
+    const live = matchedVariable.get(target.id) || null;
+    for (const [modeId, raw] of Object.entries(target.rawValuesByMode || {})) {
+      if (!isVariableAliasValue(raw) || targetVariableIds.has(raw.id)) continue;
+      const liveModeId = maps.modes.get(modeId);
+      if (live && liveModeId && areVariableValuesEqual(live.valuesByMode[liveModeId], raw)) continue;
+      if (!aliasTargetOk.has(raw.id)) {
+        const liveTarget = liveVariableById.get(raw.id);
+        let ok = !!liveTarget && !removedCollectionIds.has(liveTarget.variableCollectionId) &&
+          !removedVariableIds.has(raw.id);
+        if (!ok && !liveTarget) {
+          try {
+            const external = await figma.variables.getVariableByIdAsync(raw.id);
+            ok = !!external && external.remote === true;
+          } catch {
+            ok = false;
+          }
+        }
+        aliasTargetOk.set(raw.id, ok);
+      }
+      if (!aliasTargetOk.get(raw.id)) {
+        deadAliasModes.add(`${target.id}::${modeId}`);
+        deadAliasNames.add(target.name);
+      }
+    }
+  }
+
+  // ---- Writes ----
+
+  // Collections the file lacks.
+  for (const target of collectionsToCreate) {
+    const collection = figma.variables.createVariableCollection(target.name);
+    maps.collections.set(target.id, collection.id);
+    matchedCollection.set(target.id, collection);
+    target.modes.forEach((mode, index) => {
+      if (index === 0) {
+        if (collection.modes[0] && collection.modes[0].name !== mode.name) {
+          collection.renameMode(collection.defaultModeId, mode.name);
+        }
+        maps.modes.set(mode.id, collection.defaultModeId);
+      } else {
+        maps.modes.set(mode.id, collection.addMode(mode.name));
+      }
+    });
+    if (collection.hiddenFromPublishing !== target.hiddenFromPublishing) {
+      collection.hiddenFromPublishing = target.hiddenFromPublishing;
+    }
+  }
+
+  // Matched collections: name, flag, modes. Extra modes go first, so a
+  // collection at its mode limit can still take back a missing one; no value
+  // is ever written into a mode that is not in the snapshot.
+  for (const target of snapshot.collections) {
+    const live = matchedCollection.get(target.id);
+    if (!live || target.isExtension === true || collectionsToCreate.indexOf(target) !== -1) continue;
+    if (live.name !== target.name) live.name = target.name;
+    if (live.hiddenFromPublishing !== target.hiddenFromPublishing) {
+      live.hiddenFromPublishing = target.hiddenFromPublishing;
+    }
+  }
+  for (const { collection, modeId } of modesToRemove) {
+    collection.removeMode(modeId);
+  }
+  for (const { collection, modeId, name } of modesToRename) {
+    collection.renameMode(modeId, name);
+  }
+  modesToAdd.forEach((modes, targetCollectionId) => {
+    const live = matchedCollection.get(targetCollectionId)!;
+    for (const mode of modes) {
+      maps.modes.set(mode.id, live.addMode(mode.name));
+    }
+  });
+
+  // Variables: removals first (frees their names), then renames (through a
+  // temporary name, so two variables can swap names), then creations.
+  const removedVariables: Variable[] = variablesToRemove.concat(variablesGoneWithCollections);
+  for (const variable of variablesToRemove) {
+    variable.remove();
+  }
+  for (const collection of collectionsToRemove) {
     collection.remove();
   }
 
-  const collectionSnapshotById = new Map(snapshot.collections.map(collection => [collection.id, collection]));
-  const collectionMap = new Map<string, VariableCollection>();
-  const modeIdMap = new Map<string, string>();
-
-  for (const collectionSnapshot of snapshot.collections) {
-    const collection = figma.variables.createVariableCollection(collectionSnapshot.name);
-    const defaultMode = collectionSnapshot.modes.length > 0 ? collectionSnapshot.modes[0] : null;
-    const extraModes = collectionSnapshot.modes.slice(1);
-
-    if (defaultMode) {
-      collection.renameMode(collection.defaultModeId, defaultMode.name);
-      modeIdMap.set(defaultMode.id, collection.defaultModeId);
-    }
-
-    for (const mode of extraModes) {
-      const newModeId = collection.addMode(mode.name);
-      modeIdMap.set(mode.id, newModeId);
-    }
-
-    collection.hiddenFromPublishing = collectionSnapshot.hiddenFromPublishing;
-    collectionMap.set(collectionSnapshot.id, collection);
+  const renames: Array<{ variable: Variable; name: string }> = [];
+  for (const target of targetVariables) {
+    const live = matchedVariable.get(target.id);
+    if (live && live.name !== target.name) renames.push({ variable: live, name: target.name });
+  }
+  if (renames.length > 1) {
+    renames.forEach((rename, index) => {
+      rename.variable.name = `__winden_restore_${index}_${rename.variable.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    });
+  }
+  for (const rename of renames) {
+    rename.variable.name = rename.name;
   }
 
-  const variableMap = new Map<string, Variable>();
-  for (const variableSnapshot of snapshot.variables) {
-    const collection = collectionMap.get(variableSnapshot.collectionId);
-    const collectionSnapshot = collectionSnapshotById.get(variableSnapshot.collectionId);
-    if (!collection || !collectionSnapshot) continue;
-
+  const createdVariables: Array<{ target: HistoryVariableSnapshot; variable: Variable }> = [];
+  for (const target of variablesToCreate) {
+    const collection = matchedCollection.get(target.collectionId);
+    if (!collection) continue;
     const variable = figma.variables.createVariable(
-      variableSnapshot.name,
+      target.name,
       collection,
-      variableSnapshot.resolvedType as VariableResolvedDataType
+      target.resolvedType as VariableResolvedDataType
     );
-    const defaultModeId = collectionSnapshot.modes[0]
-      ? modeIdMap.get(collectionSnapshot.modes[0].id) || collection.defaultModeId
-      : collection.defaultModeId;
-    variable.setValueForMode(defaultModeId, getDefaultValue(variableSnapshot.resolvedType));
-    variableMap.set(variableSnapshot.id, variable);
+    matchedVariable.set(target.id, variable);
+    createdVariables.push({ target, variable });
   }
 
-  for (const variableSnapshot of snapshot.variables) {
-    const variable = variableMap.get(variableSnapshot.id);
+  const liveVariableByTargetId = new Map<string, Variable>();
+  matchedVariable.forEach((variable, targetId) => {
+    liveVariableByTargetId.set(targetId, variable);
+    maps.variables.set(targetId, variable.id);
+  });
+
+  // Values. Pass 1 writes literals and turns every alias that changes into a
+  // placeholder; pass 2 writes the aliases. Between the two, the alias graph
+  // is a subset of the snapshot's, so Figma never sees a cycle.
+  const createdTargetIds = new Set(createdVariables.map(entry => entry.target.id));
+  const aliasWrites: Array<{ variable: Variable; modeId: string; value: VariableValue }> = [];
+  for (const target of targetVariables) {
+    const variable = liveVariableByTargetId.get(target.id);
     if (!variable) continue;
-
-    for (const [oldModeId, value] of Object.entries(variableSnapshot.valuesByMode)) {
-      const newModeId = modeIdMap.get(oldModeId);
-      if (!newModeId) continue;
-      const parsedValue = await parseValue(value, variable.resolvedType);
-      variable.setValueForMode(newModeId, parsedValue);
+    for (const [modeId, raw] of Object.entries(target.rawValuesByMode || {})) {
+      const liveModeId = maps.modes.get(modeId);
+      if (!liveModeId) continue;
+      if (deadAliasModes.has(`${target.id}::${modeId}`)) continue;
+      const value: VariableValue = isVariableAliasValue(raw)
+        ? { type: 'VARIABLE_ALIAS', id: maps.variables.get(raw.id) || raw.id }
+        : cloneVariableValue(raw);
+      const current = variable.valuesByMode[liveModeId];
+      if (!createdTargetIds.has(target.id) && areVariableValuesEqual(current, value)) continue;
+      if (isVariableAliasValue(value)) {
+        if (isVariableAliasValue(current)) {
+          variable.setValueForMode(liveModeId, getDefaultValue(variable.resolvedType));
+        }
+        aliasWrites.push({ variable, modeId: liveModeId, value });
+      } else {
+        variable.setValueForMode(liveModeId, value);
+      }
     }
   }
+  for (const write of aliasWrites) {
+    write.variable.setValueForMode(write.modeId, write.value);
+  }
 
-  for (const variableSnapshot of snapshot.variables) {
-    const variable = variableMap.get(variableSnapshot.id);
+  // Metadata.
+  for (const target of targetVariables) {
+    const variable = liveVariableByTargetId.get(target.id);
     if (!variable) continue;
-
-    if (variableSnapshot.shadeConfig) {
-      variable.setPluginData(
-        SHADE_GENERATOR_CONFIG_KEY,
-        JSON.stringify(remapShadeConfigForRestore(variableSnapshot.shadeConfig, variableMap))
-      );
-    } else {
-      clearShadeGeneratorConfig(variable);
+    const description = target.description || '';
+    if ((variable.description || '') !== description) variable.description = description;
+    if ((variable.hiddenFromPublishing === true) !== (target.hiddenFromPublishing === true)) {
+      variable.hiddenFromPublishing = target.hiddenFromPublishing === true;
     }
-
-    if (variableSnapshot.stepConfig) {
-      variable.setPluginData(
-        STEP_GENERATOR_CONFIG_KEY,
-        JSON.stringify(remapStepConfigForRestore(variableSnapshot.stepConfig, variableMap, modeIdMap))
-      );
-    } else {
-      clearStepGeneratorConfig(variable);
+    const scopes = target.scopes || [];
+    if (!areStringListsEqual(variable.scopes || [], scopes)) variable.scopes = scopes.slice();
+    const liveSyntax = variable.codeSyntax || {};
+    const targetSyntax = target.codeSyntax || {};
+    for (const platform of CODE_SYNTAX_PLATFORMS) {
+      const want = targetSyntax[platform] || '';
+      const have = liveSyntax[platform] || '';
+      if (want === have) continue;
+      if (want) {
+        variable.setVariableCodeSyntax(platform, want);
+      } else {
+        variable.removeVariableCodeSyntax(platform);
+      }
     }
   }
 
-  setVariableOrder(
-    snapshot.variableOrder
-      .map(oldVariableId => {
-        const mappedVariable = variableMap.get(oldVariableId);
-        return mappedVariable ? mappedVariable.id : null;
-      })
-      .filter((id): id is string => id !== null)
+  // Generator plugin data.
+  for (const target of targetVariables) {
+    const variable = liveVariableByTargetId.get(target.id);
+    if (!variable) continue;
+    const shadeConfig = target.shadeConfig;
+    restoreGeneratorPluginData(
+      variable,
+      SHADE_GENERATOR_CONFIG_KEY,
+      shadeConfig,
+      () => remapShadeConfigForRestore(shadeConfig!, liveVariableByTargetId),
+      shadeConfig ? shadeConfig.updatedAt : ''
+    );
+    const stepConfig = target.stepConfig;
+    restoreGeneratorPluginData(
+      variable,
+      STEP_GENERATOR_CONFIG_KEY,
+      stepConfig,
+      () => remapStepConfigForRestore(stepConfig!, liveVariableByTargetId, maps.modes),
+      stepConfig ? stepConfig.updatedAt : ''
+    );
+  }
+
+  // Orders.
+  const nextVariableOrder = snapshot.variableOrder
+    .map(oldVariableId => maps.variables.get(oldVariableId) || null)
+    .filter((id): id is string => id !== null);
+  if (JSON.stringify(nextVariableOrder) !== JSON.stringify(getVariableOrder())) {
+    setVariableOrder(nextVariableOrder);
+  }
+  restoreSnapshotCollectionOrder(snapshot, oldCollectionId => matchedCollection.get(oldCollectionId) || null);
+
+  // Layers still bound to a variable that is gone (the snapshot's own id, or
+  // a live copy this restore removed, e.g. the copy a move made) move to its
+  // live twin. Needs every page loaded, so only when something was recreated.
+  const rebind = new Map<string, Variable>();
+  liveVariableByTargetId.forEach((variable, targetId) => {
+    if (variable.id !== targetId) rebind.set(targetId, variable);
+  });
+  // A removed variable's twin is the recreated one with the same name and
+  // type in the same collection (or in the collection recreated in its
+  // place), or the other side of a move.
+  const removedCollectionById = new Map(collectionsToRemove.map(collection => [collection.id, collection]));
+  const sameCollection = (removed: Variable, target: HistoryVariableSnapshot): boolean => {
+    if (removed.variableCollectionId === target.collectionId) return true;
+    const live = matchedCollection.get(target.collectionId);
+    if (live && live.id === removed.variableCollectionId) return true;
+    const removedCollection = removedCollectionById.get(removed.variableCollectionId);
+    const recreated = collectionsToCreate.find(collection => collection.id === target.collectionId);
+    return !!removedCollection && !!recreated && removedCollection.name === recreated.name;
+  };
+  const movePair = (a: string, b: string) => historyMoveLinks.some(link =>
+    (link.original === a && link.copy === b) || (link.original === b && link.copy === a)
   );
-  restoreSnapshotCollectionOrder(snapshot, oldCollectionId => collectionMap.get(oldCollectionId) || null);
+  for (const removed of removedVariables) {
+    if (rebind.has(removed.id)) continue;
+    const twin = createdVariables.find(entry =>
+      entry.target.resolvedType === removed.resolvedType && movePair(removed.id, entry.target.id)
+    ) || createdVariables.find(entry =>
+      entry.target.name === removed.name &&
+      entry.target.resolvedType === removed.resolvedType &&
+      sameCollection(removed, entry.target)
+    );
+    if (twin) rebind.set(removed.id, twin.variable);
+  }
+  if (rebind.size > 0) {
+    try {
+      await rebindMovedVariablesOnCanvas(rebind);
+    } catch (error) {
+      console.warn('[Plugin] Could not rebind layers after undo/redo:', error);
+    }
+  }
+
+  maps.keptCurrentValues = Array.from(deadAliasNames);
   setSidebarRelaunchData();
   await fetchData();
+  return maps;
+}
+
+function remapHistoryId(map: Map<string, string>, id: string): string {
+  return map.get(id) || id;
+}
+
+// Rewrites a stacked snapshot after a restore changed some ids, so the next
+// undo / redo finds them by id instead of falling back to names.
+function remapHistorySnapshotIds(snapshot: HistorySnapshot, maps: HistoryIdMaps): HistorySnapshot {
+  const collectionId = (id: string) => remapHistoryId(maps.collections, id);
+  const modeId = (id: string) => remapHistoryId(maps.modes, id);
+  const variableId = (id: string) => remapHistoryId(maps.variables, id);
+  const remapKeys = <T>(record: Record<string, T>, mapValue: (value: T) => T): Record<string, T> => {
+    const next: Record<string, T> = {};
+    for (const [key, value] of Object.entries(record || {})) {
+      next[modeId(key)] = mapValue(value);
+    }
+    return next;
+  };
+  const remapStepEntries = (steps: StoredStepEntry[] | undefined) => steps
+    ? steps.map(step => ({ ...step, id: typeof step.id === 'string' ? variableId(step.id) : step.id }))
+    : steps;
+  const remapGeneratedSteps = (steps: StoredStepData[]) =>
+    steps.map(step => ({ ...step, id: variableId(step.id) }));
+
+  const next: HistorySnapshotData = {
+    collections: snapshot.collections.map(collection => ({
+      ...collection,
+      id: collectionId(collection.id),
+      modes: collection.modes.map(mode => ({ id: modeId(mode.id), name: mode.name })),
+    })),
+    variables: snapshot.variables.map(variable => {
+      const shadeConfig = cloneStoredShadeConfig(variable.shadeConfig);
+      if (shadeConfig) {
+        shadeConfig.sourceVariableId = variableId(shadeConfig.sourceVariableId);
+        shadeConfig.generatedShades = shadeConfig.generatedShades.map(shade => ({ ...shade, id: variableId(shade.id) }));
+      }
+      const stepConfig = cloneStoredStepConfig(variable.stepConfig);
+      if (stepConfig) {
+        stepConfig.sourceVariableId = variableId(stepConfig.sourceVariableId);
+        stepConfig.generatedSteps = remapGeneratedSteps(stepConfig.generatedSteps);
+        stepConfig.steps = remapStepEntries(stepConfig.steps);
+        if (stepConfig.modes) {
+          stepConfig.modes = remapKeys(stepConfig.modes, modeConfig => ({
+            steps: remapStepEntries(modeConfig.steps) || [],
+            generatedSteps: remapGeneratedSteps(modeConfig.generatedSteps),
+            modalState: modeConfig.modalState,
+          }));
+        }
+      }
+      return {
+        ...variable,
+        id: variableId(variable.id),
+        collectionId: collectionId(variable.collectionId),
+        valuesByMode: remapKeys(variable.valuesByMode, value => value),
+        rawValuesByMode: remapKeys(variable.rawValuesByMode, value => isVariableAliasValue(value)
+          ? { type: 'VARIABLE_ALIAS', id: variableId(value.id) } as VariableAlias
+          : value),
+        shadeConfig,
+        stepConfig,
+      };
+    }),
+    variableOrder: snapshot.variableOrder.map(variableId),
+    collectionOrder: snapshot.collectionOrder
+      ? snapshot.collectionOrder.map(entry => ({ id: collectionId(entry.id), name: entry.name }))
+      : snapshot.collectionOrder,
+    collectionOrderRaw: snapshot.collectionOrderRaw,
+  };
+  return { ...next, ...buildHistoryHashes(next) };
+}
+
+function hasChangedHistoryIds(maps: HistoryIdMaps): boolean {
+  const changed = (map: Map<string, string>) => {
+    let result = false;
+    map.forEach((value, key) => {
+      if (value !== key) result = true;
+    });
+    return result;
+  };
+  return changed(maps.collections) || changed(maps.modes) || changed(maps.variables);
 }
 
 // Undo/redo fast path: the target differs from the file only in collection
@@ -771,22 +1270,24 @@ function canRestoreCollectionOrderOnly(current: HistorySnapshot, target: History
     target.collections.length === current.collections.length;
 }
 
-async function restoreCollectionOrderOnly(current: HistorySnapshot, target: HistorySnapshot): Promise<void> {
+async function restoreCollectionOrderOnly(current: HistorySnapshot, target: HistorySnapshot): Promise<HistoryIdMaps> {
+  const maps = createHistoryIdMaps();
   const liveByTargetId = new Map<string, { id: string; name: string }>();
   target.collections.forEach((collection, index) => {
     const live = current.collections[index];
     liveByTargetId.set(collection.id, { id: live.id, name: live.name });
+    maps.collections.set(collection.id, live.id);
   });
   restoreSnapshotCollectionOrder(target, targetId => liveByTargetId.get(targetId) || null);
   await fetchData();
+  return maps;
 }
 
-async function applyHistorySnapshot(current: HistorySnapshot, target: HistorySnapshot): Promise<void> {
+async function applyHistorySnapshot(current: HistorySnapshot, target: HistorySnapshot): Promise<HistoryIdMaps> {
   if (canRestoreCollectionOrderOnly(current, target)) {
-    await restoreCollectionOrderOnly(current, target);
-  } else {
-    await restoreHistorySnapshot(target);
+    return restoreCollectionOrderOnly(current, target);
   }
+  return restoreHistorySnapshotInPlace(target);
 }
 
 function trimHistoryStack(stack: HistorySnapshot[]): HistorySnapshot[] {
@@ -809,6 +1310,7 @@ function postHistoryState(): void {
 async function resetHistory(): Promise<void> {
   undoHistory = [];
   redoHistory = [];
+  historyMoveLinks = [];
   currentHistoryHash = (await captureHistorySnapshot()).hash;
   postHistoryState();
 }
@@ -846,34 +1348,24 @@ function runMutationWithHistory(action: () => Promise<void>): Promise<void> {
   });
 }
 
-async function undoHistoryStep(): Promise<void> {
-  if (undoHistory.length === 0) {
-    postHistoryState();
-    return;
-  }
-
-  const currentSnapshot = await captureHistorySnapshot();
-  if (currentSnapshot.hash !== currentHistoryHash) {
-    await resetHistory();
-    figma.ui.postMessage({
-      type: 'history-error',
-      error: 'Undo history was cleared because the file changed outside the plugin.',
-    });
-    return;
-  }
-
-  const previousSnapshot = undoHistory[undoHistory.length - 1];
-  undoHistory = undoHistory.slice(0, -1);
-  redoHistory = trimHistoryStack(redoHistory.concat([currentSnapshot]));
-
-  await applyHistorySnapshot(currentSnapshot, previousSnapshot);
-  currentHistoryHash = previousSnapshot.hash;
-  postHistoryState();
-  figma.ui.postMessage({ type: 'history-applied', direction: 'undo' });
+function remapHistoryStacks(maps: HistoryIdMaps): void {
+  if (!hasChangedHistoryIds(maps)) return;
+  undoHistory = undoHistory.map(snapshot => remapHistorySnapshotIds(snapshot, maps));
+  redoHistory = redoHistory.map(snapshot => remapHistorySnapshotIds(snapshot, maps));
+  historyMoveLinks = historyMoveLinks.map(link => ({
+    original: remapHistoryId(maps.variables, link.original),
+    copy: remapHistoryId(maps.variables, link.copy),
+  }));
 }
 
-async function redoHistoryStep(): Promise<void> {
-  if (redoHistory.length === 0) {
+// One undo or redo step. The stacks move only after the restore succeeded.
+// A restore that fails half-way is rolled back to the snapshot taken just
+// before it, so the file is never left half-restored, and the stacks stay
+// as they were.
+async function stepHistory(direction: 'undo' | 'redo'): Promise<void> {
+  const label = direction === 'undo' ? 'Undo' : 'Redo';
+  const source = direction === 'undo' ? undoHistory : redoHistory;
+  if (source.length === 0) {
     postHistoryState();
     return;
   }
@@ -883,19 +1375,70 @@ async function redoHistoryStep(): Promise<void> {
     await resetHistory();
     figma.ui.postMessage({
       type: 'history-error',
-      error: 'Redo history was cleared because the file changed outside the plugin.',
+      error: `${label} history was cleared because the file changed outside the plugin.`,
     });
     return;
   }
 
-  const nextSnapshot = redoHistory[redoHistory.length - 1];
-  redoHistory = redoHistory.slice(0, -1);
-  undoHistory = trimHistoryStack(undoHistory.concat([currentSnapshot]));
+  const targetSnapshot = source[source.length - 1];
+  let maps: HistoryIdMaps;
+  try {
+    maps = await applyHistorySnapshot(currentSnapshot, targetSnapshot);
+  } catch (error: any) {
+    const reason = error && error.message ? error.message : String(error);
+    console.error(`[Plugin] ${label} failed, rolling back:`, error);
+    try {
+      const rollbackMaps = await restoreHistorySnapshotInPlace(currentSnapshot);
+      remapHistoryStacks(rollbackMaps);
+      currentHistoryHash = (await captureHistorySnapshot()).hash;
+      postHistoryState();
+      figma.ui.postMessage({ type: 'history-error', error: `${label} failed and was rolled back: ${reason}` });
+    } catch (rollbackError) {
+      console.error(`[Plugin] ${label} rollback failed:`, rollbackError);
+      try {
+        await fetchData();
+      } catch {
+        // The reset below still tells the UI where history stands.
+      }
+      await resetHistory();
+      figma.ui.postMessage({
+        type: 'history-error',
+        error: `${label} failed and history was cleared: ${reason}`,
+      });
+    }
+    return;
+  }
 
-  await applyHistorySnapshot(currentSnapshot, nextSnapshot);
-  currentHistoryHash = nextSnapshot.hash;
+  if (direction === 'undo') {
+    undoHistory = undoHistory.slice(0, -1);
+    redoHistory = trimHistoryStack(redoHistory.concat([currentSnapshot]));
+  } else {
+    redoHistory = redoHistory.slice(0, -1);
+    undoHistory = trimHistoryStack(undoHistory.concat([currentSnapshot]));
+  }
+  remapHistoryStacks(maps);
+
+  // A fresh capture, not the target's stored hash: a recreated collection,
+  // mode or variable lands last in API order, which the index-based hash
+  // would otherwise read as an outside change.
+  currentHistoryHash = (await captureHistorySnapshot()).hash;
   postHistoryState();
-  figma.ui.postMessage({ type: 'history-applied', direction: 'redo' });
+  const kept = maps.keptCurrentValues;
+  figma.ui.postMessage({
+    type: 'history-applied',
+    direction,
+    ...(kept.length > 0
+      ? { notice: `${label} couldn't restore the reference on ${kept.join(', ')}: the variable it pointed to no longer exists.` }
+      : {}),
+  });
+}
+
+function undoHistoryStep(): Promise<void> {
+  return stepHistory('undo');
+}
+
+function redoHistoryStep(): Promise<void> {
+  return stepHistory('redo');
 }
 
 function isShadeVariableName(name: string): boolean {
@@ -2277,6 +2820,11 @@ async function buildUiState(): Promise<UIState> {
     modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name }))
   }));
 
+  const liveVariableIds = getLiveVariableIds(collections);
+  // One lookup per alias target for the whole build, shared by formatValue
+  // and isDeadAlias (every mode of every aliasing variable asks again).
+  const lookupVariable = createVariableLookup();
+
   let variableData: UIVariableData[] = [];
   for (const collection of collections) {
     for (const varId of collection.variableIds) {
@@ -2288,6 +2836,7 @@ async function buildUiState(): Promise<UIState> {
 
         // Format all mode values
         const valuesByMode: Record<string, string> = {};
+        const brokenModes: string[] = [];
         for (const modeId of Object.keys(variable.valuesByMode)) {
           const modeValue = variable.valuesByMode[modeId];
           valuesByMode[modeId] = await formatValue(modeValue, variable.resolvedType, lookupVariable);
@@ -2350,6 +2899,33 @@ async function fetchData() {
     shadeGroups,
     collectionOrder,
   });
+  // A component card shows its rows' resolved values (#F9B8B8), read when it
+  // was sent. Editing a variable changes them without touching the layer, so
+  // no selection or node event fires: resend the card with every data load.
+  await sendSelection();
+}
+
+// Ids of every live local variable. Figma keeps a deleted variable around
+// (soft-deleted, name and all, so its own undo can bring it back), and
+// getVariableByIdAsync still returns it; only the collections' lists drop it.
+function getLiveVariableIds(collections: VariableCollection[]): Set<string> {
+  const ids = new Set<string>();
+  collections.forEach(collection => collection.variableIds.forEach(id => ids.add(id)));
+  return ids;
+}
+
+// Whether a looked-up variable is gone: not found, or a local variable no
+// local collection lists. Remote (library) variables are trusted as is.
+function isDeadVariable(variable: Variable | null, liveVariableIds: Set<string>): boolean {
+  return !variable || (!variable.remote && !liveVariableIds.has(variable.id));
+}
+
+// A mode value that aliases a variable that no longer exists. Live local
+// targets cost no lookup.
+type VariableLookup = (id: string) => Promise<Variable | null>;
+
+function lookupVariableUncached(id: string): Promise<Variable | null> {
+  return figma.variables.getVariableByIdAsync(id);
 }
 
 // A memoized `getVariableByIdAsync` for one pass over the file. Caches the
@@ -2503,6 +3079,17 @@ interface InspectorTokenRef {
   name: string;
   collectionId?: string;
   collectionName?: string;
+  // Bound to a variable that no longer exists (see isDeadVariable). `name` is
+  // the soft-deleted variable's name when Figma still returns it, else ''.
+  // Set only when true, to keep the payload lean.
+  missing?: true;
+}
+
+// Live local variables and collection names, read once per selection send so
+// the row builders never fetch per row.
+interface InspectorContext {
+  liveVariableIds: Set<string>;
+  collectionNames: Map<string, string>;
 }
 
 type InspectorBindingTarget =
@@ -2576,11 +3163,29 @@ async function resolveVariableAlias(alias: any, context: InspectorContext): Prom
   if (!alias || alias.type !== 'VARIABLE_ALIAS') {
     return null;
   }
+  let variable: Variable | null = null;
   try {
     variable = await figma.variables.getVariableByIdAsync(alias.id);
   } catch (e) {
-    return null;
+    variable = null;
   }
+  if (!variable) {
+    return { id: alias.id, name: '', missing: true };
+  }
+  const collectionName = await lookupCollectionName(variable.variableCollectionId, context);
+  if (isDeadVariable(variable, context.liveVariableIds)) {
+    const token: InspectorTokenRef = { id: variable.id, name: variable.name, missing: true };
+    if (collectionName !== undefined) {
+      token.collectionName = collectionName;
+    }
+    return token;
+  }
+  return {
+    id: variable.id,
+    name: variable.name,
+    collectionId: variable.variableCollectionId,
+    collectionName,
+  };
 }
 
 async function resolveStyleName(styleId: any): Promise<string | null> {
@@ -2591,7 +3196,7 @@ async function resolveStyleName(styleId: any): Promise<string | null> {
     const style = await figma.getStyleByIdAsync(styleId);
     return style ? style.name : null;
   } catch (e) {
-    variable = null;
+    return null;
   }
 }
 
@@ -2876,11 +3481,6 @@ async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData>
   if (INSPECTOR_COMPONENT_TYPES.has(node.type)) {
     const state = { count: 1, truncated: false }; // root counts toward the cap too
     const children = await collectInspectorChildren((node as any).children, state, context);
-  const liveVariableIds = getLiveVariableIds(collections);
-  // One lookup per alias target for the whole build, shared by formatValue
-  // and isDeadAlias (every mode of every aliasing variable asks again).
-  const lookupVariable = createVariableLookup();
-
     if (children.length > 0) {
       data.children = children;
     }
@@ -2892,8 +3492,61 @@ async function getNodeInspectorData(node: SceneNode): Promise<InspectorNodeData>
   return data;
 }
 
-        const brokenModes: string[] = [];
 async function bindNodeProperty(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
+  await applyNodeBinding(nodeId, target, variableId);
+  await sendSelection();
+}
+
+type NodeBindingRequest = { nodeId: string; target: InspectorBindingTarget; variableId: string };
+
+// A `bind-node-properties` item as the UI sends it; anything else is
+// reported instead of applied.
+function isNodeBindingRequest(value: any): value is NodeBindingRequest {
+  if (!value || typeof value !== 'object') return false;
+  if (typeof value.nodeId !== 'string' || !value.nodeId) return false;
+  if (typeof value.variableId !== 'string' || !value.variableId) return false;
+  const target = value.target;
+  if (!target || typeof target !== 'object') return false;
+  const isIndex = (index: any) => typeof index === 'number' && Number.isInteger(index) && index >= 0;
+  switch (target.kind) {
+    case 'node-field':
+      return typeof target.field === 'string' && target.field.length > 0;
+    case 'paint':
+      return (target.prop === 'fills' || target.prop === 'strokes') && isIndex(target.index);
+    case 'effect':
+      return isIndex(target.index);
+    default:
+      return false;
+  }
+}
+
+// Relink all: each binding on its own, so one failure does not stop the
+// rest, then one selection resend. Throws one error naming every failure.
+async function bindNodeProperties(bindings: unknown[]) {
+  const failures: string[] = [];
+  try {
+    for (let index = 0; index < bindings.length; index++) {
+      const binding = bindings[index];
+      if (!isNodeBindingRequest(binding)) {
+        failures.push(`binding ${index + 1}: invalid request`);
+        continue;
+      }
+      try {
+        await applyNodeBinding(binding.nodeId, binding.target, binding.variableId);
+      } catch (error: any) {
+        failures.push(`binding ${index + 1}: ${error && error.message ? error.message : String(error)}`);
+      }
+    }
+  } finally {
+    await sendSelection();
+  }
+  if (failures.length > 0) {
+    const applied = bindings.length - failures.length;
+    throw new Error(`${failures.length} of ${bindings.length} bindings failed (${applied} applied): ${failures.join('; ')}`);
+  }
+}
+
+async function applyNodeBinding(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
     throw new Error('Node not found');
@@ -2946,33 +3599,6 @@ function getDefaultValue(type: string): any {
       return { r: 0, g: 0, b: 0, a: 1 };
     case 'FLOAT':
       return 0;
-  // A component card shows its rows' resolved values (#F9B8B8), read when it
-  // was sent. Editing a variable changes them without touching the layer, so
-  // no selection or node event fires: resend the card with every data load.
-  await sendSelection();
-}
-
-// Ids of every live local variable. Figma keeps a deleted variable around
-// (soft-deleted, name and all, so its own undo can bring it back), and
-// getVariableByIdAsync still returns it; only the collections' lists drop it.
-function getLiveVariableIds(collections: VariableCollection[]): Set<string> {
-  const ids = new Set<string>();
-  collections.forEach(collection => collection.variableIds.forEach(id => ids.add(id)));
-  return ids;
-}
-
-// Whether a looked-up variable is gone: not found, or a local variable no
-// local collection lists. Remote (library) variables are trusted as is.
-function isDeadVariable(variable: Variable | null, liveVariableIds: Set<string>): boolean {
-  return !variable || (!variable.remote && !liveVariableIds.has(variable.id));
-}
-
-// A mode value that aliases a variable that no longer exists. Live local
-// targets cost no lookup.
-type VariableLookup = (id: string) => Promise<Variable | null>;
-
-function lookupVariableUncached(id: string): Promise<Variable | null> {
-  return figma.variables.getVariableByIdAsync(id);
     case 'STRING':
       return '';
     case 'BOOLEAN':
@@ -3090,17 +3716,6 @@ function buildDuplicateGroupName(
   return candidate;
 }
 
-  // Bound to a variable that no longer exists (see isDeadVariable). `name` is
-  // the soft-deleted variable's name when Figma still returns it, else ''.
-  // Set only when true, to keep the payload lean.
-  missing?: true;
-}
-
-// Live local variables and collection names, read once per selection send so
-// the row builders never fetch per row.
-interface InspectorContext {
-  liveVariableIds: Set<string>;
-  collectionNames: Map<string, string>;
 async function renameGroup(variableIds: string[], currentGroupName: string, nextGroupName: string) {
   try {
     const normalizedGroupName = nextGroupName.trim();
@@ -3151,7 +3766,6 @@ async function duplicateGroup(variableIds: string[], groupName: string) {
     for (const variableId of variableIds) {
       const variable = await figma.variables.getVariableByIdAsync(variableId);
       if (variable) {
-  let variable: Variable | null = null;
         sourceVariables.push(variable);
       }
     }
@@ -3173,23 +3787,6 @@ async function duplicateGroup(variableIds: string[], groupName: string) {
     sourceVariables
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
-  if (!variable) {
-    return { id: alias.id, name: '', missing: true };
-  }
-  const collectionName = await lookupCollectionName(variable.variableCollectionId, context);
-  if (isDeadVariable(variable, context.liveVariableIds)) {
-    const token: InspectorTokenRef = { id: variable.id, name: variable.name, missing: true };
-    if (collectionName !== undefined) {
-      token.collectionName = collectionName;
-    }
-    return token;
-  }
-  return {
-    id: variable.id,
-    name: variable.name,
-    collectionId: variable.variableCollectionId,
-    collectionName,
-  };
       .forEach(variable => {
         const duplicatedVariable = figma.variables.createVariable(
           buildGroupVariableName(variable.name, groupName, nextGroupName),
@@ -3399,6 +3996,14 @@ async function safeMoveVariablesToCollection(variableIds: string[], targetCollec
 
   // Step 5: only now is it safe to delete the originals.
   toMove.forEach(v => v.remove());
+
+  // Lets undo / redo of this move rebind layers across the two collections.
+  oldToNew.forEach((newVar, oldId) => {
+    historyMoveLinks.push({ original: oldId, copy: newVar.id });
+  });
+  if (historyMoveLinks.length > HISTORY_LIMIT * 50) {
+    historyMoveLinks = historyMoveLinks.slice(historyMoveLinks.length - HISTORY_LIMIT * 50);
+  }
 }
 
 // Move variable to different collection
@@ -3491,60 +4096,6 @@ async function deleteAllVariables() {
 }
 
 // Helper: Convert hex color to Figma RGB
-  await applyNodeBinding(nodeId, target, variableId);
-  await sendSelection();
-}
-
-type NodeBindingRequest = { nodeId: string; target: InspectorBindingTarget; variableId: string };
-
-// A `bind-node-properties` item as the UI sends it; anything else is
-// reported instead of applied.
-function isNodeBindingRequest(value: any): value is NodeBindingRequest {
-  if (!value || typeof value !== 'object') return false;
-  if (typeof value.nodeId !== 'string' || !value.nodeId) return false;
-  if (typeof value.variableId !== 'string' || !value.variableId) return false;
-  const target = value.target;
-  if (!target || typeof target !== 'object') return false;
-  const isIndex = (index: any) => typeof index === 'number' && Number.isInteger(index) && index >= 0;
-  switch (target.kind) {
-    case 'node-field':
-      return typeof target.field === 'string' && target.field.length > 0;
-    case 'paint':
-      return (target.prop === 'fills' || target.prop === 'strokes') && isIndex(target.index);
-    case 'effect':
-      return isIndex(target.index);
-    default:
-      return false;
-  }
-}
-
-// Relink all: each binding on its own, so one failure does not stop the
-// rest, then one selection resend. Throws one error naming every failure.
-async function bindNodeProperties(bindings: unknown[]) {
-  const failures: string[] = [];
-  try {
-    for (let index = 0; index < bindings.length; index++) {
-      const binding = bindings[index];
-      if (!isNodeBindingRequest(binding)) {
-        failures.push(`binding ${index + 1}: invalid request`);
-        continue;
-      }
-      try {
-        await applyNodeBinding(binding.nodeId, binding.target, binding.variableId);
-      } catch (error: any) {
-        failures.push(`binding ${index + 1}: ${error && error.message ? error.message : String(error)}`);
-      }
-    }
-  } finally {
-    await sendSelection();
-  }
-  if (failures.length > 0) {
-    const applied = bindings.length - failures.length;
-    throw new Error(`${failures.length} of ${bindings.length} bindings failed (${applied} applied): ${failures.join('; ')}`);
-  }
-}
-
-async function applyNodeBinding(nodeId: string, target: InspectorBindingTarget, variableId: string | null) {
 function hexToRgb(hex: string): { r: number; g: number; b: number; a: number } {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return { r: 0, g: 0, b: 0, a: 1 };
@@ -4772,6 +5323,46 @@ figma.on('selectionchange', () => {
   void sendSelection();
 });
 
+// Editing the selected layer (adding a stroke, changing padding) does not
+// change the selection, so without this the card keeps showing stale rows.
+// A page's `nodechange` needs no loadAllPagesAsync under dynamic-page access;
+// the listener moves with the current page. Bursts (a drag, a slider) are
+// coalesced into one resend.
+const SELECTION_REFRESH_DELAY_MS = 150;
+let selectionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isInsideSelectedNode(node: BaseNode | null, selectedId: string): boolean {
+  for (let current = node; current; current = current.parent) {
+    if (current.id === selectedId) return true;
+  }
+  return false;
+}
+
+function onPageNodeChange(event: NodeChangeEvent) {
+  const selection = figma.currentPage.selection;
+  if (selection.length !== 1) return;
+  const selectedId = selection[0].id;
+  const touchesSelection = event.nodeChanges.some(change =>
+    // A removed node has no parent left to walk; a delete under the selection
+    // is rare enough to just refresh.
+    change.type === 'DELETE' || isInsideSelectedNode(change.node as BaseNode, selectedId)
+  );
+  if (!touchesSelection) return;
+  if (selectionRefreshTimer) clearTimeout(selectionRefreshTimer);
+  selectionRefreshTimer = setTimeout(() => {
+    selectionRefreshTimer = null;
+    void sendSelection();
+  }, SELECTION_REFRESH_DELAY_MS);
+}
+
+let watchedPage: PageNode = figma.currentPage;
+watchedPage.on('nodechange', onPageNodeChange);
+figma.on('currentpagechange', () => {
+  watchedPage.off('nodechange', onPageNodeChange);
+  watchedPage = figma.currentPage;
+  watchedPage.on('nodechange', onPageNodeChange);
+});
+
 // Start polling - check every 5 seconds to reduce overhead
 setInterval(checkForChanges, 5000);
 
@@ -4997,6 +5588,15 @@ figma.ui.onmessage = async (msg: any) => {
       }
       break;
 
+    case 'bind-node-properties':
+      try {
+        await bindNodeProperties(Array.isArray(msg.bindings) ? msg.bindings : []);
+        figma.ui.postMessage({ type: 'update-success' });
+      } catch (error: any) {
+        figma.ui.postMessage({ type: 'update-error', error: error.message });
+      }
+      break;
+
     case 'unbind-node-property':
       try {
         await bindNodeProperty(msg.nodeId, msg.target, null);
@@ -5011,52 +5611,3 @@ figma.ui.onmessage = async (msg: any) => {
       break;
   }
 };
-// Editing the selected layer (adding a stroke, changing padding) does not
-// change the selection, so without this the card keeps showing stale rows.
-// A page's `nodechange` needs no loadAllPagesAsync under dynamic-page access;
-// the listener moves with the current page. Bursts (a drag, a slider) are
-// coalesced into one resend.
-const SELECTION_REFRESH_DELAY_MS = 150;
-let selectionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-function isInsideSelectedNode(node: BaseNode | null, selectedId: string): boolean {
-  for (let current = node; current; current = current.parent) {
-    if (current.id === selectedId) return true;
-  }
-  return false;
-}
-
-function onPageNodeChange(event: NodeChangeEvent) {
-  const selection = figma.currentPage.selection;
-  if (selection.length !== 1) return;
-  const selectedId = selection[0].id;
-  const touchesSelection = event.nodeChanges.some(change =>
-    // A removed node has no parent left to walk; a delete under the selection
-    // is rare enough to just refresh.
-    change.type === 'DELETE' || isInsideSelectedNode(change.node as BaseNode, selectedId)
-  );
-  if (!touchesSelection) return;
-  if (selectionRefreshTimer) clearTimeout(selectionRefreshTimer);
-  selectionRefreshTimer = setTimeout(() => {
-    selectionRefreshTimer = null;
-    void sendSelection();
-  }, SELECTION_REFRESH_DELAY_MS);
-}
-
-let watchedPage: PageNode = figma.currentPage;
-watchedPage.on('nodechange', onPageNodeChange);
-figma.on('currentpagechange', () => {
-  watchedPage.off('nodechange', onPageNodeChange);
-  watchedPage = figma.currentPage;
-  watchedPage.on('nodechange', onPageNodeChange);
-});
-
-    case 'bind-node-properties':
-      try {
-        await bindNodeProperties(Array.isArray(msg.bindings) ? msg.bindings : []);
-        figma.ui.postMessage({ type: 'update-success' });
-      } catch (error: any) {
-        figma.ui.postMessage({ type: 'update-error', error: error.message });
-      }
-      break;
-
