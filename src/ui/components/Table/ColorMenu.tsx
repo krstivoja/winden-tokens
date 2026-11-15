@@ -46,7 +46,7 @@ export function ColorMenu({
           <button
             key={index}
             type="button"
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text bg-transparent hover:bg-base-2 transition-colors text-left"
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs bg-transparent transition-colors text-left ${option.className ?? 'text-text hover:bg-base-2'}`}
             onClick={option.onClick}
             style={option.style}
           >

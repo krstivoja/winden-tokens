@@ -33,6 +33,11 @@ export interface VariableNode {
   connectionsDisabled?: boolean;
 }
 
+export interface RowMenuActions {
+  canRename: boolean;
+  canDelete: boolean;
+}
+
 // ── Group Data ─────────────────────────────────────────────────────
 
 export interface GroupData {
@@ -173,6 +178,11 @@ export type GroupNodeData = {
   onDeleteGroup: (group: GroupData) => void;
   onRenameVariable: (node: VariableNode) => void;
   onDeleteVariable: (node: VariableNode) => void;
+  /**
+   * Right-click on a real row. `canRename` / `canDelete` mirror the row's own
+   * double-click rename and hover `×`, so the menu offers exactly those.
+   */
+  onShowRowMenu: (event: React.MouseEvent, node: VariableNode, actions: RowMenuActions) => void;
   onDisconnect: (receiverVarName: string, resolvedValue: string) => void;
   /**
    * The card sits inside a frame: it is already grouped, so it offers no

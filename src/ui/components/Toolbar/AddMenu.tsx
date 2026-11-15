@@ -48,13 +48,15 @@ export function AddMenu({ position, onClose }: AddMenuProps) {
   return (
     <div
       id="add-menu"
-      className="add-menu open"
+      className="fixed z-50 flex flex-col gap-0.5 min-w-[160px] p-1 bg-base border border-border rounded-lg shadow-lg"
       style={{ top: position.top, left: position.left }}
     >
       {variableTypes.map(({ type, label }) => (
         <IconTextButton
           key={type}
           icon={TypeIcons[type]}
+          fullWidth
+          className="justify-start! py-1.5!"
           onClick={() => handleAddVariable(type)}
         >
           {label}

@@ -1,6 +1,6 @@
 // Grouped graph component - @xyflow/react based relationships view
 
-import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import {
   ReactFlow,
   useNodesState,
@@ -29,6 +29,9 @@ import { post } from '../../hooks/usePluginMessages';
 import { useAppContext } from '../../context/AppContext';
 import { useModalContext } from '../Modals/ModalContext';
 import { ColorValueMenu } from '../Table/ColorValueMenu';
+import { ColorMenu } from '../Table/ColorMenu';
+import type { ColorMenuOption } from '../Table/ColorMenu';
+import { CopyIcon, EditIcon, TrashIcon, TypeIcons } from '../Icons';
 import { SidebarFilter } from '../Table/SidebarFilter';
 import { Icon } from '../icons/Icon';
 import { IconButton } from '../common/Button/IconButton/IconButton';
@@ -43,6 +46,7 @@ import {
   CustomEdgeData,
   GroupData,
   VariableNode,
+  RowMenuActions,
   ConnectionRecord,
   ConnectionFlags,
   GridLayoutSettings,
@@ -116,12 +120,12 @@ import {
   getStandaloneLane,
   extractShadeNumber,
   formatVariableNode,
+  resolveEntryToken,
+  findRelinkVariable,
   createShaderNode,
   createStepsNode,
   createPaletteNode,
   detectManagedNumberStepGroups,
-  resolveEntryToken,
-  findRelinkVariable,
   arrangeGroupsByConnectedBlocks,
   buildCollectionCards,
   isCardHidden,
@@ -580,6 +584,16 @@ function GroupedGraphInner() {
     setColorMenu(prev => ({ ...prev, show: false }));
   }, []);
 
+  // Right-click menu on a card row. Position is relative to the graph
+  // container, like the color menu's.
+  const [rowMenu, setRowMenu] = useState<{
+    position: { top: number; left: number };
+    node: VariableNode;
+    actions: RowMenuActions;
+  } | null>(null);
+
+  const hideRowMenu = useCallback(() => setRowMenu(null), []);
+
   // Sidebar handlers
   const handleModeChange = useCallback((modeId: string) => {
     setGlobalModeId(modeId);
@@ -631,6 +645,68 @@ function GroupedGraphInner() {
       value: node.value,
     });
   }, [isColorType]);
+
+  const handleShowRowMenu = useCallback((event: React.MouseEvent, node: VariableNode, actions: RowMenuActions) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (node.isVirtual || !groupedGraphRef.current) return;
+
+    const graphRect = groupedGraphRef.current.getBoundingClientRect();
+    hideColorMenu();
+    setRowMenu({
+      position: {
+        top: event.clientY - graphRect.top,
+        left: event.clientX - graphRect.left,
+      },
+      node,
+      actions,
+    });
+  }, [hideColorMenu]);
+
+  // Keep the row menu inside the plugin window: once drawn at the cursor,
+  // shift it back by however far it spills past the right / bottom edge.
+  useLayoutEffect(() => {
+    if (!rowMenu) return;
+    const menu = document.getElementById('graph-row-menu');
+    if (!menu) return;
+    const margin = 4;
+    const rect = menu.getBoundingClientRect();
+    const overflowX = Math.max(0, rect.right - (window.innerWidth - margin));
+    const overflowY = Math.max(0, rect.bottom - (window.innerHeight - margin));
+    // Never push it past the left / top edge either.
+    const shiftX = Math.min(overflowX, Math.max(0, rect.left - margin));
+    const shiftY = Math.min(overflowY, Math.max(0, rect.top - margin));
+    if (shiftX === 0 && shiftY === 0) return;
+    setRowMenu(prev => prev && ({
+      ...prev,
+      position: { top: prev.position.top - shiftY, left: prev.position.left - shiftX },
+    }));
+  }, [rowMenu]);
+
+  useEffect(() => {
+    if (!rowMenu) return;
+
+    const handleClick = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('#graph-row-menu')) hideRowMenu();
+    };
+    // A row's own right-click stops propagation, so this only sees
+    // right-clicks elsewhere (the pane, a header, the sidebar).
+    const handleContextMenu = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('#graph-row-menu')) hideRowMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') hideRowMenu();
+    };
+
+    document.addEventListener('click', handleClick);
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [rowMenu, hideRowMenu]);
 
   // Load saved positions on mount
   useEffect(() => {
@@ -937,7 +1013,9 @@ function GroupedGraphInner() {
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('#color-value-menu') && !target.closest('.rf-color-swatch')) {
+      // The row menu's "Edit value" opens this menu from a click inside it.
+      if (!target.closest('#color-value-menu') && !target.closest('.rf-color-swatch')
+        && !target.closest('#graph-row-menu')) {
         hideColorMenu();
       }
     };
@@ -1060,6 +1138,76 @@ function GroupedGraphInner() {
     });
   }, [openInputModal]);
 
+  // Row menu "Edit value": the same editor the value already has elsewhere.
+  // COLOR opens the swatch's Pick / Reference menu where the row menu was;
+  // BOOLEAN flips; FLOAT / STRING open the input modal. An alias is
+  // prefilled with the value it resolves to (not `{ref}`), and confirming it
+  // unchanged keeps the alias.
+  const handleRowMenuEditValue = useCallback((node: VariableNode, position: { top: number; left: number }) => {
+    const variable = variablesById.get(node.id);
+    if (!variable || node.isVirtual) return;
+    const modeId = resolveModeIdForCollection(collections, variable.collectionId, selectedModeId);
+
+    if (node.resolvedType === 'COLOR') {
+      setColorMenu({ show: true, position, variableId: node.id, value: node.value });
+      return;
+    }
+    if (node.resolvedType === 'BOOLEAN') {
+      post({
+        type: 'update-variable-value',
+        id: node.id,
+        value: node.resolvedValue === 'true' ? 'false' : 'true',
+        modeId,
+      });
+      return;
+    }
+
+    const initialValue = node.isReference ? node.resolvedValue : node.value;
+    openInputModal({
+      title: `Edit ${node.shortName}`,
+      label: 'Value',
+      confirmText: 'Save',
+      initialValue,
+      onConfirm: value => {
+        if (value === initialValue) return;
+        post({ type: 'update-variable-value', id: node.id, value, modeId });
+      },
+    });
+  }, [collections, openInputModal, selectedModeId, variablesById]);
+
+  const rowMenuOptions = useMemo((): ColorMenuOption[] => {
+    if (!rowMenu) return [];
+    const { node, actions, position } = rowMenu;
+    const run = (action: () => void) => () => {
+      hideRowMenu();
+      action();
+    };
+    const options: ColorMenuOption[] = [];
+    if (actions.canRename) {
+      options.push({ label: 'Rename', icon: <EditIcon />, onClick: run(() => handleRenameGraphVariable(node)) });
+    }
+    options.push({
+      label: 'Edit value',
+      icon: node.resolvedType ? TypeIcons[node.resolvedType] : <EditIcon />,
+      onClick: run(() => handleRowMenuEditValue(node, position)),
+    });
+    options.push({
+      label: 'Duplicate',
+      icon: <CopyIcon />,
+      onClick: run(() => post({ type: 'duplicate-variable', id: node.id })),
+    });
+    if (actions.canDelete) {
+      options.push({
+        label: 'Delete',
+        icon: <TrashIcon />,
+        onClick: run(() => handleDeleteGraphVariable(node)),
+        // The divider above it, and the card menu's red Delete.
+        className: 'mt-1 border-t border-border text-danger hover:bg-danger hover:text-white',
+      });
+    }
+    return options;
+  }, [rowMenu, hideRowMenu, handleRenameGraphVariable, handleRowMenuEditValue, handleDeleteGraphVariable]);
+
   const handleDisconnect = useCallback((receiverVarId: string, resolvedValue: string) => {
     const receiverVariable = variablesById.get(receiverVarId);
     const modeId = receiverVariable
@@ -1073,6 +1221,28 @@ function GroupedGraphInner() {
   // instead of a fresh closure per edge per layout pass.
   const handleUnbindProperty = useCallback((nodeId: string, target: InspectorBindingTarget) => {
     post({ type: 'unbind-node-property', nodeId, target });
+  }, []);
+
+  // Selection rows bound to a deleted variable that a live namesake can take
+  // over (see findRelinkVariable), keyed by getRelinkKey.
+  const relinkTargets = useMemo(() => {
+    const targets: Record<string, RelinkTarget> = {};
+    selectedLayers.forEach(layer => layer.entries.forEach((entry, index) => {
+      if (!entry.token?.missing || !entry.bindingTarget) return;
+      const variable = findRelinkVariable(entry.token, entry.bindingTarget, variables, collections);
+      if (variable) targets[getRelinkKey(layer.layerIndex, index)] = { variableId: variable.id, name: variable.name };
+    }));
+    return targets;
+  }, [selectedLayers, variables, collections]);
+
+  // One row goes through the same message an edge drag uses; Relink all
+  // sends them together so the card is resent once.
+  const handleRelinkProperties = useCallback((bindings: RelinkBinding[]) => {
+    if (bindings.length === 1) {
+      post({ type: 'bind-node-property', ...bindings[0] });
+    } else if (bindings.length > 1) {
+      post({ type: 'bind-node-properties', bindings });
+    }
   }, []);
 
   // Every highlight change that does not come from a sidebar row goes
@@ -1223,28 +1393,6 @@ function GroupedGraphInner() {
         post({
           type: 'create-variable',
           collectionId: firstCollectionId,
-  // Selection rows bound to a deleted variable that a live namesake can take
-  // over (see findRelinkVariable), keyed by getRelinkKey.
-  const relinkTargets = useMemo(() => {
-    const targets: Record<string, RelinkTarget> = {};
-    selectedLayers.forEach(layer => layer.entries.forEach((entry, index) => {
-      if (!entry.token?.missing || !entry.bindingTarget) return;
-      const variable = findRelinkVariable(entry.token, entry.bindingTarget, variables, collections);
-      if (variable) targets[getRelinkKey(layer.layerIndex, index)] = { variableId: variable.id, name: variable.name };
-    }));
-    return targets;
-  }, [selectedLayers, variables, collections]);
-
-  // One row goes through the same message an edge drag uses; Relink all
-  // sends them together so the card is resent once.
-  const handleRelinkProperties = useCallback((bindings: RelinkBinding[]) => {
-    if (bindings.length === 1) {
-      post({ type: 'bind-node-property', ...bindings[0] });
-    } else if (bindings.length > 1) {
-      post({ type: 'bind-node-properties', bindings });
-    }
-  }, []);
-
           name: `${groupName}/${DEFAULT_GROUP_CHILD_NAME}`,
           varType: variableType,
           value: getDefaultVariableValue(variableType),
@@ -1498,6 +1646,17 @@ function GroupedGraphInner() {
       semanticY += getGroupHeight(groupData) + GROUP_GAP_Y;
     });
 
+    // Selection tokens match cards by variable id (see resolveEntryToken).
+    // First card wins, like the name map's last-wins never mattered for ids:
+    // a variable sits on one card.
+    const cardsById = new Map<string, VariableCardInfo>();
+    groupsArray.forEach(group => {
+      group.variables.forEach((vNode, variableIndex) => {
+        if (vNode.isVirtual || cardsById.has(vNode.id)) return;
+        cardsById.set(vNode.id, { group: group.key, index: variableIndex, node: vNode });
+      });
+    });
+
     groupsArray.forEach(group => {
       group.variables.forEach(vNode => {
         // A broken alias has no provider, even when a live namesake exists.
@@ -1646,17 +1805,6 @@ function GroupedGraphInner() {
       groups: stillUnchecked(own.groups, selectedGroups),
       collections: stillUnchecked(own.collections, localSelectedCollections),
     };
-    // Selection tokens match cards by variable id (see resolveEntryToken).
-    // First card wins, like the name map's last-wins never mattered for ids:
-    // a variable sits on one card.
-    const cardsById = new Map<string, VariableCardInfo>();
-    groupsArray.forEach(group => {
-      group.variables.forEach((vNode, variableIndex) => {
-        if (vNode.isVirtual || cardsById.has(vNode.id)) return;
-        cardsById.set(vNode.id, { group: group.key, index: variableIndex, node: vNode });
-      });
-    });
-
   }, [selectedGroups, localSelectedCollections]);
   // One write per activation — toggled on with a highlight, card menu "Hide
   // unused", or the highlight moving while on — never a running override, so
@@ -2148,6 +2296,7 @@ function GroupedGraphInner() {
         onDeleteGroup: handleDeleteGraphGroup,
         onRenameVariable: handleRenameGraphVariable,
         onDeleteVariable: handleDeleteGraphVariable,
+        onShowRowMenu: handleShowRowMenu,
         onDisconnect: handleDisconnect,
       };
     };
@@ -2334,6 +2483,7 @@ function GroupedGraphInner() {
             onDeleteGroup: handleDeleteGraphGroup,
             onRenameVariable: handleRenameGraphVariable,
             onDeleteVariable: handleDeleteGraphVariable,
+            onShowRowMenu: handleShowRowMenu,
             onDisconnect: handleDisconnect,
           },
           dragHandle: '.group-header',
@@ -2357,6 +2507,8 @@ function GroupedGraphInner() {
           nodeType: selectedNode.type,
           layers: selectedLayers,
           truncated: selectedNode.truncated,
+          relinkTargets,
+          onRelink: handleRelinkProperties,
         } as PropertyNodeData,
         dragHandle: '.group-header',
       });
@@ -2507,12 +2659,10 @@ function GroupedGraphInner() {
       cardVisibilityFilters, variablesById, collectionNameById, selectedNode, selectedLayers,
       isColorType, variableType, handleGeneratorOpen, handleAddVariableToGroup,
       handleRenameGroup, handleDuplicateGroup, handleEditGroupAsText, handleLevelUp, handleUngroup, handleDeleteGraphGroup, handleRenameGraphVariable,
-      handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleHighlightPath,
+      handleDeleteGraphVariable, handleDisconnect, handleUnbindProperty, handleShowColorMenu, handleShowRowMenu, handleHighlightPath,
       handleHideUnusedFromCard, handleHighlightVariable, hasHighlight, highlightedVarName, highlightPath, hidingPath,
       sidebarUncheck, isCardHiddenNow, layoutGapY, setNodes, setEdges]);
 
-          relinkTargets,
-          onRelink: handleRelinkProperties,
   // Everything that can add, remove or move a handle *under an existing node
   // id*: a card's rows (handle ids are `${variable name}::in|out`, and the
   // output handle is suppressed for connection-disabled rows), and the
@@ -3434,6 +3584,14 @@ function GroupedGraphInner() {
           variableId={colorMenu.variableId}
           currentValue={colorMenu.value}
           onClose={hideColorMenu}
+        />
+      )}
+
+      {rowMenu && (
+        <ColorMenu
+          id="graph-row-menu"
+          position={rowMenu.position}
+          options={rowMenuOptions}
         />
       )}
     </div>

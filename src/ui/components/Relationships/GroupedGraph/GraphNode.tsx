@@ -267,6 +267,7 @@ export function CardRows({
       onShowColorMenu={data.onShowColorMenu}
       onRenameVariable={data.onRenameVariable}
       onDeleteVariable={data.onDeleteVariable}
+      onShowRowMenu={data.onShowRowMenu}
       showEmptyState={showEmptyState}
       keepLastBorder={keepLastBorder}
     />
@@ -275,7 +276,7 @@ export function CardRows({
 
 type CardRowsListProps = Pick<GroupNodeData,
   'group' | 'connectedVars' | 'onHighlightVariable' | 'onGeneratorOpen'
-  | 'onShowColorMenu' | 'onRenameVariable' | 'onDeleteVariable'> & {
+  | 'onShowColorMenu' | 'onRenameVariable' | 'onDeleteVariable' | 'onShowRowMenu'> & {
   rowsHighlighted: boolean;
   highlightedVars: Set<string> | undefined;
   highlightedVarSeed: string | null;
@@ -307,6 +308,7 @@ const CardRowsList = React.memo(function CardRowsList({
   onShowColorMenu,
   onRenameVariable,
   onDeleteVariable,
+  onShowRowMenu,
   showEmptyState,
   keepLastBorder,
 }: CardRowsListProps) {
@@ -355,6 +357,13 @@ const CardRowsList = React.memo(function CardRowsList({
               e.stopPropagation();
               if (rowInteractive) onGeneratorOpen(group, node);
               else onHighlightVariable(group, node);
+            }}
+            // Virtual rows (out / fx) have nothing to act on: the browser's
+            // own menu is left alone there.
+            onContextMenu={node.isVirtual ? undefined : (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onShowRowMenu(e, node, { canRename: canRenameVariable, canDelete: showDeleteAction });
             }}
           >
             {/* Left handle (target) */}
