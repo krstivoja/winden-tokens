@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/jekyll.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,6 +33,18 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
           working-directory: docs
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build site CSS (Tailwind)
+        run: npm run docs:css
 
       - name: Setup Pages
         id: pages

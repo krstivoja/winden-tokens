@@ -1,10 +1,12 @@
 ---
 title: "5 Best Practices for Organizing Design Tokens at Scale"
-categories: tutorial best-practices
+categories: tutorials
+redirect_from:
+  - /blog/tutorials/tutorial/best-practices/design-tokens-best-practices/
 youtube: https://youtu.be/DBpWtI3KMyY
 ---
 
-Design tokens are the foundation of any scalable design system. After working with hundreds of users, we've identified the patterns that separate good token systems from great ones.
+Design tokens are the foundation of any scalable design system. These are five patterns that help keep a token system organized as it grows.
 
 ## 1. Use Semantic Naming, Not Descriptive
 
@@ -86,4 +88,4 @@ Don't build everything at once. Start with:
 
 Then expand as needs emerge. A focused system is better than a bloated one.
 
-**What patterns work for your team?** Share your experiences in our [GitHub Discussions](https://github.com/krstivoja/winden-tokens/discussions)!
+**What patterns work for your team?** Share them in a [GitHub issue](https://github.com/krstivoja/winden-tokens/issues).

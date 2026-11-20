@@ -1,0 +1,208 @@
+/*
+  Source for the site stylesheet. `npm run docs:css` (repo root) compiles it to
+  docs/assets/css/site.css, which is git-ignored and built in CI before Jekyll.
+
+  The site was built for the Tailwind v3 Play CDN. This file reproduces that
+  output with Tailwind v4: preflight and utilities are imported WITHOUT cascade
+  layers, like v3, so the unlayered <style> block in _layouts/default.html keeps
+  cascading against them by specificity and source order exactly as before.
+*/
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css";
+
+@source "../../*.html";
+@source "../../_layouts";
+@source "../../_includes";
+@source "../../blog";
+@source "../../_posts";
+
+/*
+  Theme. `colors` and `boxShadow` were set directly in the v3 config (not under
+  `extend`), which replaced the default palette and shadow scale, so the
+  defaults are cleared here too.
+*/
+@theme {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+  --color-canvas: rgb(var(--canvas));
+  --color-panel: rgb(var(--panel));
+  --color-panel-strong: rgb(var(--panel-strong));
+  --color-line: rgb(var(--line));
+  --color-ink: rgb(var(--ink));
+  --color-ink-muted: rgb(var(--ink-muted));
+  --color-ink-faint: rgb(var(--ink-faint));
+  --color-dot: rgb(var(--dot));
+  --color-select: rgb(var(--select));
+  --color-component: rgb(var(--component));
+  --color-cursor-you: rgb(var(--cursor-you));
+  --color-cursor-claude: rgb(var(--cursor-claude));
+  --color-cursor-green: rgb(var(--cursor-green));
+  --color-cursor-mint: rgb(var(--cursor-mint));
+  --color-cursor-mint-edge: rgb(var(--cursor-mint-edge));
+  --color-cursor-sky: rgb(var(--cursor-sky));
+  --color-cursor-sky-edge: rgb(var(--cursor-sky-edge));
+  --color-tint-sky: rgb(var(--tint-sky));
+  --color-tint-lime: rgb(var(--tint-lime));
+  --color-tint-lilac: rgb(var(--tint-lilac));
+  --color-tint-peach: rgb(var(--tint-peach));
+  --color-on-sky-muted: rgb(var(--on-sky-muted));
+  --color-on-sky-line: rgb(var(--on-sky-line));
+  --color-on-lime-muted: rgb(var(--on-lime-muted));
+  --color-on-lime-line: rgb(var(--on-lime-line));
+  --color-on-lilac-muted: rgb(var(--on-lilac-muted));
+  --color-on-lilac-line: rgb(var(--on-lilac-line));
+  --color-on-peach-muted: rgb(var(--on-peach-muted));
+  --color-on-peach-line: rgb(var(--on-peach-line));
+  --color-success: rgb(var(--success));
+  --color-success-tint: rgb(var(--success-tint));
+  --color-ramp-10: rgb(var(--ramp-10));
+  --color-ramp-20: rgb(var(--ramp-20));
+  --color-ramp-30: rgb(var(--ramp-30));
+  --color-ramp-40: rgb(var(--ramp-40));
+  --color-ramp-50: rgb(var(--ramp-50));
+  --color-ramp-60: rgb(var(--ramp-60));
+  --color-ramp-70: rgb(var(--ramp-70));
+  --color-ramp-80: rgb(var(--ramp-80));
+  --color-ramp-90: rgb(var(--ramp-90));
+  --color-ramp-100: rgb(var(--ramp-100));
+  --color-shadow: rgb(var(--shadow));
+
+  --shadow-*: initial;
+  --shadow-float: 0 1px 2px rgb(var(--shadow) / 0.05), 0 8px 24px -12px rgb(var(--shadow) / 0.16);
+  --shadow-window: 0 1px 2px rgb(var(--shadow) / 0.06), 0 24px 48px -16px rgb(var(--shadow) / 0.22);
+
+  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* v3 font-size line heights were fixed rem values (inherited as lengths), v4 uses ratios */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+
+  --animate-drift: drift 7s ease-in-out infinite;
+  --animate-drift-slow: drift 10s ease-in-out infinite;
+  --animate-float: pop-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both, bob 8s ease-in-out infinite;
+
+  @keyframes drift {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(var(--drift-x, 6px), var(--drift-y, -8px), 0); }
+  }
+  @keyframes pop-in {
+    0% { opacity: 0; scale: 0.9; }
+    100% { opacity: 1; scale: 1; }
+  }
+  @keyframes bob {
+    0%, 100% { translate: 0 0; }
+    50% { translate: 0 var(--bob, -7px); }
+  }
+}
+
+/* v3 applied hover on every device, not only on hover-capable ones */
+@custom-variant hover (&:hover);
+
+@utility bg-grid-dots {
+  background-image: radial-gradient(circle, rgb(var(--dot)) 1px, transparent 1.25px);
+}
+@utility bg-grid-dots-inverse {
+  background-image: radial-gradient(circle, rgb(var(--canvas) / 0.14) 1px, transparent 1.25px);
+}
+@utility bg-dots {
+  background-size: 20px 20px;
+}
+
+/* v3 preflight behaviour that v4 changed */
+*,
+::after,
+::before,
+::backdrop,
+::file-selector-button {
+  border-color: rgb(var(--line));
+}
+
+/* Default ring colour: v3 used ringColor.DEFAULT at the default ring opacity (0.5) */
+*,
+::after,
+::before,
+::backdrop {
+  --tw-ring-color: rgb(var(--line) / 0.5);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af;
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+:disabled {
+  cursor: default;
+}
+
+/*
+  Utilities whose v4 output differs from v3 in ways that show on the page are
+  not generated by Tailwind here; their v3 rules are written out by hand
+  instead (below, and after `@tailwind utilities`). Only the classes the site
+  uses are covered: when you start using another one, add it to both places.
+*/
+@source not inline("sr-only focus:not-sr-only transition-colors space-y-1 space-y-1.5 space-y-3 space-y-4 space-y-5 sm:space-y-4 divide-y divide-ink/[0.07]");
+
+/* Before the utilities, as in v3, so later utilities (focus:px-4, duration-*) still win */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+/* v4 also transitions outline-color, which would fade in the :focus-visible outline */
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+@tailwind utilities source(none);
+
+/*
+  space-y / divide-y with v3 selectors. v4 puts the gap on the bottom of every
+  child but the last (inside :where(), so zero specificity); v3 put it on the
+  top of every visible child but the first and could not be overridden by a
+  plain margin utility on the child. Only the classes the site uses are listed:
+  add a new one here (and to the exclusion list) when you use it.
+*/
+.space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; margin-bottom: 0; }
+.space-y-1\.5 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.375rem; margin-bottom: 0; }
+.space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; margin-bottom: 0; }
+.space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; margin-bottom: 0; }
+.space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.25rem; margin-bottom: 0; }
+.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-bottom-width: 0; }
+.divide-ink\/\[0\.07\] > :not([hidden]) ~ :not([hidden]) { border-color: rgb(var(--ink) / 0.07); }
+
+@media (width >= 40rem) {
+  .sm\:space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; margin-bottom: 0; }
+}

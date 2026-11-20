@@ -12,7 +12,7 @@
       <li><a href="{{ home_url }}#features" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Features</a></li>
       <li><a href="{{ home_url }}#graph" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Graph</a></li>
       <li><a href="{{ home_url }}#claude" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">Claude</a></li>
-      <li><a href="{{ '/blog' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong aria-[current=page]:bg-panel-strong">Blog</a></li>
+      <li><a href="{{ '/blog/' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong aria-[current=page]:bg-panel-strong">Blog</a></li>
       <li><a href="https://github.com/krstivoja/winden-tokens" target="_blank" rel="noopener" class="inline-flex h-10 items-center rounded-full px-3.5 text-sm font-medium transition-colors hover:bg-panel-strong">GitHub</a></li>
     </ul>
 
@@ -31,7 +31,7 @@
           <li><a href="{{ home_url }}#features" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Features</a></li>
           <li><a href="{{ home_url }}#graph" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Graph</a></li>
           <li><a href="{{ home_url }}#claude" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">Claude</a></li>
-          <li><a href="{{ '/blog' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel aria-[current=page]:bg-panel">Blog</a></li>
+          <li><a href="{{ '/blog/' | relative_url }}" {% if page.url contains '/blog' %}aria-current="page" {% endif %}class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel aria-[current=page]:bg-panel">Blog</a></li>
           <li><a href="https://github.com/krstivoja/winden-tokens" target="_blank" rel="noopener" class="flex h-11 items-center rounded-xl px-3 text-[15px] font-medium hover:bg-panel">GitHub</a></li>
         </ul>
       </div>

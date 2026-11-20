@@ -49,11 +49,11 @@ Ready to try Winden Tokens? Here's how to install:
 
 1. **Development Version**:
    - Go to **Plugins > Development > Import plugin from manifest** in Figma
-   - Select the `manifest.json` file from the [GitHub repository](https://github.com/yourusername/winden-tokens)
+   - Select the `manifest.json` file from the [GitHub repository](https://github.com/krstivoja/winden-tokens)
 
 2. **Build from Source**:
    ```bash
-   git clone https://github.com/yourusername/winden-tokens.git
+   git clone https://github.com/krstivoja/winden-tokens.git
    cd winden-tokens
    npm install
    npm run build
@@ -73,28 +73,28 @@ When using Winden Tokens, consider these best practices:
 
 ## Related Resources
 
-- [Installation Tutorial](/winden-tokens/tutorials/how-to-install-developers-version)
-- [Design Tokens Best Practices](/winden-tokens/tutorials/design-tokens-best-practices)
-- [Complete Documentation](/winden-tokens/)
-- [Latest Release Notes](/winden-tokens/releases/)
+- [Installation Tutorial](/blog/tutorials/complete-guide-install-winden-tokens-figma-plugin-developer-version/)
+- [Design Tokens Best Practices](/blog/tutorials/design-tokens-best-practices/)
+- [Complete Documentation](/)
+- [Latest Release Notes](/blog/releases/)
 
 ## Next Steps
 
 After watching this introduction:
 
 1. Install Winden Tokens in your Figma workspace
-2. Watch the [installation tutorial](/winden-tokens/tutorials/how-to-install-developers-version)
-3. Explore the [design tokens best practices guide](/winden-tokens/tutorials/design-tokens-best-practices)
+2. Watch the [installation tutorial](/blog/tutorials/complete-guide-install-winden-tokens-figma-plugin-developer-version/)
+3. Explore the [design tokens best practices guide](/blog/tutorials/design-tokens-best-practices/)
 4. Start organizing your first token collection
-5. Check out the [March 2025 update](/winden-tokens/tutorials/winden-tokens-march-update) for the latest features
+5. Check out the [March 2025 update](/blog/tutorials/whats-new-winden-tokens-latest-features-updates/) for the latest features
 
 ## Have Questions?
 
 If you have any questions about getting started with Winden Tokens:
 
-- [Open an issue on GitHub](https://github.com/yourusername/winden-tokens/issues)
-- Watch more tutorials in our [tutorial series](/winden-tokens/tutorials/)
-- Read the [comprehensive documentation](/winden-tokens/)
+- [Open an issue on GitHub](https://github.com/krstivoja/winden-tokens/issues)
+- Watch more tutorials in our [tutorial series](/blog/tutorials/)
+- Read the [comprehensive documentation](/)
 - Join our community discussions
 
 ---

@@ -39,7 +39,7 @@ Before you begin, make sure you have:
 Open your terminal and run:
 
 ```bash
-git clone https://github.com/yourusername/winden-tokens.git
+git clone https://github.com/krstivoja/winden-tokens.git
 cd winden-tokens
 ```
 
@@ -128,8 +128,8 @@ npm run lint:fix   # Run ESLint with auto-fix
 
 If you encounter issues:
 
-1. Check the [GitHub Issues](https://github.com/yourusername/winden-tokens/issues) page
-2. Review the [documentation](/winden-tokens/)
+1. Check the [GitHub Issues](https://github.com/krstivoja/winden-tokens/issues) page
+2. Review the [documentation](/)
 3. Open a new issue with details about your problem
 
 ## Updating the Plugin
@@ -159,32 +159,32 @@ Want to contribute to Winden Tokens?
 4. Test thoroughly
 5. Submit a pull request
 
-Check out the [contributing guidelines](https://github.com/yourusername/winden-tokens/blob/main/CONTRIBUTING.md) for more details.
+See the [GitHub repository](https://github.com/krstivoja/winden-tokens) for more details.
 
 ## Next Steps
 
 Now that you have Winden Tokens installed:
 
-1. Watch the [introduction tutorial](/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction)
-2. Explore the [design tokens best practices](/winden-tokens/tutorials/design-tokens-best-practices)
-3. Check out the [latest features](/winden-tokens/tutorials/winden-tokens-march-update)
-4. Read the [complete documentation](/winden-tokens/)
+1. Watch the [introduction tutorial](/blog/tutorials/winden-tokens-ultimate-figma-plugin-design-system-management/)
+2. Explore the [design tokens best practices](/blog/tutorials/design-tokens-best-practices/)
+3. Check out the [latest features](/blog/tutorials/whats-new-winden-tokens-latest-features-updates/)
+4. Read the [complete documentation](/)
 
 ## Related Resources
 
-- [Introduction to Winden Tokens](/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction)
-- [March 2025 Update](/winden-tokens/tutorials/winden-tokens-march-update)
-- [Design Tokens Best Practices](/winden-tokens/tutorials/design-tokens-best-practices)
-- [GitHub Repository](https://github.com/yourusername/winden-tokens)
-- [Release Notes](/winden-tokens/releases/)
+- [Introduction to Winden Tokens](/blog/tutorials/winden-tokens-ultimate-figma-plugin-design-system-management/)
+- [March 2025 Update](/blog/tutorials/whats-new-winden-tokens-latest-features-updates/)
+- [Design Tokens Best Practices](/blog/tutorials/design-tokens-best-practices/)
+- [GitHub Repository](https://github.com/krstivoja/winden-tokens)
+- [Release Notes](/blog/releases/)
 
 ## Have Questions?
 
 If you need help with installation:
 
-- [Open an issue on GitHub](https://github.com/yourusername/winden-tokens/issues)
-- Watch more tutorials in our [tutorial series](/winden-tokens/tutorials/)
-- Check the [FAQ section](/winden-tokens/#faq)
+- [Open an issue on GitHub](https://github.com/krstivoja/winden-tokens/issues)
+- Watch more tutorials in our [tutorial series](/blog/tutorials/)
+- Check the [FAQ section](/)
 
 ---
 

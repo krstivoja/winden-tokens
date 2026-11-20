@@ -9,6 +9,7 @@ theme: minima
 
 plugins:
   - jekyll-sitemap
+  - jekyll-redirect-from
 
 # Collections
 collections:
@@ -65,3 +66,4 @@ exclude:
   - serve.sh
   - create-video-post.sh
   - _config_dev.yml
+  - assets/css/site.src.css

@@ -3,6 +3,9 @@ layout: default
 title: Tutorials - Blog
 description: "Tutorials and guides for Winden Tokens: design token workflows in Figma, step by step."
 category: tutorials
+permalink: /blog/tutorials/
+redirect_from:
+  - /blog/tutorials.html
 ---
 
 <!-- Blog header -->
@@ -14,21 +17,21 @@ category: tutorials
 
     <!-- Category filter -->
     <nav aria-label="Blog categories" class="mt-8 flex flex-wrap gap-2 sm:mt-10">
-      <a href="{{ '/blog' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         All posts
       </a>
       {% if site.categories.releases.size > 0 %}
-      <a href="{{ '/blog/releases' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/releases/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         Releases
       </a>
       {% endif %}
       {% if site.categories.tutorials.size > 0 %}
-      <a href="{{ '/blog/tutorials' | relative_url }}" aria-current="page" class="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-canvas">
+      <a href="{{ '/blog/tutorials/' | relative_url }}" aria-current="page" class="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-canvas">
         Tutorials
       </a>
       {% endif %}
       {% if site.categories.videos.size > 0 %}
-      <a href="{{ '/blog/videos' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/videos/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         Videos
       </a>
       {% endif %}
@@ -52,7 +55,7 @@ category: tutorials
             <time datetime="{{ post.date | date_to_xmlschema }}">{{ post.date | date: "%B %d, %Y" }}</time>
           </div>
 
-          <h2 class="mt-3 text-balance text-xl font-semibold leading-snug tracking-[-0.02em] sm:text-2xl">
+          <h2 class="mt-3 text-balance text-xl font-semibold leading-snug tracking-[-0.02em] sm:text-2xl sm:leading-8">
             <a href="{{ post.url | relative_url }}" class="after:absolute after:inset-0 after:z-[1] after:rounded-[20px]">
               {{ post.title }}
             </a>

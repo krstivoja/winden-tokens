@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "verify": "npm run build && npm test"
+    "verify": "npm run build && npm test",
+    "docs:css": "tailwindcss -i docs/assets/css/site.src.css -o docs/assets/css/site.css --minify",
+    "docs:css:watch": "tailwindcss -i docs/assets/css/site.src.css -o docs/assets/css/site.css --watch=always"
   },
   "author": "Marko Krstic",
   "license": "MIT",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.98.0",
+    "@tailwindcss/cli": "^4.2.2",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",

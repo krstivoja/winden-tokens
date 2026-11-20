@@ -54,8 +54,8 @@ Before watching this tutorial:
 
 This tutorial builds on foundational knowledge:
 
-1. Watch the [introduction tutorial](/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction) first
-2. Practice basic workflows from the [earlier tutorial](/winden-tokens/tutorials/winden-tokens-tutorial)
+1. Watch the [introduction tutorial](/blog/tutorials/winden-tokens-ultimate-figma-plugin-design-system-management/) first
+2. Practice basic workflows from the [earlier tutorial](/blog/tutorials/master-winden-tokens-essential-workflows-design-token-management/)
 3. Then dive into these advanced techniques
 
 ## Getting Started
@@ -63,7 +63,7 @@ This tutorial builds on foundational knowledge:
 If you need to install Winden Tokens:
 
 1. Go to **Plugins > Development > Import plugin from manifest** in Figma
-2. Select the `manifest.json` file from the [GitHub repository](https://github.com/yourusername/winden-tokens)
+2. Select the `manifest.json` file from the [GitHub repository](https://github.com/krstivoja/winden-tokens)
 3. Or build from source using `npm run build`
 
 ## Implementation Guide
@@ -78,11 +78,11 @@ After mastering these advanced features:
 
 ## Related Resources
 
-- [Basic Tutorial](/winden-tokens/tutorials/winden-tokens-tutorial)
-- [Theming Tutorial](/winden-tokens/tutorials/winden-tokens-theming)
-- [Installation Guide](/winden-tokens/tutorials/how-to-install-developers-version)
-- [Design Tokens Best Practices](/winden-tokens/tutorials/design-tokens-best-practices)
-- [Complete Documentation](/winden-tokens/)
+- [Basic Tutorial](/blog/tutorials/master-winden-tokens-essential-workflows-design-token-management/)
+- [Theming Tutorial](/blog/tutorials/building-themes-winden-tokens-light-dark-mode-beyond/)
+- [Installation Guide](/blog/tutorials/complete-guide-install-winden-tokens-figma-plugin-developer-version/)
+- [Design Tokens Best Practices](/blog/tutorials/design-tokens-best-practices/)
+- [Complete Documentation](/)
 
 ## Best Practices for Advanced Usage
 
@@ -98,18 +98,18 @@ When working with advanced features:
 
 Explore more advanced topics:
 
-- [Theming and Multi-Mode Variables](/winden-tokens/tutorials/winden-tokens-theming)
-- [Plugin Updates](/winden-tokens/tutorials/winden-tokens-march-update)
-- [All Tutorials](/winden-tokens/tutorials/)
+- [Theming and Multi-Mode Variables](/blog/tutorials/building-themes-winden-tokens-light-dark-mode-beyond/)
+- [Plugin Updates](/blog/tutorials/whats-new-winden-tokens-latest-features-updates/)
+- [All Tutorials](/blog/tutorials/)
 
 ## Have Questions?
 
 If you have questions about advanced features:
 
-- [Open an issue on GitHub](https://github.com/yourusername/winden-tokens/issues)
-- Watch more tutorials in our [tutorial series](/winden-tokens/tutorials/)
-- Check out our [comprehensive documentation](/winden-tokens/)
+- [Open an issue on GitHub](https://github.com/krstivoja/winden-tokens/issues)
+- Watch more tutorials in our [tutorial series](/blog/tutorials/)
+- Check out our [comprehensive documentation](/)
 
 ---
 
-*Ready for more? Check out our [theming tutorial](/winden-tokens/tutorials/winden-tokens-theming) to learn about multi-mode variables!*
+*Ready for more? Check out our [theming tutorial](/blog/tutorials/building-themes-winden-tokens-light-dark-mode-beyond/) to learn about multi-mode variables!*

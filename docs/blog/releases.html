@@ -3,6 +3,10 @@ layout: default
 title: Releases - Blog
 description: "Version history for Winden Tokens: what changed in each release of the Figma plugin."
 category: releases
+permalink: /blog/releases/
+redirect_from:
+  - /blog/releases.html
+  - /blog/releases/performance-improvements-bulk-editing/
 ---
 
 <!-- Blog header -->
@@ -14,21 +18,21 @@ category: releases
 
     <!-- Category filter -->
     <nav aria-label="Blog categories" class="mt-8 flex flex-wrap gap-2 sm:mt-10">
-      <a href="{{ '/blog' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         All posts
       </a>
       {% if site.categories.releases.size > 0 %}
-      <a href="{{ '/blog/releases' | relative_url }}" aria-current="page" class="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-canvas">
+      <a href="{{ '/blog/releases/' | relative_url }}" aria-current="page" class="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-canvas">
         Releases
       </a>
       {% endif %}
       {% if site.categories.tutorials.size > 0 %}
-      <a href="{{ '/blog/tutorials' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/tutorials/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         Tutorials
       </a>
       {% endif %}
       {% if site.categories.videos.size > 0 %}
-      <a href="{{ '/blog/videos' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
+      <a href="{{ '/blog/videos/' | relative_url }}" class="inline-flex h-10 items-center rounded-full bg-panel px-4 text-sm font-medium transition-colors hover:bg-panel-strong">
         Videos
       </a>
       {% endif %}
@@ -57,7 +61,7 @@ category: releases
             {% endif %}
           </div>
 
-          <h2 class="mt-3 text-balance text-xl font-semibold leading-snug tracking-[-0.02em] sm:text-2xl">
+          <h2 class="mt-3 text-balance text-xl font-semibold leading-snug tracking-[-0.02em] sm:text-2xl sm:leading-8">
             <a href="{{ post.url | relative_url }}" class="after:absolute after:inset-0 after:z-[1] after:rounded-[20px]">
               {{ post.title }}
             </a>

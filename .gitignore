@@ -14,3 +14,6 @@ bridge/ui/
 bridge/LICENSE
 bridge/*.tgz
 bridge/package-lock.json
+
+# Compiled from docs/assets/css/site.src.css by `npm run docs:css` (built in CI)
+docs/assets/css/site.css

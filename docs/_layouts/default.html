@@ -40,120 +40,74 @@
     <meta name="twitter:title" content="{{ page_title | escape }}" />
     <meta name="twitter:description" content="{{ page_description | escape }}" />
     <meta name="twitter:image" content="{{ og_image }}" />
+    {%- assign canonical_url = site_origin | append: page.url %}
+    {%- if page.url == '/' %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "{{ site_origin }}/#website",
+            "name": {{ site.title | jsonify }},
+            "url": "{{ site_origin }}/"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Winden Tokens",
+            "description": {{ page_description | jsonify }},
+            "url": "{{ site_origin }}/",
+            "image": {{ og_image | jsonify }},
+            "applicationCategory": "DesignApplication",
+            "operatingSystem": "Figma",
+            "isAccessibleForFree": true,
+            "license": "https://opensource.org/licenses/MIT",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "downloadUrl": "https://www.figma.com/community/plugin/1597659998667042080",
+            "sameAs": [
+              "https://www.figma.com/community/plugin/1597659998667042080",
+              "https://github.com/krstivoja/winden-tokens",
+              "https://www.npmjs.com/package/winden-tokens"
+            ],
+            "author": { "@id": "https://dplugins.com/#organization" },
+            "publisher": { "@id": "https://dplugins.com/#organization" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://dplugins.com/#organization",
+            "name": "DPlugins",
+            "url": "https://dplugins.com",
+            "sameAs": ["https://www.figma.com/@dplugins"]
+          }
+        ]
+      }
+    </script>
+    {%- elsif page.layout == 'post' %}
+    {%- assign post_author = page.author | default: 'Winden Tokens Team' %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": {{ page.title | jsonify }},
+        "description": {{ page_description | jsonify }},
+        "datePublished": {{ page.date | date_to_xmlschema | jsonify }},
+        "dateModified": {{ page.last_modified_at | default: page.date | date_to_xmlschema | jsonify }},
+        "image": {{ og_image | jsonify }},
+        "url": {{ canonical_url | jsonify }},
+        "mainEntityOfPage": { "@type": "WebPage", "@id": {{ canonical_url | jsonify }} },
+        "author": { "@type": "Organization", "name": {{ post_author | jsonify }}, "url": "{{ site_origin }}/" },
+        "publisher": {
+          "@type": "Organization",
+          "name": {{ site.title | jsonify }},
+          "url": "{{ site_origin }}/",
+          "logo": { "@type": "ImageObject", "url": "{{ site_origin }}/assets/icon.png", "width": 256, "height": 256 }
+        }
+      }
+    </script>
+    {%- endif %}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          colors: {
-            transparent: 'transparent',
-            current: 'currentColor',
-            inherit: 'inherit',
-            canvas: 'rgb(var(--canvas) / <alpha-value>)',
-            panel: {
-              DEFAULT: 'rgb(var(--panel) / <alpha-value>)',
-              strong: 'rgb(var(--panel-strong) / <alpha-value>)',
-            },
-            line: 'rgb(var(--line) / <alpha-value>)',
-            ink: {
-              DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
-              muted: 'rgb(var(--ink-muted) / <alpha-value>)',
-              faint: 'rgb(var(--ink-faint) / <alpha-value>)',
-            },
-            dot: 'rgb(var(--dot) / <alpha-value>)',
-            select: 'rgb(var(--select) / <alpha-value>)',
-            component: 'rgb(var(--component) / <alpha-value>)',
-            cursor: {
-              you: 'rgb(var(--cursor-you) / <alpha-value>)',
-              claude: 'rgb(var(--cursor-claude) / <alpha-value>)',
-              green: 'rgb(var(--cursor-green) / <alpha-value>)',
-              mint: 'rgb(var(--cursor-mint) / <alpha-value>)',
-              'mint-edge': 'rgb(var(--cursor-mint-edge) / <alpha-value>)',
-              sky: 'rgb(var(--cursor-sky) / <alpha-value>)',
-              'sky-edge': 'rgb(var(--cursor-sky-edge) / <alpha-value>)',
-            },
-            tint: {
-              sky: 'rgb(var(--tint-sky) / <alpha-value>)',
-              lime: 'rgb(var(--tint-lime) / <alpha-value>)',
-              lilac: 'rgb(var(--tint-lilac) / <alpha-value>)',
-              peach: 'rgb(var(--tint-peach) / <alpha-value>)',
-            },
-            'on-sky': {
-              muted: 'rgb(var(--on-sky-muted) / <alpha-value>)',
-              line: 'rgb(var(--on-sky-line) / <alpha-value>)',
-            },
-            'on-lime': {
-              muted: 'rgb(var(--on-lime-muted) / <alpha-value>)',
-              line: 'rgb(var(--on-lime-line) / <alpha-value>)',
-            },
-            'on-lilac': {
-              muted: 'rgb(var(--on-lilac-muted) / <alpha-value>)',
-              line: 'rgb(var(--on-lilac-line) / <alpha-value>)',
-            },
-            'on-peach': {
-              muted: 'rgb(var(--on-peach-muted) / <alpha-value>)',
-              line: 'rgb(var(--on-peach-line) / <alpha-value>)',
-            },
-            success: {
-              DEFAULT: 'rgb(var(--success) / <alpha-value>)',
-              tint: 'rgb(var(--success-tint) / <alpha-value>)',
-            },
-            ramp: {
-              10: 'rgb(var(--ramp-10) / <alpha-value>)',
-              20: 'rgb(var(--ramp-20) / <alpha-value>)',
-              30: 'rgb(var(--ramp-30) / <alpha-value>)',
-              40: 'rgb(var(--ramp-40) / <alpha-value>)',
-              50: 'rgb(var(--ramp-50) / <alpha-value>)',
-              60: 'rgb(var(--ramp-60) / <alpha-value>)',
-              70: 'rgb(var(--ramp-70) / <alpha-value>)',
-              80: 'rgb(var(--ramp-80) / <alpha-value>)',
-              90: 'rgb(var(--ramp-90) / <alpha-value>)',
-              100: 'rgb(var(--ramp-100) / <alpha-value>)',
-            },
-            shadow: 'rgb(var(--shadow) / <alpha-value>)',
-          },
-          boxShadow: {
-            none: 'none',
-            float: '0 1px 2px rgb(var(--shadow) / 0.05), 0 8px 24px -12px rgb(var(--shadow) / 0.16)',
-            window: '0 1px 2px rgb(var(--shadow) / 0.06), 0 24px 48px -16px rgb(var(--shadow) / 0.22)',
-          },
-          extend: {
-            fontFamily: {
-              sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-              mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-            },
-            borderColor: { DEFAULT: 'rgb(var(--line))' },
-            ringColor: { DEFAULT: 'rgb(var(--line))' },
-            backgroundImage: {
-              'grid-dots': 'radial-gradient(circle, rgb(var(--dot)) 1px, transparent 1.25px)',
-              'grid-dots-inverse': 'radial-gradient(circle, rgb(var(--canvas) / 0.14) 1px, transparent 1.25px)',
-            },
-            backgroundSize: { dots: '20px 20px' },
-            keyframes: {
-              drift: {
-                '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
-                '50%': { transform: 'translate3d(var(--drift-x, 6px), var(--drift-y, -8px), 0)' },
-              },
-              'pop-in': {
-                '0%': { opacity: '0', scale: '0.9' },
-                '100%': { opacity: '1', scale: '1' },
-              },
-              bob: {
-                '0%, 100%': { translate: '0 0' },
-                '50%': { translate: '0 var(--bob, -7px)' },
-              },
-            },
-            animation: {
-              drift: 'drift 7s ease-in-out infinite',
-              'drift-slow': 'drift 10s ease-in-out infinite',
-              float: 'pop-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both, bob 8s ease-in-out infinite',
-            },
-          },
-        },
-      };
-    </script>
     <style>
       :root {
         --canvas: 255 255 255;
@@ -242,7 +196,7 @@
         .live-cursor-el svg { transition: transform 120ms ease-out; }
       }
 
-      /* Post body (the Typography plugin is not loaded on the CDN build) */
+      /* Post body (the Typography plugin is not used) */
       .prose { max-width: 68ch; font-size: 17px; line-height: 1.75; color: rgb(var(--ink) / 0.84); overflow-wrap: break-word; }
       .prose > :first-child { margin-top: 0; }
       .prose > :last-child { margin-bottom: 0; }
@@ -272,6 +226,7 @@
       .prose th { padding: 0.65em 1em 0.65em 0; text-align: left; font-weight: 600; color: rgb(var(--ink)); border-bottom: 1px solid rgb(var(--line)); }
       .prose td { padding: 0.65em 1em 0.65em 0; vertical-align: top; border-bottom: 1px solid rgb(var(--line)); }
     </style>
+    <link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}" />
   </head>
   <body class="bg-canvas font-sans text-ink antialiased">
     {% include header.html %}

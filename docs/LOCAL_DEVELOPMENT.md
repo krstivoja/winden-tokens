@@ -5,6 +5,7 @@
 - **Ruby 3.0+** (system Ruby 2.6 won't work)
 - Install via Homebrew: `brew install ruby`
 - The `serve.sh` script automatically uses Homebrew Ruby
+- **Node.js** with the repo's npm dependencies installed (`npm ci` in the repo root) — the site's Tailwind CSS is compiled at build time
 
 ## Quick Start
 
@@ -27,6 +28,12 @@ If you prefer to run commands manually:
 ```bash
 # Install dependencies (first time only)
 bundle install
+(cd .. && npm ci)
+
+# Compile the site CSS (docs/assets/css/site.src.css -> site.css, git-ignored)
+(cd .. && npm run docs:css)
+# ...or keep recompiling it while you edit
+(cd .. && npm run docs:css:watch)
 
 # Start Jekyll server
 bundle exec jekyll serve --livereload

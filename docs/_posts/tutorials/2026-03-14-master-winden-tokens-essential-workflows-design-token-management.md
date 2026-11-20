@@ -45,7 +45,7 @@ This tutorial is perfect for:
 If you haven't installed Winden Tokens yet:
 
 1. Go to **Plugins > Development > Import plugin from manifest** in Figma
-2. Select the `manifest.json` file from the [GitHub repository](https://github.com/yourusername/winden-tokens)
+2. Select the `manifest.json` file from the [GitHub repository](https://github.com/krstivoja/winden-tokens)
 3. Or build from source using `npm run build`
 
 ## Apply What You've Learned
@@ -59,28 +59,28 @@ After watching this tutorial:
 
 ## Related Resources
 
-- [Installation Guide](/winden-tokens/tutorials/how-to-install-developers-version)
-- [Winden Tokens Introduction](/winden-tokens/tutorials/winden-tokens-figma-plugin-introduction)
-- [Design Tokens Best Practices](/winden-tokens/tutorials/design-tokens-best-practices)
-- [Complete Documentation](/winden-tokens/)
-- [Latest Release Notes](/winden-tokens/releases/)
+- [Installation Guide](/blog/tutorials/complete-guide-install-winden-tokens-figma-plugin-developer-version/)
+- [Winden Tokens Introduction](/blog/tutorials/winden-tokens-ultimate-figma-plugin-design-system-management/)
+- [Design Tokens Best Practices](/blog/tutorials/design-tokens-best-practices/)
+- [Complete Documentation](/)
+- [Latest Release Notes](/blog/releases/)
 
 ## Continue Learning
 
 Check out more tutorials in the series:
 
-- [Plugin Update](/winden-tokens/tutorials/winden-tokens-march-update)
-- [Theming Tutorial](/winden-tokens/tutorials/winden-tokens-theming)
-- [All Tutorials](/winden-tokens/tutorials/)
+- [Plugin Update](/blog/tutorials/whats-new-winden-tokens-latest-features-updates/)
+- [Theming Tutorial](/blog/tutorials/building-themes-winden-tokens-light-dark-mode-beyond/)
+- [All Tutorials](/blog/tutorials/)
 
 ## Have Questions?
 
 If you have any questions about the topics covered in this tutorial:
 
-- [Open an issue on GitHub](https://github.com/yourusername/winden-tokens/issues)
-- Watch more tutorials in our [tutorial series](/winden-tokens/tutorials/)
-- Check out our [comprehensive documentation](/winden-tokens/)
+- [Open an issue on GitHub](https://github.com/krstivoja/winden-tokens/issues)
+- Watch more tutorials in our [tutorial series](/blog/tutorials/)
+- Check out our [comprehensive documentation](/)
 
 ---
 
-*Keep learning! More tutorials are available in our [tutorial series](/winden-tokens/tutorials/).*
+*Keep learning! More tutorials are available in our [tutorial series](/blog/tutorials/).*
